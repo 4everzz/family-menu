@@ -1,0 +1,21 @@
+.page-shell { padding: 24rpx 24rpx 150rpx; }
+.cart-list { display: flex; flex-direction: column; gap: 16rpx; }
+.cart-card { display: flex; align-items: center; gap: 18rpx; padding: 20rpx; border-radius: 16rpx; background: #FFFFFF; }
+.cart-visual { width: 96rpx; height: 96rpx; border-radius: 16rpx; display: flex; align-items: center; justify-content: center; font-size: 46rpx; }
+.cart-copy { flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
+.cart-name { font-size: 32rpx; font-weight: 700; }
+.cart-price { color: #DC2626; font-size: 28rpx; font-weight: 700; }
+.stepper { display: flex; align-items: center; gap: 10rpx; }
+.stepper-button { width: 64rpx; height: 64rpx; padding: 0; border-radius: 32rpx; background: #FEE2E2; color: #B91C1C; font-size: 36rpx; line-height: 60rpx; }
+.stepper-button.primary { background: #DC2626; color: #FFFFFF; }
+.stepper-value { min-width: 28rpx; text-align: center; font-weight: 700; }
+.remark-card { padding: 20rpx; border-radius: 16rpx; background: #FFFFFF; }
+.remark-label { display: block; margin-bottom: 12rpx; font-size: 28rpx; font-weight: 700; }
+.remark-input { width: 100%; min-height: 88rpx; box-sizing: border-box; color: #450A0A; font-size: 28rpx; line-height: 1.5; }
+.empty-state { margin-top: 180rpx; display: flex; flex-direction: column; align-items: center; gap: 12rpx; color: #64748B; }
+.empty-title { color: #450A0A; font-size: 36rpx; font-weight: 700; }
+.empty-copy { font-size: 28rpx; }
+.checkout-panel { position: fixed; left: 0; right: 0; bottom: 100rpx; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 22rpx 24rpx calc(22rpx + env(safe-area-inset-bottom)); background: #FFFFFF; box-shadow: 0 -4rpx 16rpx rgba(69, 10, 10, .08); }
+.total-label { margin-right: 12rpx; color: #64748B; font-size: 26rpx; }
+.total-value { color: #DC2626; font-size: 38rpx; font-weight: 700; }
+.checkout-button { min-width: 230rpx; height: 84rpx; margin: 0; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; line-height: 84rpx; }

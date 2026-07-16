@@ -143,6 +143,7 @@ body{display:block;overflow-x:hidden;overflow-y:auto}
 .dish-favorite{position:absolute;top:8px;right:8px;z-index:2;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.92);color:#9ca3af;font-size:22px;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)}.dish-favorite.active{color:var(--primary)}.favorite-list{display:grid;gap:12px}.favorite-item{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:#fff8f7}.favorite-icon{font-size:28px;width:40px;text-align:center}.favorite-copy{flex:1;min-width:0}.favorite-name{font-size:15px;font-weight:700}.favorite-desc{font-size:13px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.favorite-add,.order-reorder{min-height:40px;padding:8px 12px;border:0;border-radius:7px;background:var(--primary);color:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer}.order-reorder{width:100%;margin-top:12px}
 .dish-row{cursor:pointer}.dish-row button{cursor:pointer}.dish-detail-hero{display:flex;align-items:center;gap:16px;padding:4px 0 20px;border-bottom:1px solid var(--border)}.dish-detail-emoji{width:72px;height:72px;display:grid;place-items:center;border-radius:12px;background:#fff0ee;font-size:40px;flex-shrink:0}.dish-detail-name{font-size:21px;font-weight:800}.dish-detail-price{margin-top:6px;font-size:19px;font-weight:800;color:var(--primary)}.dish-detail-desc{margin-top:8px;font-size:14px;line-height:1.6;color:var(--muted)}.dish-detail-list{display:grid;gap:14px;margin-top:20px}.dish-detail-row{display:grid;grid-template-columns:76px 1fr;gap:10px;font-size:14px;line-height:1.55}.dish-detail-label{font-weight:700;color:#555}.dish-detail-value{color:#333}.dish-spice{display:inline-flex;align-items:center;min-height:26px;padding:2px 10px;border-radius:14px;background:#fff0ee;color:var(--primary);font-size:13px;font-weight:700}
 .dish-row.sold-out{opacity:.68}.dish-sold-badge{position:absolute;left:8px;bottom:8px;z-index:2;padding:4px 8px;border-radius:5px;background:rgba(38,38,38,.82);color:#fff;font-size:12px;font-weight:700}.dish-row-info .dri-actions .btn-add:disabled{background:#9ca3af;cursor:not-allowed}.admin-act-btn-stock{background:var(--accent);font-size:11px!important}
+.merchant-page{padding:24px;max-width:960px;width:100%;margin:0 auto}.merchant-heading{margin-bottom:24px}.merchant-heading h2{font-size:24px;color:var(--text)}.merchant-heading p{margin-top:6px;font-size:14px;color:var(--muted)}.merchant-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.merchant-metric{padding:18px;border:1px solid var(--border);border-radius:8px;background:#fff}.merchant-metric-label{font-size:13px;color:var(--muted)}.merchant-metric-value{margin-top:8px;font-size:28px;font-weight:800;color:var(--primary)}.merchant-actions{display:grid;gap:12px;margin-top:24px}.merchant-action{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;text-align:left;color:var(--text);font:inherit;cursor:pointer}.merchant-action strong{display:block;font-size:16px}.merchant-action span{display:block;margin-top:4px;font-size:13px;color:var(--muted)}.merchant-action-arrow{font-size:22px;color:var(--primary)}.merchant-user-btn{margin-top:20px;width:100%;min-height:44px;border:1px solid var(--primary);border-radius:8px;background:#fff;color:var(--primary);font:inherit;font-weight:700;cursor:pointer}.merchant-dashboard-btn,#adminToggle{display:none!important}.merchant-role .merchant-dashboard-btn,.merchant-role #adminToggle{display:flex!important}.merchant-role .bottom-nav,.merchant-role #cartBtn,.merchant-role .cart-bar{display:none!important}body:not(.merchant-role) .admin-banner,body:not(.merchant-role) .add-cat-btn,body:not(.merchant-role) .cat-admin-edit,body:not(.merchant-role) .admin-act-btn,body:not(.merchant-role) .img-edit-overlay{display:none!important}.timer-settings .cook-time-display{display:block;padding:8px 12px;border-radius:8px;background:#fff;color:#555;font-size:14px;font-weight:700}.timer-settings input[type=number]{display:none}.merchant-role .timer-settings .cook-time-display{display:none}.merchant-role .timer-settings input[type=number]{display:block}@media(max-width:520px){.merchant-page{padding:16px}.merchant-metrics{grid-template-columns:1fr}.merchant-metric-value{font-size:24px}}
 </style>
 <header class="header">
 <div class="header-left"><button class="mobile-sidebar-toggle" id="sidebarToggle">☰</button><div class="header-logo"><span class="logo-icon">🍜</span><div><h1>小家菜单</h1><div class="subtitle">MEIWEIXUAN · 品质中餐</div></div></div></div>
@@ -153,7 +154,7 @@ body{display:block;overflow-x:hidden;overflow-y:auto}
 <aside class="left-panel" id="leftPanel"><div class="left-panel-header"><span>📂 菜品分类</span><button class="add-cat-btn" id="addCategoryBtn">+</button></div><div class="category-list" id="categoryList"></div></aside>
 <main class="right-content">
 <div class="admin-banner" id="adminBanner">✅ 管理模式 — 点击菜品图片可上传/更换照片，编辑或删除菜品信息</div>
-<div class="content-toolbar"><div class="ct-left"><h2 id="currentCategoryTitle">🍽️ 全部菜品</h2><span class="result-count" id="resultCount">共 0 道菜品</span></div><div class="ct-right"><button class="toolbar-btn toolbar-btn-primary" id="adminToggle">⚙️ 管理菜品</button></div></div>
+<div class="content-toolbar"><div class="ct-left"><h2 id="currentCategoryTitle">🍽️ 全部菜品</h2><span class="result-count" id="resultCount">共 0 道菜品</span></div><div class="ct-right"><button class="toolbar-btn toolbar-btn-outline merchant-dashboard-btn" id="merchantDashboardBtn">返回商家后台</button><button class="toolbar-btn toolbar-btn-primary" id="adminToggle">⚙️ 管理菜品</button></div></div>
 <div class="dish-list" id="dishList"></div>
 </main>
 </div>
@@ -167,7 +168,8 @@ body{display:block;overflow-x:hidden;overflow-y:auto}
 <div class="waiting-eta" id="waitingEta"></div>
 <div class="waiting-progress" id="waitingProgress"><div class="waiting-step" data-step="received"><span class="waiting-step-dot">1</span><span>&#24050;&#25509;&#21333;</span></div><div class="waiting-line"></div><div class="waiting-step" data-step="cooking"><span class="waiting-step-dot">2</span><span>&#21046;&#20316;&#20013;</span></div><div class="waiting-line"></div><div class="waiting-step" data-step="ready"><span class="waiting-step-dot">3</span><span>&#21487;&#21462;&#39184;</span></div></div>
 <div class="timer-settings">
-<label>&#9201;&#65039; &#39044;&#35774;&#21046;&#20316;&#26102;&#38271;&#65288;&#20998;&#38047;&#65289;</label>
+<label>&#9201;&#65039; &#39044;&#35745;&#21046;&#20316;&#26102;&#38271;</label>
+<output class="cook-time-display" id="cookTimeDisplay">&#32422; 1 &#20998;&#38047;</output>
 <input type="number" id="cookTime" value="1" min="0.5" step="0.5" />
 </div>
 </div>
@@ -175,9 +177,10 @@ body{display:block;overflow-x:hidden;overflow-y:auto}
 <div class="page" id="pageProfile">
 <div class="profile-page">
 <div class="profile-summary"><div class="profile-avatar" id="profileAvatar">&#128100;</div><div><div class="profile-name" id="profileNickname">&#28216;&#23458;</div><div class="profile-subtitle" id="profileStatus">&#26412;&#22320;&#36134;&#25143;</div></div><button class="profile-login" id="profileLoginBtn">&#36134;&#25143;&#30331;&#24405;</button></div>
-<div class="profile-menu"><button class="profile-menu-item" id="profileOrdersBtn"><span class="profile-menu-icon">&#128203;</span><span class="profile-menu-copy"><span class="profile-menu-title">&#21382;&#21490;&#35746;&#21333;</span><span class="profile-menu-desc">&#26597;&#30475;&#24744;&#30340;&#28857;&#39184;&#35760;&#24405;</span></span><span class="profile-menu-arrow">&#8250;</span></button><button class="profile-menu-item" id="profileFavoritesBtn"><span class="profile-menu-icon">&#9829;</span><span class="profile-menu-copy"><span class="profile-menu-title">&#25105;&#30340;&#25910;&#34255;</span><span class="profile-menu-desc">&#24555;&#36895;&#26597;&#30475;&#24120;&#28857;&#30340;&#33756;&#21697;</span></span><span class="profile-menu-arrow">&#8250;</span></button><button class="profile-menu-item" id="profileCouponsBtn"><span class="profile-menu-icon">&#127915;</span><span class="profile-menu-copy"><span class="profile-menu-title">&#25105;&#30340;&#20248;&#24800;&#21048;</span><span class="profile-menu-desc">&#26597;&#30475;&#24050;&#20817;&#25442;&#30340;&#20248;&#24800;&#26435;&#30410;</span></span><span class="profile-menu-arrow">&#8250;</span></button><button class="profile-menu-item" id="profileRedeemBtn"><span class="profile-menu-icon">&#10024;</span><span class="profile-menu-copy"><span class="profile-menu-title">&#20817;&#25442;&#20248;&#24800;&#21048;</span><span class="profile-menu-desc">&#36755;&#20837;&#20817;&#25442;&#30721;&#33719;&#21462;&#20248;&#24800;</span></span><span class="profile-menu-arrow">&#8250;</span></button></div>
+<div class="profile-menu"><button class="profile-menu-item" id="profileOrdersBtn"><span class="profile-menu-icon">&#128203;</span><span class="profile-menu-copy"><span class="profile-menu-title">&#21382;&#21490;&#35746;&#21333;</span><span class="profile-menu-desc">&#26597;&#30475;&#24744;&#30340;&#28857;&#39184;&#35760;&#24405;</span></span><span class="profile-menu-arrow">&#8250;</span></button><button class="profile-menu-item" id="profileFavoritesBtn"><span class="profile-menu-icon">&#9829;</span><span class="profile-menu-copy"><span class="profile-menu-title">&#25105;&#30340;&#25910;&#34255;</span><span class="profile-menu-desc">&#24555;&#36895;&#26597;&#30475;&#24120;&#28857;&#30340;&#33756;&#21697;</span></span><span class="profile-menu-arrow">&#8250;</span></button><button class="profile-menu-item" id="profileCouponsBtn"><span class="profile-menu-icon">&#127915;</span><span class="profile-menu-copy"><span class="profile-menu-title">&#25105;&#30340;&#20248;&#24800;&#21048;</span><span class="profile-menu-desc">&#26597;&#30475;&#24050;&#20817;&#25442;&#30340;&#20248;&#24800;&#26435;&#30410;</span></span><span class="profile-menu-arrow">&#8250;</span></button><button class="profile-menu-item" id="profileRedeemBtn"><span class="profile-menu-icon">&#10024;</span><span class="profile-menu-copy"><span class="profile-menu-title">&#20817;&#25442;&#20248;&#24800;&#21048;</span><span class="profile-menu-desc">&#36755;&#20837;&#20817;&#25442;&#30721;&#33719;&#21462;&#20248;</span></span><span class="profile-menu-arrow">&#8250;</span></button><button class="profile-menu-item" id="profileRoleBtn"><span class="profile-menu-icon">&#128101;</span><span class="profile-menu-copy"><span class="profile-menu-title">&#20999;&#25442;&#36523;&#20221;</span><span class="profile-menu-desc">&#22312;&#29992;&#25143;&#29256;&#19982;&#21830;&#23478;&#29256;&#20043;&#38388;&#20999;&#25442;</span></span><span class="profile-menu-arrow">&#8250;</span></button></div>
 </div>
 </div>
+<div class="page" id="pageMerchant"><div class="merchant-page"><div class="merchant-heading"><h2>&#21830;&#23478;&#21518;&#21488;</h2><p>&#24403;&#21069;&#20026;&#26412;&#26426;&#28436;&#31034;&#27169;&#24335;&#65292;&#19981;&#21487;&#29992;&#20110;&#30495;&#23454;&#36134;&#21495;&#26435;&#38480;&#31649;&#29702;&#12290;</p></div><div class="merchant-metrics"><div class="merchant-metric"><div class="merchant-metric-label">&#33756;&#21697;&#25968;</div><div class="merchant-metric-value" id="merchantDishCount">0</div></div><div class="merchant-metric"><div class="merchant-metric-label">&#35746;&#21333;&#25968;</div><div class="merchant-metric-value" id="merchantOrderCount">0</div></div><div class="merchant-metric"><div class="merchant-metric-label">&#32047;&#35745;&#33756;&#21697;&#37329;&#39069;</div><div class="merchant-metric-value" id="merchantRevenue">&#165;0</div></div></div><div class="merchant-actions"><button class="merchant-action" id="merchantManageBtn"><span><strong>&#33756;&#21333;&#31649;&#29702;</strong><span>&#32534;&#36753;&#33756;&#21697;&#12289;&#20998;&#31867;&#21644;&#21806;&#32620;&#29366;&#24577;</span></span><span class="merchant-action-arrow">&#8250;</span></button><button class="merchant-action" id="merchantOrdersBtn"><span><strong>&#35746;&#21333;&#31649;&#29702;</strong><span>&#26597;&#30475;&#21382;&#21490;&#35746;&#21333;&#24182;&#24555;&#36895;&#22797;&#28857;</span></span><span class="merchant-action-arrow">&#8250;</span></button></div><button class="merchant-user-btn" id="merchantUserBtn">&#20999;&#25442;&#21040;&#29992;&#25143;&#29256;</button></div></div>
 </div>
 <div class="bottom-nav">
 <button class="nav-item active" data-page="pageOrder"><span class="nav-icon">&#127869;&#65039;</span><span>&#28857;&#21333;</span></button>
@@ -188,7 +191,7 @@ body{display:block;overflow-x:hidden;overflow-y:auto}
 <div class="cart-drawer" id="cartDrawer">
 <div class="cart-drawer-header"><h3>🛒 购物车</h3><button class="cart-close-btn" id="cartCloseBtn">✕</button></div>
 <div class="cart-drawer-items" id="cartItems"><div class="cart-empty"><span class="empty-icon">🛒</span><p>购物车是空的</p><p style="font-size:12px;margin-top:4px">快去添加喜欢的菜品吧</p></div></div>
-<div class="cart-footer"><div class="cart-remark" id="cartRemark"><div class="cr-header">📝 备注</div><div class="cr-tags" id="remarkTags"></div><textarea class="cr-input" id="remarkInput" placeholder="其他特殊要求，请在此填写..." rows="2"></textarea></div><div class="cart-coupon"><label for="cartCouponSelect">优惠券</label><select id="cartCouponSelect" disabled><option value="">暂无可用优惠券</option></select><span id="cartCouponDiscount"></span></div><div class="cart-summary"><span class="cs-label">合计</span><span class="cs-total" id="cartTotal">0</span></div><button class="btn-checkout" id="checkoutBtn" disabled>提交订单</button></div>
+<div class="cart-footer"><div class="cart-remark" id="cartRemark"><div class="cr-header">📝 备注</div><div class="cr-tags" id="remarkTags"></div><textarea class="cr-input" id="remarkInput" placeholder="其他特殊要求，请在此填写..." rows="2"></textarea></div><div class="cart-coupon"><label for="cartCouponSelect">优惠券</label><select id="cartCouponSelect" onchange="applyCouponSelection()" disabled><option value="">暂无可用优惠券</option></select><span id="cartCouponDiscount"></span></div><div class="cart-summary"><span class="cs-label">合计</span><span class="cs-total" id="cartTotal">0</span></div><button class="btn-checkout" id="checkoutBtn" disabled>提交订单</button></div>
 </div>
 <div class="modal-overlay" id="dishEditModal">
 <div class="modal"><div class="modal-header"><h3 id="dishEditTitle">添加菜品</h3><button class="modal-close" id="dishEditClose">✕</button></div>
@@ -215,6 +218,7 @@ body{display:block;overflow-x:hidden;overflow-y:auto}
 <div class="modal-overlay" id="favoriteModal"><div class="modal" style="max-width:440px"><div class="modal-header"><h3>&#25105;&#30340;&#25910;&#34255;</h3><button class="modal-close" id="favoriteModalClose">&#10005;</button></div><div class="modal-body" id="favoriteList"></div><div class="modal-footer"><button class="btn btn-secondary" id="favoriteModalDone">&#23436;&#25104;</button></div></div></div>
 <div class="modal-overlay" id="couponModal"><div class="modal" style="max-width:440px"><div class="modal-header"><h3>&#25105;&#30340;&#20248;&#24800;&#21048;</h3><button class="modal-close" id="couponModalClose">&#10005;</button></div><div class="modal-body" id="couponList"></div><div class="modal-footer"><button class="btn btn-secondary" id="couponModalDone">&#23436;&#25104;</button></div></div></div>
 <div class="modal-overlay" id="redeemModal"><div class="modal" style="max-width:400px"><div class="modal-header"><h3>&#20817;&#25442;&#20248;&#24800;&#21048;</h3><button class="modal-close" id="redeemModalClose">&#10005;</button></div><div class="modal-body"><div class="form-group"><label for="redeemCodeInput">&#20817;&#25442;&#30721;</label><input type="text" id="redeemCodeInput" autocomplete="off" maxlength="24" placeholder="&#36755;&#20837;&#20817;&#25442;&#30721;" /><div class="coupon-help">&#31034;&#20363;&#65306;SAVE10&#12289;NEW20&#12289;VIP88</div></div></div><div class="modal-footer"><button class="btn btn-secondary" id="redeemModalCancel">&#21462;&#28040;</button><button class="btn btn-primary" id="redeemModalSave">&#20817;&#25442;</button></div></div></div>
+<div class="modal-overlay" id="roleModal"><div class="modal" style="max-width:420px"><div class="modal-header"><h3>&#20999;&#25442;&#36523;&#20221;</h3><button class="modal-close" id="roleModalClose">&#10005;</button></div><div class="modal-body"><p style="font-size:14px;line-height:1.6;color:#6b7280;margin:0">&#36523;&#20221;&#20165;&#29992;&#20110;&#26412;&#26426;&#28436;&#31034;&#12290;&#29992;&#25143;&#29256;&#29992;&#20110;&#28857;&#39184;&#65292;&#21830;&#23478;&#29256;&#29992;&#20110;&#31649;&#29702;&#33756;&#21333;&#21644;&#26597;&#30475;&#35746;&#21333;&#12290;</p></div><div class="modal-footer"><button class="btn btn-secondary" id="roleUserBtn">&#20999;&#25442;&#21040;&#29992;&#25143;&#29256;</button><button class="btn btn-primary" id="roleMerchantBtn">&#36827;&#20837;&#21830;&#23478;&#29256;</button></div></div></div>
 <div class="toast-container" id="toastContainer"></div>
 <script>
 const SK='menu_data';
@@ -249,10 +253,10 @@ function rd(){const el=document.getElementById('dishList'),ds=flt();if(!ds.lengt
 function ac(did){const d=fd(did);if(!d)return;const ex=S.cart.find(i=>i.dishId===did);if(ex)ex.qty+=1;else S.cart.push({dishId:did,name:d.name,price:d.price,emoji:d.emoji||'🍽️',color:d.color||'#e74c3c',image:d.image||'',qty:1});sd();rc();uba();showToast('✅ '+d.name+' 已加购','success')}
 function uq(did,delta){const i=S.cart.find(x=>x.dishId===did);if(!i)return;i.qty+=delta;if(i.qty<=0){S.cart=S.cart.filter(x=>x.dishId!==did);sd();rc();uba();return}sd();rc();uba()}
 function rc(){const el=document.getElementById('cartItems'),te=document.getElementById('cartTotal'),ch=document.getElementById('checkoutBtn');if(!S.cart.length){el.innerHTML='<div class="cart-empty"><span class="empty-icon">🛒</span><p>购物车是空的</p><p style="font-size:12px;margin-top:4px">快去添加喜欢的菜品吧</p></div>';te.textContent='0';ch.disabled=true;return}el.innerHTML=S.cart.map(i=>{const s=fp(i.price*i.qty),hi=i.image&&i.image.length>100;return'<div class="cart-drawer-item" data-dish="'+i.dishId+'"><div class="cdi-img">'+(hi?'<img src="'+i.image+'" />':(i.emoji||'🍽️'))+'</div><div class="cdi-info"><div class="cdi-name">'+i.name+'</div><div class="cdi-price">¥'+fp(i.price)+'</div></div><div class="cdi-qty"><button data-action="dec">−</button><span class="qty-num">'+i.qty+'</span><button data-action="inc">+</button></div><div class="cdi-total">¥'+s+'</div><button class="cdi-remove" data-action="remove">✕</button></div>'}).join('');el.querySelectorAll('.cart-drawer-item').forEach(it=>{const did=it.dataset.dish;it.querySelector('[data-action="dec"]')?.addEventListener('click',()=>uq(did,-1));it.querySelector('[data-action="inc"]')?.addEventListener('click',()=>uq(did,1));it.querySelector('[data-action="remove"]')?.addEventListener('click',()=>{S.cart=S.cart.filter(i=>i.dishId!==did);sd();rc();uba()})});te.textContent=fp(ct());ch.disabled=false}
-function uba(){const c=cc(),t=ct(),b=document.getElementById('cartBadge'),cb=document.getElementById('cartBarBadge'),ccEl=document.getElementById('cartBarCount'),ctEl=document.getElementById('cartBarTotal'),ch=document.getElementById('cartBarCheckout'),bar=document.getElementById('cartBar');b.textContent=c>99?'99+':c;b.classList.toggle('show',c>0);if(cb){cb.textContent=c>99?'99+':c;cb.classList.toggle('show',c>0)}if(bar)bar.classList.toggle('show',c>0);if(ccEl)ccEl.textContent=c?('已选 '+c+' 件菜品'):'购物车是空的';if(ctEl)ctEl.textContent=c?'¥'+fp(t):'';if(ch)ch.disabled=!c}
+function uba(){const c=cc(),t=payableTotal(),b=document.getElementById('cartBadge'),cb=document.getElementById('cartBarBadge'),ccEl=document.getElementById('cartBarCount'),ctEl=document.getElementById('cartBarTotal'),ch=document.getElementById('cartBarCheckout'),bar=document.getElementById('cartBar');b.textContent=c>99?'99+':c;b.classList.toggle('show',c>0);if(cb){cb.textContent=c>99?'99+':c;cb.classList.toggle('show',c>0)}if(bar)bar.classList.toggle('show',c>0);if(ccEl)ccEl.textContent=c?('已选 '+c+' 件菜品'):'购物车是空的';if(ctEl)ctEl.textContent=c?'¥'+fp(t):'';if(ch)ch.disabled=!c}
 function oc(){document.getElementById('cartOverlay').classList.add('show');document.getElementById('cartDrawer').classList.add('open');rc()}
 function cc2(){document.getElementById('cartOverlay').classList.remove('show');document.getElementById('cartDrawer').classList.remove('open')}
-function so(){if(!S.cart.length){showToast('购物车为空','error');return}const ri=document.getElementById('remarkInput'),r=ri.value.trim();const o={id:'ORD'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,5).toUpperCase(),items:JSON.parse(JSON.stringify(S.cart)),total:ct(),remark:r||'',time:new Date().toLocaleString('zh-CN'),status:'ok'};S.orders.unshift(o);S.cart=[];ri.value='';sd();rc();uba();cc2();showToast('订单提交成功！订单号: '+o.id,'success');startWaiting(o)}
+function so(){if(!S.cart.length){showToast('购物车为空','error');return}const ri=document.getElementById('remarkInput'),r=ri.value.trim();const o={id:'ORD'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,5).toUpperCase(),items:JSON.parse(JSON.stringify(S.cart)),total:payableTotal(),remark:r||'',time:new Date().toLocaleString('zh-CN'),status:'ok'};S.orders.unshift(o);S.cart=[];ri.value='';sd();rc();uba();cc2();showToast('订单提交成功！订单号: '+o.id,'success');startWaiting(o)}
 let pui=null;function tiu(did){pui=did;const inp=document.getElementById('imageFileInput');inp.value='';inp.click()}
 function odm(did){document.getElementById('dishEditTitle').textContent=did?'编辑菜品':'添加菜品';const cs=document.getElementById('editDishCategory');cs.innerHTML=S.categories.map(c=>'<option value="'+c.id+'">'+c.name+'</option>').join('');const d=did?fd(did):null;S.editDish=did||null;document.getElementById('editDishName').value=d?d.name:'';document.getElementById('editDishPrice').value=d?d.price:'';document.getElementById('editDishDesc').value=d?(d.desc||''):'';document.getElementById('editDishEmoji').value=d?(d.emoji||'🍽️'):'🍽️';document.getElementById('editDishCategory').value=d?d.category:(S.categories[0]?.id||'');const pv=document.getElementById('uploadPreview'),ui=document.getElementById('uploadIcon'),ut=document.getElementById('uploadText'),cb=document.getElementById('uploadClear');if(d&&d.image&&d.image.length>100){pv.src=d.image;pv.style.display='block';ui.style.display='none';ut.textContent='点击更换图片';cb.style.display='flex'}else{pv.style.display='none';ui.style.display='block';ut.innerHTML='点击 <strong>上传图片</strong>，支持 JPG / PNG';cb.style.display='none'}hc(d?(d.color||CS[0]):CS[0]);document.getElementById('dishEditModal').classList.add('show')}
 function cdem(){document.getElementById('dishEditModal').classList.remove('show');S.editDish=null;pui=null;document.getElementById('imageFileInput').value=''}
@@ -339,6 +343,7 @@ function init(){
   });
 
   byId('adminToggle').addEventListener('click',()=>{
+    if(!document.body.classList.contains('merchant-role'))return;
     S.admin=!S.admin;
     const button=byId('adminToggle');
     button.textContent=S.admin?'\u2705 \u5b8c\u6210\u7ba1\u7406':'\u2699\ufe0f \u7ba1\u7406\u83dc\u54c1';
@@ -454,7 +459,7 @@ const COUPON_CATALOG={
   VIP88:{id:'vip88',title:'\u4f1a\u545888\u6298\u5238',detail:'\u5168\u573a\u4eab88\u6298\uff0c\u6709\u6548\u671f15\u5929',rate:0.12}
 };
 function gcoupons(){
-  try{const coupons=JSON.parse(localStorage.getItem(COUPON_KEY)||'[]');return Array.isArray(coupons)?coupons:[]}catch(e){return[]}
+  try{const coupons=JSON.parse(localStorage.getItem(COUPON_KEY)||'[]');if(!Array.isArray(coupons))return[];return coupons.map(coupon=>coupon.id==='vip88'&&!(Number(coupon.rate)>0)?{...coupon,rate:0.12}:coupon)}catch(e){return[]}
 }
 function rcp(){
   const list=document.getElementById('couponList');
@@ -502,16 +507,30 @@ function redeemCoupon(){
 }
 function st(){return S.cart.reduce((sum,item)=>sum+item.price*item.qty,0)}
 function selectedCoupon(){
-  if(!S.selectedCouponId)return null;
-  return gcoupons().find(coupon=>coupon.id===S.selectedCouponId&&coupon.status!=='used')||null;
+  const select=document.getElementById('cartCouponSelect');
+  const couponId=select?.value||S.selectedCouponId;
+  if(!couponId)return null;
+  return gcoupons().find(coupon=>coupon.id===couponId&&coupon.status!=='used')||null;
+}
+function applyCouponSelection(){
+  S.selectedCouponId=document.getElementById('cartCouponSelect').value||null;
+  refreshCouponTotals();
+}
+function refreshCouponTotals(){
+  const subtotal=st(),coupon=selectedCoupon(),discount=couponDiscount(subtotal,coupon),payable=payableTotal(subtotal,coupon);
+  const notice=document.getElementById('cartCouponDiscount'),total=document.getElementById('cartTotal'),barTotal=document.getElementById('cartBarTotal');
+  if(notice)notice.textContent=discount?'已优惠 ¥'+fp(discount):'';
+  if(total)total.textContent=fp(payable);
+  if(barTotal)barTotal.textContent=S.cart.length?'¥'+fp(payable):'';
 }
 function couponDiscount(subtotal=st(),coupon=selectedCoupon()){
   if(!coupon||(coupon.threshold&&subtotal<coupon.threshold))return 0;
   if(coupon.amount)return Math.min(coupon.amount,subtotal);
-  if(coupon.rate)return Math.round(subtotal*coupon.rate*10)/10;
+  if(Number(coupon.rate)>0)return Math.round(subtotal*Number(coupon.rate)*10)/10;
   return 0;
 }
-function ct(){return Math.max(0,st()-couponDiscount())}
+function payableTotal(subtotal=st(),coupon=selectedCoupon()){return Math.max(0,subtotal-couponDiscount(subtotal,coupon))}
+function ct(){return payableTotal()}
 function rcc(){
   const select=document.getElementById('cartCouponSelect');
   const notice=document.getElementById('cartCouponDiscount');
@@ -532,6 +551,7 @@ function rcc(){
   });
   select.disabled=!eligible.length;
   select.value=S.selectedCouponId||'';
+  select.onchange=applyCouponSelection;
   const discount=couponDiscount(subtotal);
   notice.textContent=discount?'\u5df2\u4f18\u60e0 \u00a5'+fp(discount):coupons.length&&!eligible.length?'\u8d2d\u7269\u8f66\u91d1\u989d\u6682\u4e0d\u6ee1\u8db3\u4f7f\u7528\u6761\u4ef6':'';
 }
@@ -543,12 +563,12 @@ function rc(){
   }
   el.innerHTML=S.cart.map(item=>{const itemTotal=fp(item.price*item.qty),hasImage=item.image&&item.image.length>100;return'<div class="cart-drawer-item" data-dish="'+item.dishId+'"><div class="cdi-img">'+(hasImage?'<img src="'+item.image+'" />':(item.emoji||'\ud83c\udf7d\ufe0f'))+'</div><div class="cdi-info"><div class="cdi-name">'+item.name+'</div><div class="cdi-price">\u00a5'+fp(item.price)+'</div></div><div class="cdi-qty"><button data-action="dec">\u2212</button><span class="qty-num">'+item.qty+'</span><button data-action="inc">+</button></div><div class="cdi-total">\u00a5'+itemTotal+'</div><button class="cdi-remove" data-action="remove">\u2715</button></div>'}).join('');
   el.querySelectorAll('.cart-drawer-item').forEach(item=>{const dishId=item.dataset.dish;item.querySelector('[data-action="dec"]')?.addEventListener('click',()=>uq(dishId,-1));item.querySelector('[data-action="inc"]')?.addEventListener('click',()=>uq(dishId,1));item.querySelector('[data-action="remove"]')?.addEventListener('click',()=>{S.cart=S.cart.filter(row=>row.dishId!==dishId);sd();rc();uba()})});
-  rcc();total.textContent=fp(ct());checkout.disabled=false;
+  rcc();total.textContent=fp(payableTotal());checkout.disabled=false;
 }
 function so(){
   if(!S.cart.length){showToast('\u8d2d\u7269\u8f66\u4e3a\u7a7a','error');return}
   const remarkInput=document.getElementById('remarkInput'),remark=remarkInput.value.trim(),subtotal=st(),coupon=selectedCoupon(),discount=couponDiscount(subtotal,coupon);
-  const order={id:'ORD'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,5).toUpperCase(),items:JSON.parse(JSON.stringify(S.cart)),subtotal,discount,total:ct(),coupon:discount&&coupon?coupon.title:'',remark:remark||'',time:new Date().toLocaleString('zh-CN'),status:'ok'};
+  const order={id:'ORD'+Date.now().toString(36).toUpperCase()+Math.random().toString(36).slice(2,5).toUpperCase(),items:JSON.parse(JSON.stringify(S.cart)),subtotal,discount,total:payableTotal(subtotal,coupon),coupon:discount&&coupon?coupon.title:'',remark:remark||'',time:new Date().toLocaleString('zh-CN'),status:'ok'};
   S.orders.unshift(order);
   if(discount&&coupon){
     const coupons=gcoupons().map(item=>item.id===coupon.id?{...item,status:'used'}:item);
@@ -597,7 +617,7 @@ function rc(){
   }
   el.innerHTML=S.cart.map(item=>{const itemTotal=fp(item.price*item.qty),hasImage=item.image&&item.image.length>100,cartKey=item.cartKey||item.dishId,options=item.options?.length?'<div class="cdi-options">'+item.options.join(' \u00b7 ')+'</div>':'';return'<div class="cart-drawer-item" data-key="'+cartKey+'"><div class="cdi-img">'+(hasImage?'<img src="'+item.image+'" />':(item.emoji||'\ud83c\udf7d\ufe0f'))+'</div><div class="cdi-info"><div class="cdi-name">'+item.name+'</div>'+options+'<div class="cdi-price">\u00a5'+fp(item.price)+'</div></div><div class="cdi-qty"><button data-action="dec">\u2212</button><span class="qty-num">'+item.qty+'</span><button data-action="inc">+</button></div><div class="cdi-total">\u00a5'+itemTotal+'</div><button class="cdi-remove" data-action="remove">\u2715</button></div>'}).join('');
   el.querySelectorAll('.cart-drawer-item').forEach(item=>{const cartKey=item.dataset.key;item.querySelector('[data-action="dec"]')?.addEventListener('click',()=>uq(cartKey,-1));item.querySelector('[data-action="inc"]')?.addEventListener('click',()=>uq(cartKey,1));item.querySelector('[data-action="remove"]')?.addEventListener('click',()=>{S.cart=S.cart.filter(row=>(row.cartKey||row.dishId)!==cartKey);sd();rc();uba()})});
-  rcc();total.textContent=fp(ct());checkout.disabled=false;
+  rcc();total.textContent=fp(payableTotal());checkout.disabled=false;
 }
 function ro(){
   const el=document.getElementById('orderList');
@@ -691,6 +711,31 @@ function oddm(dishId){
   body.append(hero,list);document.getElementById('dishDetailModal').classList.add('show');
 }
 function cddm(){document.getElementById('dishDetailModal').classList.remove('show');detailDishId=null}
+function syncCookTimeDisplay(){const input=document.getElementById('cookTime'),display=document.getElementById('cookTimeDisplay');if(!input||!display)return;const minutes=parseFloat(input.value)||1;display.textContent='约 '+minutes+' 分钟'}
+const ROLE_KEY='menu_role';
+function getRole(){try{return localStorage.getItem(ROLE_KEY)==='merchant'?'merchant':'user'}catch(e){return 'user'}}
+function closeRoleModal(){document.getElementById('roleModal').classList.remove('show')}
+function renderMerchantDashboard(){
+  const orders=Array.isArray(S.orders)?S.orders:[];
+  const revenue=orders.reduce((total,order)=>total+(Number(order.total)||0),0);
+  document.getElementById('merchantDishCount').textContent=S.dishes.length;
+  document.getElementById('merchantOrderCount').textContent=orders.length;
+  document.getElementById('merchantRevenue').textContent='¥'+fp(revenue);
+}
+function setRole(role){
+  const merchant=role==='merchant';
+  try{localStorage.setItem(ROLE_KEY,merchant?'merchant':'user')}catch(e){}
+  document.body.classList.toggle('merchant-role',merchant);
+  closeRoleModal();
+  if(merchant){renderMerchantDashboard();sw('pageMerchant');showToast('已进入商家版','success');return}
+  if(S.admin)document.getElementById('adminToggle').click();
+  sw('pageProfile');rp();showToast('已切换到用户版','success');
+}
+function openMerchantMenu(){
+  if(!document.body.classList.contains('merchant-role'))return;
+  if(!S.admin)document.getElementById('adminToggle').click();
+  sw('pageOrder');
+}
 document.addEventListener('DOMContentLoaded',()=>{
   rp();
   document.getElementById('profileLoginBtn').addEventListener('click',opm);
@@ -698,7 +743,18 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('profileFavoritesBtn').addEventListener('click',ofavm);
   document.getElementById('profileCouponsBtn').addEventListener('click',ocm2);
   document.getElementById('profileRedeemBtn').addEventListener('click',orm);
-  document.getElementById('cartCouponSelect').addEventListener('change',e=>{S.selectedCouponId=e.target.value||null;rc();uba()});
+  document.getElementById('profileRoleBtn').addEventListener('click',()=>document.getElementById('roleModal').classList.add('show'));
+  document.getElementById('roleModalClose').addEventListener('click',closeRoleModal);
+  document.getElementById('roleUserBtn').addEventListener('click',()=>setRole('user'));
+  document.getElementById('roleMerchantBtn').addEventListener('click',()=>setRole('merchant'));
+  document.getElementById('roleModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeRoleModal()});
+  document.getElementById('merchantManageBtn').addEventListener('click',openMerchantMenu);
+  document.getElementById('merchantOrdersBtn').addEventListener('click',oom);
+  document.getElementById('merchantUserBtn').addEventListener('click',()=>setRole('user'));
+  document.getElementById('merchantDashboardBtn').addEventListener('click',()=>{renderMerchantDashboard();sw('pageMerchant')});
+  document.getElementById('cookTime').addEventListener('input',syncCookTimeDisplay);
+  syncCookTimeDisplay();
+  if(getRole()==='merchant')setRole('merchant');
   document.querySelectorAll('#spicyOptions .flavor-option').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('#spicyOptions .flavor-option').forEach(item=>item.classList.toggle('active',item===button))}));
   document.getElementById('flavorModalClose').addEventListener('click',cfm);
   document.getElementById('flavorModalCancel').addEventListener('click',cfm);
@@ -726,7 +782,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('redeemCodeInput').addEventListener('keydown',e=>{if(e.key==='Enter')redeemCoupon()});
   document.querySelector('[data-page="pageProfile"]').addEventListener('click',rp);
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){ccm2();crm();cfm();cfavm();cddm()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){ccm2();crm();cfm();cfavm();cddm();closeRoleModal()}});
 document.addEventListener('DOMContentLoaded',()=>{
   const labels={sidebarToggle:'\u6253\u5f00\u83dc\u54c1\u5206\u7c7b',cartBtn:'\u6253\u5f00\u8d2d\u7269\u8f66',cartCloseBtn:'\u5173\u95ed\u8d2d\u7269\u8f66',dishEditClose:'\u5173\u95ed\u83dc\u54c1\u7f16\u8f91',orderModalClose:'\u5173\u95ed\u5386\u53f2\u8ba2\u5355',catModalClose:'\u5173\u95ed\u5206\u7c7b\u7f16\u8f91',profileModalClose:'\u5173\u95ed\u8d26\u6237\u767b\u5f55',searchInput:'\u641c\u7d22\u83dc\u54c1'};
   Object.entries(labels).forEach(([id,label])=>document.getElementById(id)?.setAttribute('aria-label',label));
