@@ -55,8 +55,9 @@ Page({
     this.renderCart();
   },
   renderCart() {
-    const items = getApp().globalData.cart;
-    const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const cart = getApp().globalData.cart;
+    const items = cart.map((item) => ({ ...item, optionsText: (item.options || []).join(' · ') }));
+    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     this.setData({ items, total: total.toFixed(2) });
   },
 });

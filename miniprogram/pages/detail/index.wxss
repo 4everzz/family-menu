@@ -1,0 +1,15 @@
+.page-shell { padding: 24rpx 24rpx 140rpx; }
+.dish-hero { height: 280rpx; border-radius: 20rpx; display: flex; align-items: center; justify-content: center; font-size: 124rpx; }
+.detail-card, .option-card { margin-top: 20rpx; padding: 24rpx; border-radius: 16rpx; background: #FFFFFF; display: flex; flex-direction: column; gap: 14rpx; }
+.dish-name { font-size: 42rpx; font-weight: 700; }
+.dish-price { color: #DC2626; font-size: 38rpx; font-weight: 700; }
+.dish-detail { color: #64748B; font-size: 28rpx; line-height: 1.65; }
+.option-title { font-size: 30rpx; font-weight: 700; }
+.choice-row { display: flex; flex-wrap: wrap; gap: 12rpx; }
+.choice { min-width: 118rpx; height: 72rpx; padding: 0 18rpx; border: 2rpx solid #FECACA; border-radius: 12rpx; background: #FFFFFF; color: #7C2D12; font-size: 27rpx; line-height: 68rpx; }
+.choice.selected { border-color: #DC2626; background: #FEE2E2; color: #B91C1C; font-weight: 700; }
+.toggle-row { min-height: 84rpx; display: flex; align-items: center; justify-content: space-between; padding: 0; border-radius: 0; background: #FFFFFF; color: #450A0A; font-size: 29rpx; text-align: left; }
+.toggle-row + .toggle-row { border-top: 2rpx solid #FEE2E2; }
+.toggle-state { min-width: 80rpx; padding: 6rpx 12rpx; border-radius: 8rpx; background: #F1F5F9; color: #64748B; font-size: 24rpx; text-align: center; }
+.toggle-state.selected { background: #FEE2E2; color: #B91C1C; font-weight: 700; }
+.add-cart-button { position: fixed; left: 24rpx; right: 24rpx; bottom: 24rpx; height: 92rpx; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 32rpx; font-weight: 700; line-height: 92rpx; }
