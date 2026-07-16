@@ -1,0 +1,12 @@
+{
+  "miniprogramRoot": "./",
+  "projectname": "小家今日吃什么",
+  "description": "家庭点餐小程序本地骨架",
+  "appid": "",
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "minified": true,
+    "urlCheck": true
+  }
+}

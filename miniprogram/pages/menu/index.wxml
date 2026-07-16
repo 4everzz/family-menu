@@ -1,0 +1,49 @@
+<view class="page-shell">
+  <view class="welcome-card">
+    <view class="welcome-copy">
+      <text class="eyebrow">家庭点餐</text>
+      <text class="page-title">今天吃点什么？</text>
+      <text class="page-subtitle">不登录也能直接点菜</text>
+    </view>
+    <view class="bowl-mark">食</view>
+  </view>
+
+  <scroll-view class="category-scroll" scroll-x="true" show-scrollbar="false">
+    <view class="category-row">
+      <button
+        wx:for="{{categories}}"
+        wx:key="id"
+        class="category-button {{activeCategory === item.id ? 'active' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="selectCategory"
+      >{{item.name}}</button>
+    </view>
+  </scroll-view>
+
+  <view class="section-head">
+    <text class="section-title">今日菜单</text>
+    <text class="section-note">{{dishes.length}} 道菜</text>
+  </view>
+
+  <view class="dish-list">
+    <view wx:for="{{dishes}}" wx:key="id" class="dish-card">
+      <view class="dish-visual" style="background: {{item.color}};">
+        <text>{{item.emoji}}</text>
+      </view>
+      <view class="dish-copy">
+        <text class="dish-name">{{item.name}}</text>
+        <text class="dish-description">{{item.description}}</text>
+        <text class="dish-price">¥{{item.price}}</text>
+      </view>
+      <view class="dish-action">
+        <button class="add-button" data-id="{{item.id}}" bindtap="addDish" aria-label="添加{{item.name}}">+</button>
+        <text wx:if="{{item.quantity > 0}}" class="quantity-label">已选 {{item.quantity}}</text>
+      </view>
+    </view>
+  </view>
+
+  <button wx:if="{{cartCount > 0}}" class="cart-bar" bindtap="goCart">
+    <text>已选 {{cartCount}} 道</text>
+    <text>查看购物车</text>
+  </button>
+</view>

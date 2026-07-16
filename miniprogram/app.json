@@ -1,0 +1,29 @@
+{
+  "pages": [
+    "pages/menu/index",
+    "pages/cart/index",
+    "pages/orders/index",
+    "pages/profile/index"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#DC2626",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "小家今日吃什么",
+    "backgroundColor": "#FEF2F2",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#7C2D12",
+    "selectedColor": "#DC2626",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/menu/index", "text": "点菜" },
+      { "pagePath": "pages/cart/index", "text": "购物车" },
+      { "pagePath": "pages/orders/index", "text": "订单" },
+      { "pagePath": "pages/profile/index", "text": "我的" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

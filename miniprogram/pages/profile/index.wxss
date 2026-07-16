@@ -1,0 +1,14 @@
+.page-shell { padding: 24rpx; }
+.profile-card { display: flex; align-items: center; gap: 20rpx; padding: 28rpx; border-radius: 20rpx; background: #DC2626; color: #FFFFFF; }
+.avatar { width: 92rpx; height: 92rpx; border-radius: 46rpx; display: flex; align-items: center; justify-content: center; background: #FFFFFF; color: #B91C1C; font-size: 42rpx; font-weight: 700; }
+.profile-copy { display: flex; flex-direction: column; gap: 6rpx; }
+.profile-name { font-size: 36rpx; font-weight: 700; }
+.profile-note { font-size: 26rpx; opacity: .86; }
+.menu-group { margin-top: 24rpx; border-radius: 16rpx; overflow: hidden; background: #FFFFFF; }
+.menu-row { min-height: 132rpx; display: flex; align-items: center; justify-content: space-between; padding: 22rpx 24rpx; border-radius: 0; background: #FFFFFF; color: #450A0A; text-align: left; box-sizing: border-box; }
+.menu-row + .menu-row { border-top: 2rpx solid #FEE2E2; }
+.menu-row view { display: flex; flex-direction: column; gap: 6rpx; }
+.menu-title { font-size: 30rpx; font-weight: 700; }
+.menu-description { color: #64748B; font-size: 25rpx; }
+.menu-arrow { color: #B91C1C; font-size: 46rpx; line-height: 1; }
+.guest-note { display: block; margin-top: 20rpx; color: #64748B; font-size: 24rpx; text-align: center; }

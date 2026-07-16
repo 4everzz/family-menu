@@ -1,0 +1,15 @@
+<view class="page-shell">
+  <view wx:if="{{orders.length}}" class="order-list">
+    <view wx:for="{{orders}}" wx:key="id" class="order-card">
+      <view class="order-head"><text class="order-id">订单 {{item.id}}</text><text class="order-status">{{item.status}}</text></view>
+      <text class="order-items">{{item.summary}}</text>
+      <text wx:if="{{item.remark}}" class="order-remark">备注：{{item.remark}}</text>
+      <view class="progress-row">
+        <view wx:for="{{item.progress}}" wx:for-item="step" wx:key="label" class="progress-step {{step.active ? 'active' : ''}}"><view class="progress-dot"></view><text>{{step.label}}</text></view>
+      </view>
+      <text class="order-note">{{item.statusNote}}</text>
+      <view class="order-foot"><text>{{item.createdAt}}</text><text class="order-total">¥{{item.total}}</text></view>
+    </view>
+  </view>
+  <view wx:else class="empty-state"><text class="empty-title">还没有订单</text><text class="empty-copy">提交的订单会显示在这里</text></view>
+</view>
