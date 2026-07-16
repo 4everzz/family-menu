@@ -1,15 +1,15 @@
 .page-shell { padding: 24rpx 24rpx 150rpx; }
 .cart-list { display: flex; flex-direction: column; gap: 16rpx; }
-.cart-card { display: flex; align-items: center; gap: 18rpx; padding: 20rpx; border-radius: 16rpx; background: #FFFFFF; }
-.cart-visual { width: 96rpx; height: 96rpx; border-radius: 16rpx; display: flex; align-items: center; justify-content: center; font-size: 46rpx; }
-.cart-copy { flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
+.cart-card { width: 100%; display: flex; align-items: center; gap: 14rpx; padding: 18rpx; border-radius: 16rpx; background: #FFFFFF; box-sizing: border-box; overflow: hidden; }
+.cart-visual { width: 80rpx; height: 80rpx; flex: 0 0 80rpx; border-radius: 14rpx; display: flex; align-items: center; justify-content: center; font-size: 40rpx; }
+.cart-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .cart-name { font-size: 32rpx; font-weight: 700; }
 .cart-price { color: #DC2626; font-size: 28rpx; font-weight: 700; }
 .cart-options { color: #64748B; font-size: 24rpx; }
-.stepper { display: flex; align-items: center; gap: 10rpx; }
-.stepper-button { width: 64rpx; height: 64rpx; padding: 0; border-radius: 32rpx; background: #FEE2E2; color: #B91C1C; font-size: 36rpx; line-height: 60rpx; }
+.stepper { width: 168rpx; flex: 0 0 168rpx; display: flex; align-items: center; justify-content: space-between; }
+.stepper-button { width: 52rpx !important; max-width: 52rpx; min-width: 52rpx; height: 52rpx; flex: 0 0 52rpx; margin: 0; padding: 0; border-radius: 26rpx; background: #FEE2E2; color: #B91C1C; font-size: 32rpx; line-height: 48rpx; box-sizing: border-box; }
 .stepper-button.primary { background: #DC2626; color: #FFFFFF; }
-.stepper-value { min-width: 28rpx; text-align: center; font-weight: 700; }
+.stepper-value { width: 48rpx; flex: 0 0 48rpx; text-align: center; font-weight: 700; }
 .remark-card { padding: 20rpx; border-radius: 16rpx; background: #FFFFFF; }
 .remark-label { display: block; margin-bottom: 12rpx; font-size: 28rpx; font-weight: 700; }
 .remark-input { width: 100%; min-height: 88rpx; box-sizing: border-box; color: #450A0A; font-size: 28rpx; line-height: 1.5; }

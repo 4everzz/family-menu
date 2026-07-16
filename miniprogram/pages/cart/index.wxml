@@ -1,6 +1,6 @@
 <view class="page-shell">
   <view wx:if="{{items.length}}" class="cart-list">
-    <view wx:for="{{items}}" wx:key="id" class="cart-card">
+    <view wx:for="{{items}}" wx:key="cartKey" class="cart-card">
       <view class="cart-visual" style="background: {{item.color}};">{{item.emoji}}</view>
       <view class="cart-copy">
         <text class="cart-name">{{item.name}}</text>
@@ -8,9 +8,9 @@
         <text class="cart-price">¥{{item.price}}</text>
       </view>
       <view class="stepper">
-        <button class="stepper-button" data-id="{{item.id}}" bindtap="decrease" aria-label="减少{{item.name}}">−</button>
+        <button class="stepper-button" data-key="{{item.cartKey}}" bindtap="decrease" aria-label="减少{{item.name}}">−</button>
         <text class="stepper-value">{{item.quantity}}</text>
-        <button class="stepper-button primary" data-id="{{item.id}}" bindtap="increase" aria-label="增加{{item.name}}">+</button>
+        <button class="stepper-button primary" data-key="{{item.cartKey}}" bindtap="increase" aria-label="增加{{item.name}}">+</button>
       </view>
     </view>
     <view class="remark-card">
