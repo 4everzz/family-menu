@@ -40,6 +40,6 @@ Page({
       cart.push({ ...dish, cartKey, options, quantity: 1 });
     }
     wx.showToast({ title: '已加入购物车', icon: 'success' });
-    setTimeout(() => wx.switchTab({ url: '/pages/cart/index' }), 500);
+    setTimeout(() => wx.navigateTo({ url: '/pages/cart/index' }), 500);
   },
 });
