@@ -26,7 +26,7 @@
   </view>
 
   <view class="dish-list">
-    <view wx:for="{{dishes}}" wx:key="id" class="dish-card">
+    <view wx:for="{{dishes}}" wx:key="id" class="dish-card" data-id="{{item.id}}" bindtap="openDish">
       <view class="dish-visual" style="background: {{item.color}};">
         <text>{{item.emoji}}</text>
       </view>
@@ -36,7 +36,7 @@
         <text class="dish-price">¥{{item.price}}</text>
       </view>
       <view class="dish-action">
-        <button class="add-button" data-id="{{item.id}}" bindtap="addDish" aria-label="添加{{item.name}}">+</button>
+        <button class="add-button" data-id="{{item.id}}" catchtap="addDish" aria-label="添加{{item.name}}">+</button>
         <text wx:if="{{item.quantity > 0}}" class="quantity-label">已选 {{item.quantity}}</text>
       </view>
     </view>

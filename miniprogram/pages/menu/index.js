@@ -1,11 +1,4 @@
-const dishes = [
-  { id: 'd1', category: 'recommended', name: '宫保鸡丁', description: '鲜香微辣，花生酥脆', price: 38, emoji: '🍗', color: '#FEE2E2' },
-  { id: 'd2', category: 'recommended', name: '番茄炒蛋', description: '酸甜软嫩，家常下饭', price: 22, emoji: '🍅', color: '#FFEDD5' },
-  { id: 'd3', category: 'home', name: '红烧肉', description: '酱香浓郁，软糯入味', price: 58, emoji: '🥩', color: '#FDE68A' },
-  { id: 'd4', category: 'home', name: '凉拌黄瓜', description: '清爽开胃，微微回甘', price: 16, emoji: '🥒', color: '#DCFCE7' },
-  { id: 'd5', category: 'soup', name: '酸辣汤', description: '暖胃开胃，酸辣适中', price: 18, emoji: '🥣', color: '#FCE7F3' },
-  { id: 'd6', category: 'staple', name: '扬州炒饭', description: '粒粒分明，配料丰富', price: 22, emoji: '🍚', color: '#FEF3C7' },
-];
+const { dishes } = require('../../data/menu');
 
 Page({
   data: {
@@ -38,6 +31,9 @@ Page({
     }
     this.renderDishes();
     wx.showToast({ title: '已加入购物车', icon: 'success' });
+  },
+  openDish(event) {
+    wx.navigateTo({ url: `/pages/detail/index?id=${event.currentTarget.dataset.id}` });
   },
   goCart() {
     wx.switchTab({ url: '/pages/cart/index' });

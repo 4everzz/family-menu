@@ -5,6 +5,7 @@
 .cart-copy { flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .cart-name { font-size: 32rpx; font-weight: 700; }
 .cart-price { color: #DC2626; font-size: 28rpx; font-weight: 700; }
+.cart-options { color: #64748B; font-size: 24rpx; }
 .stepper { display: flex; align-items: center; gap: 10rpx; }
 .stepper-button { width: 64rpx; height: 64rpx; padding: 0; border-radius: 32rpx; background: #FEE2E2; color: #B91C1C; font-size: 36rpx; line-height: 60rpx; }
 .stepper-button.primary { background: #DC2626; color: #FFFFFF; }
