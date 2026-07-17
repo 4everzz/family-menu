@@ -1,6 +1,6 @@
 page {
   min-height: 100vh;
-  background: #FEF2F2;
+  background: #FFF5F5;
   color: #450A0A;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 32rpx;
@@ -13,4 +13,8 @@ button {
 
 button::after {
   border: 0;
+}
+
+button:active {
+  opacity: .88;
 }

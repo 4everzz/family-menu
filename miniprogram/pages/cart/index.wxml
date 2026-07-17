@@ -24,7 +24,7 @@
   </view>
 
   <view wx:if="{{items.length}}" class="checkout-panel">
-    <view><text class="total-label">合计</text><text class="total-value">¥{{total}}</text></view>
+    <view class="checkout-summary"><text class="total-label">合计</text><text class="total-value">¥{{total}}</text></view>
     <button class="checkout-button" bindtap="submitOrder" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">{{isSubmitting ? '正在提交' : '提交订单'}}</button>
   </view>
 </view>

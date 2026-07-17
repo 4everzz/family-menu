@@ -4,8 +4,9 @@
     <view class="profile-copy"><text class="profile-name">游客</text><text class="profile-note">现在就能直接点菜</text></view>
   </view>
   <view class="menu-group">
-    <button class="menu-row" bindtap="showLoginNotice"><view><text class="menu-title">登录或注册</text><text class="menu-description">保存历史订单与个人资料</text></view><text class="menu-arrow">›</text></button>
-    <button class="menu-row" bindtap="showManagerNotice"><view><text class="menu-title">管理入口</text><text class="menu-description">菜品与订单需要管理者权限</text></view><text class="menu-arrow">›</text></button>
+    <view class="menu-row" hover-class="menu-row-active" bindtap="showLoginNotice"><view><text class="menu-title">登录或注册</text></view><text class="menu-arrow">›</text></view>
+    <view class="menu-row" hover-class="menu-row-active" bindtap="openHistory"><view><text class="menu-title">历史订单</text></view><text class="menu-arrow">›</text></view>
+    <view class="menu-row" hover-class="menu-row-active" bindtap="showManagerNotice"><view><text class="menu-title">管理入口</text></view><text class="menu-arrow">›</text></view>
   </view>
   <text class="guest-note">游客订单仅保存在当前微信和设备中</text>
 </view>

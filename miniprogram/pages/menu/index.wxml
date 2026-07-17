@@ -8,8 +8,8 @@
     <view class="bowl-mark">食</view>
   </view>
 
-  <view class="menu-layout">
-    <view class="category-sidebar">
+  <view class="menu-layout" style="height: {{menuHeight}}rpx;">
+    <scroll-view class="category-sidebar" scroll-y>
       <button
         wx:for="{{categories}}"
         wx:key="id"
@@ -17,13 +17,20 @@
         data-id="{{item.id}}"
         bindtap="selectCategory"
       >{{item.name}}</button>
-    </view>
-    <view class="menu-content">
+    </scroll-view>
+    <scroll-view class="menu-content" scroll-y scroll-top="{{menuScrollTop}}">
+      <view class="menu-search">
+        <text class="menu-search-label">搜索菜品</text>
+        <view class="menu-search-control">
+          <input class="menu-search-input" value="{{keyword}}" placeholder="输入菜品名称" confirm-type="search" bindinput="updateKeyword" />
+          <button wx:if="{{keyword}}" class="menu-search-clear" bindtap="clearKeyword" aria-label="清空搜索内容">×</button>
+        </view>
+      </view>
       <view class="section-head">
         <text class="section-title">今日菜单</text>
         <text class="section-note">{{dishes.length}} 道菜</text>
       </view>
-      <view class="dish-list">
+      <view wx:if="{{dishes.length}}" class="dish-list">
         <view wx:for="{{dishes}}" wx:key="id" class="dish-card" data-id="{{item.id}}" bindtap="openDish">
           <view class="dish-visual" style="background: {{item.color}};">
             <text>{{item.emoji}}</text>
@@ -34,12 +41,19 @@
             <text class="dish-price">¥{{item.price}}</text>
           </view>
           <view class="dish-action">
-            <button class="add-button" data-id="{{item.id}}" catchtap="addDish" aria-label="添加{{item.name}}">+</button>
-            <text wx:if="{{item.quantity > 0}}" class="quantity-label">已选 {{item.quantity}}</text>
+            <text wx:if="{{item.isSoldOut}}" class="soldout-label">已售罄</text>
+            <button wx:elif="{{item.quantity === 0}}" class="add-button" data-id="{{item.id}}" catchtap="addDish" aria-label="添加{{item.name}}">+</button>
+            <view wx:else class="dish-stepper">
+              <button class="dish-stepper-button secondary" data-id="{{item.id}}" catchtap="decreaseDish" aria-label="减少{{item.name}}">−</button>
+              <text class="quantity-label">{{item.quantity}}</text>
+              <button class="dish-stepper-button" data-id="{{item.id}}" catchtap="addDish" aria-label="增加{{item.name}}">+</button>
+            </view>
           </view>
         </view>
+        <view wx:if="{{cartCount > 0}}" class="menu-bottom-spacer"></view>
       </view>
-    </view>
+      <view wx:else class="menu-empty-state"><text>没有找到相关菜品</text><text>换个关键词试试</text></view>
+    </scroll-view>
   </view>
 
   <button wx:if="{{cartCount > 0}}" class="cart-bar" bindtap="goCart">
@@ -59,7 +73,7 @@
       <view class="modal-heading">
         <view>
           <text class="modal-dish-name">{{selectedDish.name}}</text>
-          <text class="modal-dish-detail">{{selectedDish.detail}}</text>
+          <text class="modal-dish-detail">{{selectedDish.description || selectedDish.detail}}</text>
         </view>
         <text class="modal-dish-price">¥{{selectedDish.price}}</text>
       </view>
@@ -76,7 +90,7 @@
         </view>
         <textarea class="modal-remark-input" value="{{customRemark}}" maxlength="40" placeholder="例如：不要香菜、打包" bindinput="updateCustomRemark" />
       </view>
-      <button class="modal-add-button" bindtap="addSelectedDish">加入购物车</button>
+      <button class="modal-add-button" bindtap="addSelectedDish" disabled="{{selectedDish.isSoldOut}}">{{selectedDish.isSoldOut ? '该菜品已售罄' : '加入购物车'}}</button>
     </view>
   </view>
 </view>

@@ -1,0 +1,40 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card">
+    <text class="state-title">正在读取菜品</text>
+    <text class="state-copy">请稍候</text>
+  </view>
+
+  <view wx:elif="{{hasAccess}}">
+    <view class="filter-row">
+      <picker class="category-picker" range="{{categories}}" range-key="name" value="{{categoryIndex}}" bindchange="selectCategory">
+        <view class="picker-value">{{activeCategoryName}}</view>
+      </picker>
+      <view class="search-control">
+        <input class="search-input" value="{{keyword}}" placeholder="搜索菜名" bindinput="updateKeyword" />
+        <button wx:if="{{keyword}}" class="search-clear" bindtap="clearKeyword" aria-label="清空搜索内容">×</button>
+      </view>
+    </view>
+    <view class="list-head">
+      <text class="list-title">{{activeCategoryName}}菜品</text>
+      <view class="list-actions">
+        <text class="list-note">{{filteredDishes.length}} 道</text>
+        <button class="add-dish-button" bindtap="openCreateDish">新增菜品</button>
+      </view>
+    </view>
+    <scroll-view class="dish-grid" style="height: {{gridHeight}}rpx;" scroll-y>
+      <view class="dish-grid-content">
+        <view wx:for="{{filteredDishes}}" wx:key="id" class="dish-card" data-id="{{item.id}}" bindtap="openDish">
+          <text class="dish-name">{{item.name}}</text>
+          <text class="dish-price">¥{{item.price}}</text>
+          <text class="dish-status {{item.statusClass}}">{{item.statusText}}</text>
+        </view>
+        <view wx:if="{{!filteredDishes.length}}" class="empty-state">没有找到相关菜品</view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <view wx:else class="state-card access-card">
+    <text class="state-title">暂无管理员权限</text>
+    <text class="state-copy">请返回“我的”页面确认管理员身份。</text>
+  </view>
+</view>

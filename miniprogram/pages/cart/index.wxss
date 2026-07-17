@@ -1,22 +1,24 @@
-.page-shell { padding: 24rpx 24rpx 150rpx; }
+.page-shell { padding: 24rpx 24rpx calc(280rpx + env(safe-area-inset-bottom)); }
 .cart-list { display: flex; flex-direction: column; gap: 16rpx; }
-.cart-card { width: 100%; display: flex; align-items: center; gap: 14rpx; padding: 18rpx; border-radius: 16rpx; background: #FFFFFF; box-sizing: border-box; overflow: hidden; }
+.cart-card { width: 100%; display: flex; align-items: center; gap: 14rpx; padding: 18rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; box-sizing: border-box; overflow: hidden; box-shadow: 0 6rpx 18rpx rgba(69, 10, 10, .06); }
 .cart-visual { width: 80rpx; height: 80rpx; flex: 0 0 80rpx; border-radius: 14rpx; display: flex; align-items: center; justify-content: center; font-size: 40rpx; }
 .cart-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .cart-name { font-size: 32rpx; font-weight: 700; }
 .cart-price { color: #DC2626; font-size: 28rpx; font-weight: 700; }
 .cart-options { color: #64748B; font-size: 24rpx; }
-.stepper { width: 168rpx; flex: 0 0 168rpx; display: flex; align-items: center; justify-content: space-between; }
-.stepper-button { width: 52rpx !important; max-width: 52rpx; min-width: 52rpx; height: 52rpx; flex: 0 0 52rpx; margin: 0; padding: 0; border-radius: 26rpx; background: #FEE2E2; color: #B91C1C; font-size: 32rpx; line-height: 48rpx; box-sizing: border-box; }
+.stepper { width: 224rpx; flex: 0 0 224rpx; display: flex; align-items: center; justify-content: space-between; }
+.stepper-button { width: 88rpx !important; max-width: 88rpx; min-width: 88rpx; height: 88rpx; flex: 0 0 88rpx; margin: 0; padding: 0; border-radius: 44rpx; background: #FEE2E2; color: #B91C1C; font-size: 32rpx; line-height: 84rpx; box-sizing: border-box; }
 .stepper-button.primary { background: #DC2626; color: #FFFFFF; }
 .stepper-value { width: 48rpx; flex: 0 0 48rpx; text-align: center; font-weight: 700; }
-.remark-card { padding: 20rpx; border-radius: 16rpx; background: #FFFFFF; }
+.remark-card { padding: 20rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; box-shadow: 0 6rpx 18rpx rgba(69, 10, 10, .05); }
 .remark-label { display: block; margin-bottom: 12rpx; font-size: 28rpx; font-weight: 700; }
-.remark-input { width: 100%; min-height: 88rpx; box-sizing: border-box; color: #450A0A; font-size: 28rpx; line-height: 1.5; }
+.remark-input { width: 100%; min-height: 88rpx; padding: 12rpx 14rpx; border: 2rpx solid #FECACA; border-radius: 12rpx; background: #FFF9F9; box-sizing: border-box; color: #450A0A; font-size: 28rpx; line-height: 1.5; }
 .empty-state { margin-top: 180rpx; display: flex; flex-direction: column; align-items: center; gap: 12rpx; color: #64748B; }
 .empty-title { color: #450A0A; font-size: 36rpx; font-weight: 700; }
 .empty-copy { font-size: 28rpx; }
-.checkout-panel { position: fixed; left: 0; right: 0; bottom: 100rpx; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 22rpx 24rpx calc(22rpx + env(safe-area-inset-bottom)); background: #FFFFFF; box-shadow: 0 -4rpx 16rpx rgba(69, 10, 10, .08); }
-.total-label { margin-right: 12rpx; color: #64748B; font-size: 26rpx; }
-.total-value { color: #DC2626; font-size: 38rpx; font-weight: 700; }
-.checkout-button { min-width: 230rpx; height: 84rpx; margin: 0; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; line-height: 84rpx; }
+.checkout-panel { position: fixed; left: 24rpx; right: 24rpx; bottom: calc(24rpx + env(safe-area-inset-bottom)); z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 16rpx 18rpx; border: 2rpx solid #FECACA; border-radius: 18rpx; background: #FFFFFF; box-shadow: 0 12rpx 28rpx rgba(69, 10, 10, .16); box-sizing: border-box; }
+.checkout-summary { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 8rpx; }
+.total-label { color: #7C2D12; font-size: 26rpx; font-weight: 600; white-space: nowrap; }
+.total-value { min-width: 0; overflow: hidden; color: #DC2626; font-size: 42rpx; font-weight: 700; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.checkout-button { width: 248rpx; min-width: 248rpx; height: 92rpx; margin: 0; padding: 0; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; line-height: 92rpx; box-shadow: 0 6rpx 12rpx rgba(220, 38, 38, .2); }
+.checkout-button[disabled] { background: #FCA5A5; box-shadow: none; }

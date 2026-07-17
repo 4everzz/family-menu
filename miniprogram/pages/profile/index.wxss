@@ -1,14 +1,13 @@
-.page-shell { padding: 24rpx; }
-.profile-card { display: flex; align-items: center; gap: 20rpx; padding: 28rpx; border-radius: 20rpx; background: #DC2626; color: #FFFFFF; }
+.page-shell { width: 100%; padding: 32rpx 24rpx 168rpx; box-sizing: border-box; }
+.profile-card { display: flex; align-items: center; gap: 20rpx; padding: 28rpx; border-radius: 20rpx; background: #DC2626; color: #FFFFFF; box-shadow: 0 12rpx 28rpx rgba(153, 27, 27, .18); }
 .avatar { width: 92rpx; height: 92rpx; border-radius: 46rpx; display: flex; align-items: center; justify-content: center; background: #FFFFFF; color: #B91C1C; font-size: 42rpx; font-weight: 700; }
 .profile-copy { display: flex; flex-direction: column; gap: 6rpx; }
 .profile-name { font-size: 36rpx; font-weight: 700; }
 .profile-note { font-size: 26rpx; opacity: .86; }
-.menu-group { margin-top: 24rpx; border-radius: 16rpx; overflow: hidden; background: #FFFFFF; }
-.menu-row { min-height: 132rpx; display: flex; align-items: center; justify-content: space-between; padding: 22rpx 24rpx; border-radius: 0; background: #FFFFFF; color: #450A0A; text-align: left; box-sizing: border-box; }
-.menu-row + .menu-row { border-top: 2rpx solid #FEE2E2; }
-.menu-row view { display: flex; flex-direction: column; gap: 6rpx; }
-.menu-title { font-size: 30rpx; font-weight: 700; }
-.menu-description { color: #64748B; font-size: 25rpx; }
-.menu-arrow { color: #B91C1C; font-size: 46rpx; line-height: 1; }
-.guest-note { display: block; margin-top: 20rpx; color: #64748B; font-size: 24rpx; text-align: center; }
+.menu-group { width: 100%; display: flex; flex-direction: column; gap: 16rpx; margin-top: 28rpx; box-sizing: border-box; }
+.menu-row { width: 100%; min-height: 112rpx; display: flex; align-items: center; padding: 24rpx 28rpx; border: 2rpx solid #FEE2E2; border-radius: 20rpx; background: #FFFFFF; color: #450A0A; box-sizing: border-box; box-shadow: 0 8rpx 20rpx rgba(69, 10, 10, .05); }
+.menu-row-active { opacity: .8; }
+.menu-row view { flex: 1; min-width: 0; display: flex; }
+.menu-title { font-size: 32rpx; line-height: 1.25; font-weight: 700; }
+.menu-arrow { width: 44rpx; margin-left: 20rpx; color: #B91C1C; font-size: 46rpx; line-height: 1; text-align: right; flex-shrink: 0; }
+.guest-note { display: block; margin: 28rpx 12rpx 0; color: #64748B; font-size: 24rpx; line-height: 1.5; text-align: center; }

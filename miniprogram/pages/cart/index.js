@@ -17,7 +17,7 @@ Page({
   updateRemark(event) {
     this.setData({ remark: event.detail.value });
   },
-  submitOrder() {
+  async submitOrder() {
     const app = getApp();
     if (this.data.isSubmitting) return;
     if (!app.globalData.cart.length) {
@@ -25,26 +25,38 @@ Page({
       return;
     }
     this.setData({ isSubmitting: true });
-    const total = app.globalData.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const order = {
-      id: `HJ${Date.now().toString().slice(-8)}`,
-      status: '制作中',
-      statusNote: '订单已提交，正在制作中',
-      total: total.toFixed(2),
-      createdAt: new Date().toLocaleString(),
-      items: app.globalData.cart.map((item) => ({ ...item })),
-      summary: app.globalData.cart.map((item) => `${item.name} × ${item.quantity}`).join('、'),
-      remark: this.data.remark.trim(),
-    };
-    app.globalData.orders.unshift(order);
-    app.saveOrders();
-    app.globalData.cart = [];
-    this.setData({ remark: '' });
-    wx.showToast({ title: '订单已提交', icon: 'success' });
-    setTimeout(() => {
+    try {
+      const response = await wx.cloud.callFunction({
+        name: 'admin-menu',
+        data: {
+          action: 'createOrder',
+          items: app.globalData.cart.map((item) => ({ id: item.id, quantity: item.quantity, options: item.options || [] })),
+          remark: this.data.remark.trim(),
+        },
+      });
+      const result = response.result || {};
+      if (!result.ok || !result.order) {
+        const dishNames = Array.isArray(result.dishNames) && result.dishNames.length
+          ? result.dishNames.join('、')
+          : '该菜品';
+        const message = result.code === 'OUT_OF_STOCK'
+          ? `${dishNames}库存不足，请调整数量后重试`
+          : (result.message || '提交订单失败');
+        throw new Error(message);
+      }
+      app.globalData.orders.unshift(result.order);
+      app.saveOrders();
+      app.globalData.cart = [];
+      app.saveCart();
+      getApp().globalData.menuUpdatedAt = Date.now();
+      this.setData({ remark: '' });
+      wx.showToast({ title: '订单已提交', icon: 'success' });
+      setTimeout(() => wx.switchTab({ url: '/pages/orders/index' }), 500);
+    } catch (error) {
+      wx.showToast({ title: error.message || '提交失败，请稍后重试', icon: 'none' });
+    } finally {
       this.setData({ isSubmitting: false });
-      wx.switchTab({ url: '/pages/orders/index' });
-    }, 500);
+    }
   },
   changeQuantity(cartKey, delta) {
     const app = getApp();
@@ -52,6 +64,7 @@ Page({
     if (!item) return;
     item.quantity += delta;
     app.globalData.cart = app.globalData.cart.filter((cartItem) => cartItem.quantity > 0);
+    app.saveCart();
     this.renderCart();
   },
   renderCart() {

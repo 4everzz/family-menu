@@ -1,5 +1,6 @@
 {
   "miniprogramRoot": "./",
+  "cloudfunctionRoot": "cloudfunctions/",
   "projectname": "小家今日吃什么",
   "description": "家庭点餐小程序本地骨架",
   "appid": "wx3179448db3b9e15a",
