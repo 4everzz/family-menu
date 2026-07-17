@@ -4,6 +4,11 @@
     "pages/detail/index",
     "pages/cart/index",
     "pages/orders/index",
+    "pages/history/index",
+    "pages/history-detail/index",
+    "pages/admin-menu/index",
+    "pages/admin-dishes/index",
+    "pages/admin-dish-detail/index",
     "pages/profile/index"
   ],
   "window": {
@@ -14,6 +19,7 @@
     "backgroundTextStyle": "dark"
   },
   "tabBar": {
+    "custom": true,
     "color": "#7C2D12",
     "selectedColor": "#DC2626",
     "backgroundColor": "#FFFFFF",

@@ -1,0 +1,21 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card">
+    <text class="state-title">正在读取管理数据</text>
+    <text class="state-copy">请稍候</text>
+  </view>
+
+  <view wx:elif="{{hasAccess}}" class="manage-card">
+    <view class="page-head">
+      <text class="page-title">管理菜品</text>
+      <text class="page-copy">在一个页面内新增菜品、查找菜品和修改菜品资料</text>
+    </view>
+    <button class="manage-button" bindtap="openDishesPage" loading="{{isNavigating}}" disabled="{{isNavigating}}">进入菜品管理</button>
+  </view>
+
+  <view wx:else class="state-card access-card">
+    <text class="state-title">暂未获得管理员权限</text>
+    <text class="state-copy">复制下面的管理员 ID，用于开通管理权限。</text>
+    <text class="open-id" selectable="true">{{openId || '暂未获取到'}}</text>
+    <button class="copy-button" bindtap="copyOpenId" disabled="{{!openId}}">复制管理员 ID</button>
+  </view>
+</view>

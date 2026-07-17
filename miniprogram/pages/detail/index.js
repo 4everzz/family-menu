@@ -32,13 +32,15 @@ Page({
     if (lessOil) options.push('少油');
     if (extraRice) options.push('加饭');
     const cartKey = `${dish.id}|${options.join('|')}`;
-    const cart = getApp().globalData.cart;
+    const app = getApp();
+    const cart = app.globalData.cart;
     const existing = cart.find((item) => item.cartKey === cartKey);
     if (existing) {
       existing.quantity += 1;
     } else {
       cart.push({ ...dish, cartKey, options, quantity: 1 });
     }
+    app.saveCart();
     wx.showToast({ title: '已加入购物车', icon: 'success' });
     setTimeout(() => wx.navigateTo({ url: '/pages/cart/index' }), 500);
   },

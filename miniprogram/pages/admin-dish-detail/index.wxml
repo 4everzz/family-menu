@@ -1,0 +1,95 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card">
+    <text class="state-title">正在读取菜品</text>
+    <text class="state-copy">请稍候</text>
+  </view>
+
+  <view wx:elif="{{hasAccess && mode === 'create'}}" class="create-form">
+    <view class="form-head">
+      <text class="page-title">新增菜品</text>
+      <text class="page-copy">填写基础信息后即可加入用户点菜菜单</text>
+    </view>
+    <view class="form-row">
+      <view class="form-field form-field-name">
+        <text class="field-label">菜名</text>
+        <input class="form-input" value="{{newDish.name}}" data-field="name" maxlength="20" placeholder="例如：青椒肉丝" bindinput="updateNewDish" />
+      </view>
+      <view class="form-field form-field-price">
+        <text class="field-label">价格</text>
+        <input class="form-input" type="digit" value="{{newDish.price}}" data-field="price" placeholder="0" bindinput="updateNewDish" />
+      </view>
+    </view>
+    <view class="form-field">
+      <text class="field-label">分类</text>
+      <picker class="category-picker" range="{{categories}}" range-key="name" value="{{categoryIndex}}" bindchange="selectNewDishCategory">
+        <view class="picker-value">{{categories[categoryIndex].name || '请选择分类'}}</view>
+      </picker>
+    </view>
+    <view class="form-field">
+      <text class="field-label">简介</text>
+      <textarea class="description-input" value="{{newDish.description}}" data-field="description" maxlength="60" placeholder="例如：鲜香下饭，现炒更美味" bindinput="updateNewDish" />
+    </view>
+    <view class="form-actions">
+      <button class="secondary-button" bindtap="cancelCreate" disabled="{{isSubmitting}}">取消</button>
+      <button class="primary-button" bindtap="submitNewDish" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">新增菜品</button>
+    </view>
+  </view>
+
+  <view wx:elif="{{hasAccess && dish}}">
+    <view class="dish-summary">
+      <text class="dish-name">{{dish.name}}</text>
+      <text class="dish-category">{{categoryName}}</text>
+      <text class="dish-status {{dish.enabled === false || dish.manualSoldOut || dish.stock <= 0 ? 'is-offline' : ''}}">{{dish.enabled === false ? '已下架' : ((dish.manualSoldOut || dish.stock <= 0) ? '已售罄' : '在售')}}</text>
+    </view>
+    <view class="operation-card">
+      <text class="operation-title">基础资料</text>
+      <view class="form-field">
+        <text class="field-label">菜名</text>
+        <input class="form-input" value="{{editDraft.name}}" data-field="name" maxlength="20" bindinput="updateEditDraft" />
+      </view>
+      <view class="form-field">
+        <text class="field-label">价格（元）</text>
+        <input class="form-input" type="digit" value="{{editDraft.price}}" data-field="price" bindinput="updateEditDraft" />
+      </view>
+      <view class="form-field">
+        <text class="field-label">分类</text>
+        <picker class="category-picker" range="{{categories}}" range-key="name" value="{{categoryIndex}}" bindchange="selectEditCategory">
+          <view class="picker-value">{{categories[categoryIndex].name || '请选择分类'}}</view>
+        </picker>
+      </view>
+      <view class="form-field">
+        <text class="field-label">简介</text>
+        <textarea class="description-input" value="{{editDraft.description}}" data-field="description" maxlength="60" placeholder="用一句话介绍这道菜" bindinput="updateEditDraft" />
+      </view>
+      <button class="primary-button" bindtap="saveDishDetails" loading="{{savingDetails}}" disabled="{{savingDetails}}">保存基础资料</button>
+    </view>
+    <view class="operation-card">
+      <text class="operation-title">商品状态</text>
+      <text class="operation-copy">下架后不显示；售罄后仍可查看，但不能加购。</text>
+      <view class="status-actions">
+        <button class="status-button {{dish.enabled === false ? 'restore-button' : ''}}" bindtap="toggleDishEnabled" loading="{{savingStatus}}" disabled="{{savingStatus}}">{{dish.enabled === false ? '恢复上架' : '下架菜品'}}</button>
+        <button class="soldout-button {{dish.manualSoldOut ? 'restore-button' : ''}}" bindtap="toggleManualSoldOut" loading="{{savingStatus}}" disabled="{{savingStatus}}">{{dish.manualSoldOut ? '恢复销售' : '设为售罄'}}</button>
+      </view>
+    </view>
+    <view class="operation-card">
+      <text class="operation-title">库存设置</text>
+      <text class="operation-copy">每日份数会在每天零点恢复为当前设置；剩余份数归零后自动售罄。</text>
+      <view class="form-row">
+        <view class="form-field">
+          <text class="field-label">每日份数</text>
+          <input class="form-input" type="number" value="{{inventoryDraft.dailyStock}}" data-field="dailyStock" bindinput="updateInventoryDraft" />
+        </view>
+        <view class="form-field">
+          <text class="field-label">剩余份数</text>
+          <input class="form-input" type="number" value="{{inventoryDraft.stock}}" data-field="stock" bindinput="updateInventoryDraft" />
+        </view>
+      </view>
+      <button class="primary-button" bindtap="saveInventory" loading="{{savingInventory}}" disabled="{{savingInventory}}">保存库存</button>
+    </view>
+  </view>
+
+  <view wx:else class="state-card access-card">
+    <text class="state-title">暂无管理员权限</text>
+    <text class="state-copy">请返回“我的”页面确认管理员身份。</text>
+  </view>
+</view>

@@ -1,0 +1,6 @@
+<view class="tab-bar">
+  <button wx:for="{{tabs}}" wx:key="path" class="tab-item {{selected === index ? 'active' : ''}}" data-index="{{index}}" data-path="{{item.path}}" bindtap="switchTab">
+    <image class="tab-icon" src="{{selected === index ? item.selectedIconPath : item.iconPath}}" mode="aspectFit" />
+    <text class="tab-label">{{item.text}}</text>
+  </button>
+</view>

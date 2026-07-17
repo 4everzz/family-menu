@@ -1,6 +1,6 @@
 <view wx:if="{{dish}}" class="page-shell">
   <view class="dish-hero" style="background: {{dish.color}};"><text>{{dish.emoji}}</text></view>
-  <view class="detail-card"><text class="dish-name">{{dish.name}}</text><text class="dish-price">¥{{dish.price}}</text><text class="dish-detail">{{dish.detail}}</text></view>
+  <view class="detail-card"><text class="dish-name">{{dish.name}}</text><text class="dish-price">¥{{dish.price}}</text><text class="dish-detail">{{dish.description || dish.detail}}</text></view>
   <view class="option-card"><text class="option-title">辣度</text><view class="choice-row"><button wx:for="{{['不辣','微辣','正常辣','特辣']}}" wx:key="*this" data-value="{{item}}" bindtap="selectSpicy" class="choice {{spicy === item ? 'selected' : ''}}">{{item}}</button></view></view>
   <view class="option-card"><text class="option-title">附加选项</text><button class="toggle-row" bindtap="toggleLessOil"><text>少油</text><text class="toggle-state {{lessOil ? 'selected' : ''}}">{{lessOil ? '已选' : '未选'}}</text></button><button class="toggle-row" bindtap="toggleExtraRice"><text>加饭</text><text class="toggle-state {{extraRice ? 'selected' : ''}}">{{extraRice ? '已选' : '未选'}}</text></button></view>
   <button class="add-cart-button" bindtap="addToCart">加入购物车</button>

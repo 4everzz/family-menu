@@ -1,0 +1,25 @@
+.page-shell { min-height: 100vh; padding: 24rpx; box-sizing: border-box; background: #FFF5F5; }
+.filter-row { display: flex; gap: 14rpx; }
+.category-picker { width: 180rpx; min-width: 180rpx; }
+.picker-value, .search-control { min-height: 80rpx; border: 2rpx solid #FECACA; border-radius: 14rpx; background: #FFFFFF; box-sizing: border-box; }
+.picker-value { padding: 0 18rpx; color: #450A0A; font-size: 27rpx; font-weight: 600; line-height: 76rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-control { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8rpx; padding: 0 12rpx; }
+.search-input { min-width: 0; flex: 1; height: 76rpx; color: #450A0A; font-size: 27rpx; }
+.search-clear { width: 64rpx; min-width: 64rpx; height: 64rpx; margin: 0; padding: 0; border-radius: 32rpx; background: #FFF1F2; color: #B91C1C; font-size: 34rpx; line-height: 60rpx; }
+.list-head { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; padding: 24rpx 4rpx 16rpx; }
+.list-title { color: #450A0A; font-size: 32rpx; font-weight: 700; line-height: 1.3; }
+.list-actions { display: flex; align-items: center; gap: 14rpx; }
+.list-note { color: #64748B; font-size: 24rpx; }
+.add-dish-button { min-width: 150rpx; height: 64rpx; margin: 0; padding: 0 18rpx; border-radius: 12rpx; background: #DC2626; color: #FFFFFF; font-size: 25rpx; font-weight: 700; line-height: 64rpx; }
+.dish-grid { width: 100%; }
+.dish-grid-content { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 16rpx; width: 100%; padding-bottom: 16rpx; box-sizing: border-box; }
+.dish-card { width: calc((100% - 16rpx) / 2); min-height: 196rpx; display: flex; flex-direction: column; justify-content: space-between; gap: 10rpx; padding: 20rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; box-sizing: border-box; box-shadow: 0 6rpx 18rpx rgba(69, 10, 10, .06); }
+.dish-name { color: #450A0A; font-size: 30rpx; font-weight: 700; line-height: 1.35; word-break: break-all; }
+.dish-price { color: #B91C1C; font-size: 28rpx; font-weight: 700; line-height: 1.25; }
+.dish-status { color: #15803D; font-size: 23rpx; line-height: 1.25; }
+.dish-status.is-offline { color: #B91C1C; }
+.empty-state { width: 100%; padding: 120rpx 0; color: #64748B; font-size: 26rpx; text-align: center; }
+.state-card { display: flex; flex-direction: column; gap: 12rpx; margin-top: 96rpx; padding: 32rpx 28rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; box-shadow: 0 6rpx 18rpx rgba(69, 10, 10, .06); }
+.state-title { color: #450A0A; font-size: 32rpx; font-weight: 700; line-height: 1.3; }
+.state-copy { color: #64748B; font-size: 26rpx; line-height: 1.5; }
+.access-card { margin-top: 160rpx; }

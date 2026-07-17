@@ -1,0 +1,16 @@
+.page-shell { padding: 24rpx; }
+.detail-card { margin-bottom: 16rpx; padding: 24rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; display: flex; flex-direction: column; gap: 16rpx; box-shadow: 0 8rpx 22rpx rgba(69, 10, 10, .06); }
+.detail-head, .detail-dish, .detail-total { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.detail-id { font-size: 30rpx; font-weight: 700; }
+.detail-status { padding: 6rpx 14rpx; border-radius: 8rpx; background: #FEE2E2; color: #B91C1C; font-size: 24rpx; font-weight: 700; }
+.detail-time { color: #64748B; font-size: 24rpx; }
+.section-title { color: #450A0A; font-size: 29rpx; font-weight: 700; }
+.detail-dish { padding-top: 14rpx; border-top: 2rpx solid #FFF1F1; }
+.detail-dish > view { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4rpx; }
+.detail-dish-name { color: #450A0A; font-size: 27rpx; font-weight: 600; }
+.detail-dish-options { overflow: hidden; color: #64748B; font-size: 23rpx; text-overflow: ellipsis; white-space: nowrap; }
+.detail-dish-price { flex: 0 0 auto; color: #B91C1C; font-size: 26rpx; font-weight: 700; }
+.detail-remark { color: #7C2D12; font-size: 26rpx; line-height: 1.55; }
+.detail-total { margin-top: 24rpx; padding: 24rpx; border-radius: 16rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; box-shadow: 0 8rpx 18rpx rgba(220, 38, 38, .18); }
+.detail-total text:last-child { font-size: 40rpx; }
+.reorder-button { width: 100%; height: 92rpx; margin-top: 20rpx; padding: 0; border-radius: 14rpx; background: #FFFFFF; color: #B91C1C; border: 2rpx solid #DC2626; font-size: 31rpx; font-weight: 700; line-height: 88rpx; box-sizing: border-box; }
