@@ -1,5 +1,11 @@
 const { callAuth, refreshCurrentUser } = require('../../utils/auth-store');
 
+function getRoleText(role) {
+  if (role === 'super_admin') return '超级管理员';
+  if (role === 'manager') return '管理员';
+  return '普通用户';
+}
+
 Page({
   data: {
     loading: true,
@@ -15,7 +21,11 @@ Page({
   async loadCurrentUser() {
     this.setData({ loading: true });
     const user = await refreshCurrentUser();
-    const profileUser = user ? { ...user, avatarText: (user.nickname || '我').slice(0, 1) } : null;
+    const profileUser = user ? {
+      ...user,
+      avatarText: (user.nickname || '我').slice(0, 1),
+      roleText: getRoleText(user.role),
+    } : null;
     getApp().globalData.currentUser = user;
     this.setData({
       loading: false,

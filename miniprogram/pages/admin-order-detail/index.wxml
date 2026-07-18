@@ -1,8 +1,0 @@
-<view wx:if="{{loading}}" class="page-shell"><view class="detail-card"><text class="detail-time">正在读取订单</text></view></view>
-<view wx:elif="{{order}}" class="page-shell">
-  <view class="detail-card"><view class="detail-head"><text class="detail-id">订单 {{order.id}}</text><text class="detail-status">{{order.status}}</text></view><text class="detail-time">{{order.createdAt}}</text></view>
-  <view class="detail-card"><text class="section-title">菜品明细</text><view wx:for="{{order.items}}" wx:for-item="dish" wx:key="id" class="detail-dish"><view><text class="detail-dish-name">{{dish.name}} × {{dish.quantity}}</text><text wx:if="{{dish.optionsText}}" class="detail-dish-options">{{dish.optionsText}}</text></view><text class="detail-dish-price">¥{{dish.price}}</text></view></view>
-  <view wx:if="{{order.remark}}" class="detail-card"><text class="section-title">订单备注</text><text class="detail-remark">{{order.remark}}</text></view>
-  <view class="detail-total"><text>订单合计</text><text>¥{{order.total}}</text></view>
-</view>
-<view wx:else class="page-shell"><view class="detail-card"><text class="detail-time">暂无查看权限</text></view></view>

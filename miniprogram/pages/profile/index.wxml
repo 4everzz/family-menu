@@ -3,7 +3,7 @@
   <view wx:elif="{{user}}">
     <view class="profile-card">
       <view class="avatar">{{user.avatarText}}</view>
-      <view class="profile-copy"><text class="profile-name">{{user.nickname}}</text><text class="profile-note">{{user.role === 'super_admin' ? '超级管理员' : (user.role === 'manager' ? '管理员' : '普通用户')}}</text></view>
+      <view class="profile-copy"><text class="profile-name">{{user.nickname}}</text><text class="profile-note">{{user.roleText}}</text></view>
     </view>
     <view class="menu-group">
       <view class="menu-row" hover-class="menu-row-active" bindtap="openHistory"><view><text class="menu-title">历史订单</text></view><text class="menu-arrow">></text></view>
