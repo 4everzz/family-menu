@@ -1,5 +1,6 @@
 <view class="page-shell">
-  <view wx:if="{{historyOrders.length}}" class="history-list">
+  <view wx:if="{{loading}}" class="empty-state"><text class="empty-copy">正在读取历史订单</text></view>
+  <view wx:elif="{{historyOrders.length}}" class="history-list">
     <view wx:for="{{historyOrders}}" wx:key="id" class="history-card" data-id="{{item.id}}" bindtap="openOrder" aria-label="查看订单{{item.id}}详情">
       <view class="history-head"><text class="history-id">订单 {{item.id}}</text><text class="history-status">{{item.status}}</text></view>
       <text class="history-summary">{{item.summary}}</text>

@@ -1,0 +1,39 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card">
+    <text class="state-title">正在读取订单</text>
+    <text class="state-copy">请稍候</text>
+  </view>
+
+  <view wx:elif="{{hasAccess}}">
+    <view class="page-head">
+      <view><text class="page-title">制作中的订单</text><text class="page-copy">确认完成后会进入历史订单</text></view>
+      <view class="head-actions"><button class="history-button" bindtap="openHistory">历史订单</button><text class="order-count">{{orders.length}} 单</text></view>
+    </view>
+
+    <view wx:if="{{orders.length}}" class="order-list">
+      <view wx:for="{{orders}}" wx:key="id" class="order-card">
+        <view class="order-head">
+          <text class="order-id">订单 {{item.id}}</text>
+          <text class="order-status">制作中</text>
+        </view>
+        <text class="order-summary">{{item.summary}}</text>
+        <text wx:if="{{item.remark}}" class="order-remark">备注：{{item.remark}}</text>
+        <view class="order-foot">
+          <text>{{item.createdAt}}</text>
+          <text class="order-total">¥{{item.total}}</text>
+        </view>
+        <button class="complete-button" data-id="{{item.id}}" bindtap="completeOrder" loading="{{item.isCompleting}}" disabled="{{item.isCompleting}}">确认已完成</button>
+      </view>
+    </view>
+
+    <view wx:else class="empty-state">
+      <text class="empty-title">暂无制作中的订单</text>
+      <text class="empty-copy">新订单提交后会显示在这里</text>
+    </view>
+  </view>
+
+  <view wx:else class="state-card access-card">
+    <text class="state-title">暂无管理员权限</text>
+    <text class="state-copy">请返回“我的”页面确认管理员身份后再操作。</text>
+  </view>
+</view>

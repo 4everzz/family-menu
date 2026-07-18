@@ -1,4 +1,5 @@
-<view wx:if="{{order}}" class="page-shell">
+<view wx:if="{{loading}}" class="page-shell"><view class="detail-card"><text class="detail-time">正在读取订单</text></view></view>
+<view wx:elif="{{order}}" class="page-shell">
   <view class="detail-card">
     <view class="detail-head"><text class="detail-id">订单 {{order.id}}</text><text class="detail-status">{{order.status}}</text></view>
     <text class="detail-time">{{order.createdAt}}</text>

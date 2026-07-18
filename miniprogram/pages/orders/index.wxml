@@ -1,5 +1,6 @@
 <view class="page-shell">
-  <view wx:if="{{currentOrder}}" class="order-list">
+  <view wx:if="{{loading}}" class="empty-state"><text class="empty-copy">正在读取订单</text></view>
+  <view wx:elif="{{currentOrder}}" class="order-list">
     <view class="order-card">
       <view class="order-head"><text class="order-id">订单 {{currentOrder.id}}</text><text class="order-status">{{currentOrder.status}}</text></view>
       <text class="order-items">{{currentOrder.summary}}</text>
@@ -9,7 +10,6 @@
       </view>
       <text class="order-note">{{currentOrder.statusNote}}</text>
       <view class="order-foot"><text>{{currentOrder.createdAt}}</text><text class="order-total">¥{{currentOrder.total}}</text></view>
-      <button class="order-complete-button" bindtap="completeOrder" loading="{{isCompleting}}" disabled="{{isCompleting}}">{{isCompleting ? '正在确认' : '确认已完成'}}</button>
     </view>
   </view>
   <view wx:else class="empty-state"><text class="empty-title">暂无进行中的订单</text><text class="empty-copy">去菜单里选择几道喜欢的菜吧</text></view>

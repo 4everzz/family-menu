@@ -1,18 +1,27 @@
+const { loadMyOrders } = require('../../utils/order-store');
+const { requireLogin } = require('../../utils/auth-guard');
+
 Page({
-  data: { historyOrders: [] },
-  onShow() {
-    const orders = getApp().globalData.orders;
-    const currentOrder = orders.find((item) => item.status !== '已完成');
+  data: { historyOrders: [], loading: true },
+  async onShow() {
+    if (!(await requireLogin())) return;
+    this.setData({ loading: true });
+    let orders = [];
+    try {
+      orders = await loadMyOrders();
+    } catch (error) {
+      wx.showToast({ title: error.message || '读取订单失败', icon: 'none' });
+    }
     const historyOrders = orders
-      .filter((item) => item !== currentOrder)
+      .filter((order) => order.status === '已完成')
       .map((order) => ({
         id: order.id,
         status: order.status,
-        summary: order.summary || (order.items || []).map((item) => `${item.name} × ${item.quantity}`).join('、'),
+        summary: order.summary,
         createdAt: order.createdAt,
         total: order.total,
       }));
-    this.setData({ historyOrders });
+    this.setData({ historyOrders, loading: false });
   },
   openOrder(event) {
     wx.navigateTo({ url: `/pages/history-detail/index?id=${event.currentTarget.dataset.id}` });

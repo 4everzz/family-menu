@@ -6,16 +6,23 @@
 
   <view wx:elif="{{hasAccess}}" class="manage-card">
     <view class="page-head">
-      <text class="page-title">管理菜品</text>
-      <text class="page-copy">在一个页面内新增菜品、查找菜品和修改菜品资料</text>
+      <text class="page-title">管理中心</text>
     </view>
-    <button class="manage-button" bindtap="openDishesPage" loading="{{isNavigating}}" disabled="{{isNavigating}}">进入菜品管理</button>
+    <view class="stats-grid">
+      <view wx:for="{{stats}}" wx:key="label" class="stat-card">
+        <text class="stat-value">{{item.value}}</text>
+        <text class="stat-label">{{item.label}}</text>
+      </view>
+    </view>
+    <view class="manage-actions">
+      <button class="manage-button" bindtap="openDishesPage" loading="{{navigatingTarget === 'dishes'}}" disabled="{{!!navigatingTarget}}">管理菜品</button>
+      <button class="manage-button" bindtap="openOrdersPage" loading="{{navigatingTarget === 'orders'}}" disabled="{{!!navigatingTarget}}">管理订单</button>
+      <button class="manage-button" bindtap="openCategoriesPage" loading="{{navigatingTarget === 'categories'}}" disabled="{{!!navigatingTarget}}">管理分类</button>
+    </view>
   </view>
 
   <view wx:else class="state-card access-card">
     <text class="state-title">暂未获得管理员权限</text>
-    <text class="state-copy">复制下面的管理员 ID，用于开通管理权限。</text>
-    <text class="open-id" selectable="true">{{openId || '暂未获取到'}}</text>
-    <button class="copy-button" bindtap="copyOpenId" disabled="{{!openId}}">复制管理员 ID</button>
+    <text class="state-copy">请使用已被授权的微信账号登录后再操作。</text>
   </view>
 </view>

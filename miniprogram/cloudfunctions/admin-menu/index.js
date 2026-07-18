@@ -4,13 +4,13 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
 
-async function isManager(openId) {
-  try {
-    const result = await db.collection('admins').where({ openId, enabled: true }).limit(1).get();
-    return result.data.length > 0;
-  } catch (error) {
-    return false;
-  }
+async function getCurrentUser(openId) {
+  const result = await db.collection('users').where({ openId, enabled: true }).limit(1).get();
+  return result.data[0] || null;
+}
+
+function isManager(user) {
+  return user && (user.role === 'manager' || user.role === 'super_admin');
 }
 
 async function getAllDishes() {
@@ -26,7 +26,11 @@ async function getAllDishes() {
 
 async function getAllCategories() {
   const result = await db.collection('categories').get();
-  return result.data.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
+  return result.data.sort((left, right) => {
+    const leftSort = Number.isInteger(left.sort) ? left.sort : Number.MAX_SAFE_INTEGER;
+    const rightSort = Number.isInteger(right.sort) ? right.sort : Number.MAX_SAFE_INTEGER;
+    return leftSort - rightSort || left.name.localeCompare(right.name, 'zh-CN');
+  });
 }
 
 async function initializeDishInventory() {
@@ -46,7 +50,7 @@ async function initializeDishInventory() {
   return updates.length;
 }
 
-async function createOrder(openId, event) {
+async function createOrder(openId, ownerUserId, event) {
   const requestedItems = Array.isArray(event.items) ? event.items : [];
   const remark = String(event.remark || '').trim().slice(0, 80);
   const mergedItems = requestedItems.reduce((result, item) => {
@@ -110,6 +114,8 @@ async function createOrder(openId, event) {
           quantity: requestedItem.quantity,
           options: requestedItem.options,
           optionsText: requestedItem.options.join('、'),
+          emoji: dish.emoji || '🍽',
+          color: dish.color || '#D97706',
         };
         orderItems.push(item);
         total += price * requestedItem.quantity;
@@ -117,6 +123,7 @@ async function createOrder(openId, event) {
       const createdAt = new Date().toLocaleString('zh-CN');
       const order = {
         id: `HJ${Date.now().toString().slice(-8)}`,
+        ownerUserId,
         ownerOpenId: openId,
         status: '制作中',
         statusNote: '订单已提交，正在制作中',
@@ -142,14 +149,104 @@ async function createOrder(openId, event) {
   }
 }
 
+async function listOrders(filter) {
+  const collection = db.collection('orders');
+  const query = Object.keys(filter).length ? collection.where(filter) : collection;
+  const result = await query.orderBy('createdAtServer', 'desc').limit(100).get();
+  return result.data;
+}
+
+async function listMyOrders(userId, openId) {
+  const [ownedResult, legacyResult] = await Promise.all([
+    db.collection('orders').where({ ownerUserId: userId }).orderBy('createdAtServer', 'desc').limit(100).get(),
+    db.collection('orders').where({ ownerOpenId: openId }).orderBy('createdAtServer', 'desc').limit(100).get(),
+  ]);
+  const orders = [...ownedResult.data, ...legacyResult.data];
+  return [...new Map(orders.map((item) => [item._id, item])).values()]
+    .sort((left, right) => new Date(right.createdAtServer || 0).getTime() - new Date(left.createdAtServer || 0).getTime());
+}
+
+async function getMyOrder(id, userId, openId) {
+  const ownedResult = await db.collection('orders').where({ id, ownerUserId: userId }).limit(1).get();
+  if (ownedResult.data[0]) return ownedResult.data[0];
+  const legacyResult = await db.collection('orders').where({ id, ownerOpenId: openId }).limit(1).get();
+  return legacyResult.data[0] || null;
+}
+
+async function completeOrder(id) {
+  const result = await db.collection('orders').where({ id, status: '制作中' }).update({
+    data: {
+      status: '已完成',
+      statusNote: '订单已完成，感谢使用小家菜单',
+      updatedAt: db.serverDate(),
+    },
+  });
+  return result.stats.updated > 0;
+}
+
 exports.main = async (event) => {
   const { OPENID: openId } = cloud.getWXContext();
-  if (event.action === 'getIdentity') return { ok: true, openId };
-  if (event.action === 'createOrder') return createOrder(openId, event);
-  if (!(await isManager(openId))) return { ok: false, code: 'FORBIDDEN', message: '没有管理员权限' };
+  const user = await getCurrentUser(openId);
+  if (event.action === 'getIdentity') return { ok: true, user: user ? { id: user._id, role: user.role } : null };
+  if (event.action === 'createOrder') {
+    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+    return createOrder(openId, user._id, event);
+  }
+  if (event.action === 'listMyOrders') {
+    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+    return { ok: true, orders: await listMyOrders(user._id, openId) };
+  }
+  if (event.action === 'getMyOrder') {
+    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+    const id = String(event.id || '');
+    const order = id ? await getMyOrder(id, user._id, openId) : null;
+    return order ? { ok: true, order } : { ok: false, code: 'NOT_FOUND', message: '订单不存在' };
+  }
+  if (!isManager(user)) return { ok: false, code: 'FORBIDDEN', message: '没有管理员权限' };
+  if (event.action === 'listAdminOrders') return { ok: true, orders: await listOrders({}) };
+  if (event.action === 'completeOrder') {
+    const id = String(event.id || '');
+    if (!id) return { ok: false, code: 'INVALID_ORDER', message: '订单无效' };
+    const completed = await completeOrder(id);
+    return completed ? { ok: true } : { ok: false, code: 'ORDER_NOT_ACTIVE', message: '订单已完成或不存在' };
+  }
   if (event.action === 'initializeDishInventory') return { ok: true, initialized: await initializeDishInventory() };
   if (event.action === 'listDishes') return { ok: true, dishes: await getAllDishes() };
   if (event.action === 'listCategories') return { ok: true, categories: await getAllCategories() };
+  if (event.action === 'addCategory') {
+    const name = String(event.name || '').trim();
+    const sort = Number(event.sort);
+    if (!name || !Number.isInteger(sort) || sort < 0) {
+      return { ok: false, code: 'INVALID_CATEGORY', message: '分类名称或排序无效' };
+    }
+    const duplicate = await db.collection('categories').where({ name: name.slice(0, 12) }).limit(1).get();
+    if (duplicate.data.length) return { ok: false, code: 'CATEGORY_EXISTS', message: '已有同名分类' };
+    const category = {
+      id: `c${Date.now()}`,
+      name: name.slice(0, 12),
+      sort,
+      createdAt: db.serverDate(),
+      updatedAt: db.serverDate(),
+    };
+    await db.collection('categories').add({ data: category });
+    return { ok: true, category };
+  }
+  if (event.action === 'updateCategory') {
+    const id = String(event.id || '');
+    const name = String(event.name || '').trim();
+    const sort = Number(event.sort);
+    if (!id || !name || !Number.isInteger(sort) || sort < 0) {
+      return { ok: false, code: 'INVALID_CATEGORY', message: '分类名称或排序无效' };
+    }
+    const duplicate = await db.collection('categories').where({ name: name.slice(0, 12) }).limit(1).get();
+    if (duplicate.data.some((item) => item.id !== id)) return { ok: false, code: 'CATEGORY_EXISTS', message: '已有同名分类' };
+    const category = { name: name.slice(0, 12), sort };
+    const result = await db.collection('categories').where({ id }).update({
+      data: { ...category, updatedAt: db.serverDate() },
+    });
+    if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '分类不存在' };
+    return { ok: true, category: { id, ...category } };
+  }
   if (event.action === 'updateDishPrice') {
     const id = String(event.id || '');
     const price = Number(event.price);

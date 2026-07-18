@@ -11,3 +11,9 @@
 .menu-title { font-size: 32rpx; line-height: 1.25; font-weight: 700; }
 .menu-arrow { width: 44rpx; margin-left: 20rpx; color: #B91C1C; font-size: 46rpx; line-height: 1; text-align: right; flex-shrink: 0; }
 .guest-note { display: block; margin: 28rpx 12rpx 0; color: #64748B; font-size: 24rpx; line-height: 1.5; text-align: center; }
+.state-card { margin-top: 120rpx; padding: 32rpx 28rpx; border: 2rpx solid #FEE2E2; border-radius: 18rpx; background: #FFFFFF; color: #64748B; font-size: 28rpx; text-align: center; box-shadow: 0 8rpx 20rpx rgba(69, 10, 10, .05); }
+.guest-card { background: #7C2D12; }
+.phone-row { width: 100%; min-width: 100%; min-height: 112rpx; display: flex; align-self: stretch; align-items: center; justify-content: space-between; margin: 0; padding: 24rpx 28rpx; border: 2rpx solid #FEE2E2; border-radius: 20rpx; background: #FFFFFF; color: #450A0A; text-align: left; box-sizing: border-box; box-shadow: 0 8rpx 20rpx rgba(69, 10, 10, .05); }
+.phone-row::after { border: 0; }
+.phone-row view { flex: 1; min-width: 0; display: flex; }
+.login-button { width: 100%; min-height: 92rpx; margin: 28rpx 0 0; padding: 0 24rpx; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; line-height: 92rpx; box-sizing: border-box; }
