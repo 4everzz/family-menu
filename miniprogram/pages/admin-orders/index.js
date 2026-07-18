@@ -3,6 +3,9 @@ Page({
     loading: true,
     hasAccess: false,
     orders: [],
+    historyOrders: [],
+    activeTab: 'active',
+    selectedHistoryOrder: null,
   },
   onShow() {
     this.loadOrders();
@@ -22,13 +25,18 @@ Page({
         this.setData({ hasAccess: false, orders: [], loading: false });
         return;
       }
+      const allOrders = result.orders || [];
       const previousOrders = this.data.orders;
-      const orders = (result.orders || []).filter((item) => item.status === '制作中').map((item) => ({
+      const orders = allOrders.filter((item) => item.status === '制作中').map((item) => ({
         ...item,
         summary: item.summary || (item.items || []).map((dish) => `${dish.name} x ${dish.quantity}`).join('、'),
         isCompleting: previousOrders.some((previous) => previous.id === item.id && previous.isCompleting),
       }));
-      this.setData({ hasAccess: true, orders, loading: false });
+      const historyOrders = allOrders.filter((item) => item.status === '已完成').map((item) => ({
+        ...item,
+        summary: item.summary || (item.items || []).map((dish) => `${dish.name} x ${dish.quantity}`).join('、'),
+      }));
+      this.setData({ hasAccess: true, orders, historyOrders, loading: false });
     } catch (error) {
       this.setData({ loading: false });
       wx.showToast({ title: '读取订单失败，请稍后重试', icon: 'none' });
@@ -66,7 +74,16 @@ Page({
       }
     }
   },
-  openHistory() {
-    wx.navigateTo({ url: '/pages/admin-history/index' });
+  switchTab(event) {
+    this.setData({ activeTab: event.currentTarget.dataset.tab });
+  },
+  openHistoryOrder(event) {
+    const order = this.data.historyOrders.find((item) => item.id === event.currentTarget.dataset.id);
+    if (order) this.setData({ selectedHistoryOrder: order });
+  },
+  closeHistoryOrder() {
+    this.setData({ selectedHistoryOrder: null });
+  },
+  stopModalPropagation() {
   },
 });
