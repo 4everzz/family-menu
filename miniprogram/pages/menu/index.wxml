@@ -3,7 +3,7 @@
     <view class="welcome-copy">
       <text class="eyebrow">家庭点餐</text>
       <text class="page-title">今天吃点什么？</text>
-      <text class="page-subtitle">不登录也能直接点菜</text>
+      <text class="page-subtitle">登录后即可开始点菜</text>
     </view>
     <view class="bowl-mark">食</view>
   </view>

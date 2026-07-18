@@ -1,3 +1,5 @@
+const { requireLogin } = require('../../utils/auth-guard');
+
 Page({
   data: {
     items: [],
@@ -5,7 +7,8 @@ Page({
     isSubmitting: false,
     remark: '',
   },
-  onShow() {
+  async onShow() {
+    if (!(await requireLogin())) return;
     this.renderCart();
   },
   increase(event) {
@@ -17,9 +20,28 @@ Page({
   updateRemark(event) {
     this.setData({ remark: event.detail.value });
   },
+  clearCart() {
+    if (this.data.isSubmitting || !this.data.items.length) return;
+    wx.showModal({
+      title: '清空购物车',
+      content: '确定移除当前已选的全部菜品吗？',
+      confirmText: '清空',
+      confirmColor: '#DC2626',
+      success: (result) => {
+        if (!result.confirm) return;
+        const app = getApp();
+        app.globalData.cart = [];
+        app.saveCart();
+        this.setData({ remark: '' });
+        this.renderCart();
+        wx.showToast({ title: '购物车已清空', icon: 'success' });
+      },
+    });
+  },
   async submitOrder() {
     const app = getApp();
     if (this.data.isSubmitting) return;
+    if (!(await requireLogin())) return;
     if (!app.globalData.cart.length) {
       wx.showToast({ title: '请先选择菜品', icon: 'none' });
       return;

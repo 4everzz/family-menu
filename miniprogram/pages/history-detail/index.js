@@ -1,22 +1,22 @@
+const { loadMyOrder } = require('../../utils/order-store');
+const { requireLogin } = require('../../utils/auth-guard');
+
 Page({
-  data: { order: null },
-  onLoad(query) {
-    const order = getApp().globalData.orders.find((item) => item.id === query.id);
+  data: { order: null, loading: true },
+  async onLoad(query) {
+    if (!(await requireLogin())) return;
+    let order = null;
+    try {
+      order = await loadMyOrder(query.id);
+    } catch (error) {
+      wx.showToast({ title: error.message || '读取订单失败', icon: 'none' });
+    }
     if (!order) {
       wx.showToast({ title: '订单不存在', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 500);
       return;
     }
-    this.setData({
-      order: {
-        ...order,
-        items: (order.items || []).map((item) => ({
-          ...item,
-          cartKey: item.cartKey || `${item.id}|${(item.options || ['正常辣']).join('|')}`,
-          optionsText: (item.options || []).join(' · '),
-        })),
-      },
-    });
+    this.setData({ order, loading: false });
   },
   reorder() {
     const { order } = this.data;
@@ -24,9 +24,9 @@ Page({
     const app = getApp();
     const cart = app.globalData.cart;
     order.items.forEach((dish) => {
-      const options = dish.options || ['正常辣'];
+      const options = dish.options || [];
       const cartKey = dish.cartKey || `${dish.id}|${options.join('|')}`;
-      const existing = cart.find((item) => (item.cartKey || `${item.id}|${(item.options || ['正常辣']).join('|')}`) === cartKey);
+      const existing = cart.find((item) => (item.cartKey || `${item.id}|${(item.options || []).join('|')}`) === cartKey);
       if (existing) {
         existing.quantity += dish.quantity;
       } else {

@@ -1,4 +1,5 @@
 const { dishes } = require('../../data/menu');
+const { requireLogin } = require('../../utils/auth-guard');
 
 Page({
   data: {
@@ -7,7 +8,8 @@ Page({
     lessOil: false,
     extraRice: false,
   },
-  onLoad(query) {
+  async onLoad(query) {
+    if (!(await requireLogin())) return;
     const dish = dishes.find((item) => item.id === query.id);
     if (!dish) {
       wx.showToast({ title: '菜品不存在', icon: 'none' });
@@ -25,7 +27,8 @@ Page({
   toggleExtraRice() {
     this.setData({ extraRice: !this.data.extraRice });
   },
-  addToCart() {
+  async addToCart() {
+    if (!(await requireLogin())) return;
     const { dish, spicy, lessOil, extraRice } = this.data;
     if (!dish) return;
     const options = [spicy];

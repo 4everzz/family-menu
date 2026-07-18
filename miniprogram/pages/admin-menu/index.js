@@ -2,14 +2,16 @@ Page({
   data: {
     loading: true,
     hasAccess: false,
-    openId: '',
-    isNavigating: false,
-  },
-  onLoad() {
-    this.loadAccess();
+    navigatingTarget: '',
+    stats: [
+      { label: '制作中订单', value: '—' },
+      { label: '可点菜品', value: '—' },
+      { label: '菜品分类', value: '—' },
+    ],
   },
   onShow() {
-    this.setData({ isNavigating: false });
+    this.setData({ navigatingTarget: '' });
+    this.loadAccess();
   },
   async callAdmin(action, payload = {}) {
     const response = await wx.cloud.callFunction({
@@ -21,31 +23,65 @@ Page({
   async loadAccess() {
     this.setData({ loading: true });
     try {
-      const result = await this.callAdmin('listCategories');
-      if (result.ok) {
-        this.setData({ hasAccess: true, loading: false });
+      const [categoryResult, dishResult, orderResult] = await Promise.all([
+        this.callAdmin('listCategories'),
+        this.callAdmin('listDishes'),
+        this.callAdmin('listAdminOrders'),
+      ]);
+      if (categoryResult.ok && dishResult.ok && orderResult.ok) {
+        const makingOrders = (orderResult.orders || []).filter((item) => item.status === '制作中').length;
+        const availableDishes = (dishResult.dishes || []).filter((item) => {
+          const stock = Number(item.stock);
+          return item.enabled !== false && item.manualSoldOut !== true && (!Number.isFinite(stock) || stock > 0);
+        }).length;
+        this.setData({
+          hasAccess: true,
+          loading: false,
+          stats: [
+            { label: '制作中订单', value: String(makingOrders) },
+            { label: '可点菜品', value: String(availableDishes) },
+            { label: '菜品分类', value: String((categoryResult.categories || []).length) },
+          ],
+        });
         return;
       }
-      const identity = await this.callAdmin('getIdentity');
-      this.setData({ openId: identity.openId || '', hasAccess: false, loading: false });
+      this.setData({ hasAccess: false, loading: false });
     } catch (error) {
       wx.showToast({ title: '读取管理数据失败', icon: 'none' });
       this.setData({ loading: false });
     }
   },
   openDishesPage() {
-    if (this.data.isNavigating) return;
-    this.setData({ isNavigating: true });
+    if (this.data.navigatingTarget) return;
+    this.setData({ navigatingTarget: 'dishes' });
     wx.navigateTo({
       url: '/pages/admin-dishes/index',
       fail: () => {
-        this.setData({ isNavigating: false });
+        this.setData({ navigatingTarget: '' });
         wx.showToast({ title: '打开菜品管理失败', icon: 'none' });
       },
     });
   },
-  copyOpenId() {
-    if (!this.data.openId) return;
-    wx.setClipboardData({ data: this.data.openId });
+  openOrdersPage() {
+    if (this.data.navigatingTarget) return;
+    this.setData({ navigatingTarget: 'orders' });
+    wx.navigateTo({
+      url: '/pages/admin-orders/index',
+      fail: () => {
+        this.setData({ navigatingTarget: '' });
+        wx.showToast({ title: '打开订单管理失败', icon: 'none' });
+      },
+    });
+  },
+  openCategoriesPage() {
+    if (this.data.navigatingTarget) return;
+    this.setData({ navigatingTarget: 'categories' });
+    wx.navigateTo({
+      url: '/pages/admin-categories/index',
+      fail: () => {
+        this.setData({ navigatingTarget: '' });
+        wx.showToast({ title: '打开分类管理失败', icon: 'none' });
+      },
+    });
   },
 });

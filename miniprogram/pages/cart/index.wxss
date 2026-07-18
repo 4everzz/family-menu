@@ -20,5 +20,7 @@
 .checkout-summary { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 8rpx; }
 .total-label { color: #7C2D12; font-size: 26rpx; font-weight: 600; white-space: nowrap; }
 .total-value { min-width: 0; overflow: hidden; color: #DC2626; font-size: 42rpx; font-weight: 700; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
-.checkout-button { width: 248rpx; min-width: 248rpx; height: 92rpx; margin: 0; padding: 0; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; line-height: 92rpx; box-shadow: 0 6rpx 12rpx rgba(220, 38, 38, .2); }
+.clear-button { width: 96rpx; min-width: 96rpx; height: 92rpx; margin: 0; padding: 0; border: 2rpx solid #FCA5A5; border-radius: 14rpx; background: #FFFFFF; color: #B91C1C; font-size: 26rpx; font-weight: 700; line-height: 88rpx; box-sizing: border-box; }
+.checkout-button { width: 216rpx; min-width: 216rpx; height: 92rpx; margin: 0; padding: 0; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; line-height: 92rpx; box-shadow: 0 6rpx 12rpx rgba(220, 38, 38, .2); }
+.clear-button[disabled] { opacity: .45; }
 .checkout-button[disabled] { background: #FCA5A5; box-shadow: none; }

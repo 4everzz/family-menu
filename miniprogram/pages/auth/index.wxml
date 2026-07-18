@@ -1,0 +1,10 @@
+<view class="page-shell">
+  <view class="page-head">
+    <text class="page-title">登录小家菜单</text>
+    <text class="page-copy">使用微信身份继续</text>
+  </view>
+  <view class="login-actions">
+    <button class="primary-button" bindtap="loginWithWechat" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">微信登录</button>
+    <button class="secondary-button" open-type="getPhoneNumber" bindgetphonenumber="loginWithPhone" disabled="{{isSubmitting}}">授权手机号并登录</button>
+  </view>
+</view>

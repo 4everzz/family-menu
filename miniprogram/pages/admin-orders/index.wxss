@@ -1,0 +1,21 @@
+.page-shell { min-height: 100vh; padding: 24rpx 24rpx calc(48rpx + env(safe-area-inset-bottom)); box-sizing: border-box; background: #FFF5F5; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; padding: 8rpx 4rpx 24rpx; }
+.page-title, .state-title, .empty-title { color: #450A0A; font-size: 36rpx; font-weight: 700; line-height: 1.3; }
+.page-copy, .state-copy, .empty-copy { display: block; margin-top: 8rpx; color: #64748B; font-size: 25rpx; line-height: 1.5; }
+.order-count { flex-shrink: 0; padding: 8rpx 14rpx; border-radius: 10rpx; background: #FEE2E2; color: #B91C1C; font-size: 24rpx; font-weight: 700; line-height: 1.3; }
+.head-actions { display: flex; align-items: center; gap: 12rpx; flex-shrink: 0; }.history-button { min-width: 144rpx; height: 88rpx; margin: 0; padding: 0 14rpx; border: 2rpx solid #FCA5A5; border-radius: 12rpx; background: #FFFFFF; color: #B91C1C; font-size: 23rpx; font-weight: 700; line-height: 84rpx; box-sizing: border-box; }
+.order-list { display: flex; flex-direction: column; gap: 16rpx; }
+.order-card, .state-card { display: flex; flex-direction: column; gap: 16rpx; padding: 24rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; box-shadow: 0 8rpx 22rpx rgba(69, 10, 10, .07); box-sizing: border-box; }
+.order-head, .order-foot { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.order-id { min-width: 0; overflow: hidden; color: #450A0A; font-size: 30rpx; font-weight: 700; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.order-status { flex-shrink: 0; padding: 6rpx 14rpx; border-radius: 8rpx; background: #FEE2E2; color: #B91C1C; font-size: 24rpx; font-weight: 700; line-height: 1.3; }
+.order-summary { color: #475569; font-size: 27rpx; line-height: 1.5; }
+.order-remark { padding: 14rpx 16rpx; border-radius: 10rpx; background: #FFF7F7; color: #7C2D12; font-size: 25rpx; line-height: 1.5; }
+.order-foot { color: #64748B; font-size: 24rpx; line-height: 1.4; }
+.order-total { flex-shrink: 0; color: #DC2626; font-size: 34rpx; font-weight: 700; }
+.complete-button { width: 100%; min-height: 88rpx; margin: 0; padding: 0 24rpx; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 29rpx; font-weight: 700; line-height: 88rpx; box-sizing: border-box; }
+.complete-button[disabled] { opacity: .55; }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 4rpx; margin-top: 180rpx; text-align: center; }
+.empty-copy { margin-top: 0; }
+.state-card { margin-top: 120rpx; }
+.access-card { margin-top: 160rpx; }

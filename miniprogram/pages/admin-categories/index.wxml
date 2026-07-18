@@ -1,0 +1,62 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card">
+    <text class="state-title">正在读取分类</text>
+    <text class="state-copy">请稍候</text>
+  </view>
+
+  <view wx:elif="{{hasAccess}}">
+    <view class="page-head">
+      <text class="page-title">管理分类</text>
+      <text class="page-copy">名称可修改，排序数字越小越靠前。为避免影响已有菜品，分类不提供删除。</text>
+    </view>
+
+    <view class="form-card">
+      <text class="section-title">新增分类</text>
+      <view class="form-row">
+        <view class="form-field form-field-name">
+          <text class="field-label">分类名称</text>
+          <input class="form-input" value="{{newDraft.name}}" data-field="name" maxlength="12" placeholder="例如：早餐" bindinput="updateNewDraft" />
+        </view>
+        <view class="form-field form-field-sort">
+          <text class="field-label">排序</text>
+          <input class="form-input" type="number" value="{{newDraft.sort}}" data-field="sort" bindinput="updateNewDraft" />
+        </view>
+      </view>
+      <button class="primary-button" bindtap="addCategory" loading="{{isAdding}}" disabled="{{isAdding || isSaving}}">新增分类</button>
+    </view>
+
+    <view class="list-head">
+      <text class="section-title">已有分类</text>
+      <text class="list-count">{{categories.length}} 个</text>
+    </view>
+    <view class="category-list">
+      <button wx:for="{{categories}}" wx:key="id" class="category-row {{item.isEditing ? 'is-editing' : ''}}" data-id="{{item.id}}" bindtap="selectCategory" disabled="{{isAdding || isSaving}}">
+        <text class="category-name">{{item.name}}</text>
+        <text class="category-sort">排序 {{item.sortText}}</text>
+      </button>
+    </view>
+
+    <view wx:if="{{editId}}" class="form-card edit-card">
+      <text class="section-title">修改分类</text>
+      <view class="form-row">
+        <view class="form-field form-field-name">
+          <text class="field-label">分类名称</text>
+          <input class="form-input" value="{{editDraft.name}}" data-field="name" maxlength="12" bindinput="updateEditDraft" />
+        </view>
+        <view class="form-field form-field-sort">
+          <text class="field-label">排序</text>
+          <input class="form-input" type="number" value="{{editDraft.sort}}" data-field="sort" bindinput="updateEditDraft" />
+        </view>
+      </view>
+      <view class="form-actions">
+        <button class="secondary-button" bindtap="cancelEdit" disabled="{{isSaving}}">取消</button>
+        <button class="primary-button" bindtap="saveCategory" loading="{{isSaving}}" disabled="{{isSaving}}">保存修改</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:else class="state-card access-card">
+    <text class="state-title">暂无管理员权限</text>
+    <text class="state-copy">请返回“我的”页面确认管理员身份后再操作。</text>
+  </view>
+</view>

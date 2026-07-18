@@ -1,4 +1,5 @@
 const { dishes: defaultDishes, categories: defaultCategories } = require('../../data/menu');
+const { requireLogin } = require('../../utils/auth-guard');
 
 let menuDishes = defaultDishes;
 
@@ -25,7 +26,8 @@ Page({
     this.updateMenuHeight();
     this.loadCloudMenu();
   },
-  onShow() {
+  async onShow() {
+    if (!(await requireLogin())) return;
     this.syncTabBar();
     this.renderDishes();
     const app = getApp();
@@ -60,7 +62,11 @@ Page({
       }));
       if (!validDishes.length) return;
       menuDishes = validDishes;
-      const validCategories = cloudCategories.filter((item) => item && item.id && item.name && item.id !== 'all');
+      const validCategories = cloudCategories.filter((item) => item && item.id && item.name && item.id !== 'all').sort((left, right) => {
+        const leftSort = Number.isInteger(left.sort) ? left.sort : Number.MAX_SAFE_INTEGER;
+        const rightSort = Number.isInteger(right.sort) ? right.sort : Number.MAX_SAFE_INTEGER;
+        return leftSort - rightSort || left.name.localeCompare(right.name, 'zh-CN');
+      });
       const categories = validCategories.length
         ? [{ id: 'all', name: '全部' }, ...validCategories]
         : defaultCategories;
@@ -90,7 +96,8 @@ Page({
   clearKeyword() {
     this.setData({ keyword: '' }, () => this.renderDishes());
   },
-  addDish(event) {
+  async addDish(event) {
+    if (!(await requireLogin())) return;
     const id = event.currentTarget.dataset.id;
     const dish = menuDishes.find((item) => item.id === id);
     if (!dish || dish.isSoldOut) {
@@ -141,7 +148,8 @@ Page({
   updateCustomRemark(event) {
     this.setData({ customRemark: event.detail.value });
   },
-  addSelectedDish() {
+  async addSelectedDish() {
+    if (!(await requireLogin())) return;
     const { selectedDish, selectedSpicy, quickRemarkOptions, customRemark } = this.data;
     if (!selectedDish || selectedDish.isSoldOut) {
       wx.showToast({ title: '该菜品已售罄', icon: 'none' });
@@ -167,7 +175,8 @@ Page({
     app.globalData.cart.push({ ...dish, cartKey, options, quantity: 1 });
     app.saveCart();
   },
-  goCart() {
+  async goCart() {
+    if (!(await requireLogin())) return;
     wx.navigateTo({ url: '/pages/cart/index' });
   },
   renderDishes() {

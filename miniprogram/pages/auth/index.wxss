@@ -1,0 +1,9 @@
+.page-shell { min-height: 100vh; padding: 64rpx 32rpx calc(64rpx + env(safe-area-inset-bottom)); box-sizing: border-box; background: #FFF5F5; }
+.page-head { display: flex; flex-direction: column; gap: 10rpx; padding: 8rpx 4rpx 56rpx; }
+.page-title { color: #450A0A; font-size: 46rpx; font-weight: 700; line-height: 1.25; }
+.page-copy { color: #64748B; font-size: 27rpx; line-height: 1.5; }
+.login-actions { display: flex; flex-direction: column; gap: 20rpx; }
+.primary-button, .secondary-button { width: 100%; min-height: 92rpx; margin: 0; padding: 0 24rpx; border-radius: 14rpx; font-size: 30rpx; font-weight: 700; line-height: 92rpx; box-sizing: border-box; }
+.primary-button { background: #DC2626; color: #FFFFFF; }
+.secondary-button { border: 2rpx solid #FCA5A5; background: #FFFFFF; color: #B91C1C; }
+.primary-button[disabled], .secondary-button[disabled] { opacity: .55; }

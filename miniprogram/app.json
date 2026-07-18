@@ -8,8 +8,14 @@
     "pages/history-detail/index",
     "pages/admin-menu/index",
     "pages/admin-dishes/index",
+    "pages/admin-orders/index",
+    "pages/admin-history/index",
+    "pages/admin-order-detail/index",
+    "pages/admin-categories/index",
     "pages/admin-dish-detail/index",
-    "pages/profile/index"
+    "pages/auth/index",
+    "pages/profile/index",
+    "pages/admin-users/index"
   ],
   "window": {
     "navigationBarBackgroundColor": "#DC2626",
