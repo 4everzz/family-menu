@@ -1,0 +1,23 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card">正在读取资料</view>
+  <view wx:else>
+    <view class="page-head">
+      <text class="page-title">资料设置</text>
+      <text class="page-copy">设置一个家人容易认出的昵称</text>
+    </view>
+    <view class="form-card">
+      <view class="avatar-section">
+        <button class="avatar-picker" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" loading="{{imageUploading}}" disabled="{{imageUploading}}" aria-label="选择头像">
+          <image wx:if="{{avatarFileId}}" class="avatar-image" src="{{avatarFileId}}" mode="aspectFill" />
+          <view wx:else class="avatar-fallback">{{avatarText}}</view>
+        </button>
+        <view class="avatar-copy"><text class="field-label">头像</text><text class="field-note">可选，可随时更换</text></view>
+      </view>
+      <view class="field-group">
+        <text class="field-label">昵称</text>
+        <input class="nickname-input" value="{{nickname}}" maxlength="12" placeholder="例如：小雨、爸爸、阿杰" bindinput="updateNickname" />
+      </view>
+      <button class="save-button" bindtap="saveProfile" loading="{{saving}}" disabled="{{saving || imageUploading}}">保存资料</button>
+    </view>
+  </view>
+</view>

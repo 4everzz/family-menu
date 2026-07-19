@@ -9,10 +9,22 @@ const ROLES = {
   SUPER_ADMIN: 'super_admin',
 };
 
+function normalizeAvatarFileId(value) {
+  const avatarFileId = String(value || '').trim();
+  return avatarFileId.startsWith('cloud://') ? avatarFileId.slice(0, 512) : '';
+}
+
+function isProfileCompleted(user) {
+  const nickname = String(user && user.nickname || '').trim();
+  return !!nickname && nickname !== '微信用户';
+}
+
 function makePublicUser(user) {
   return {
     id: user._id,
     nickname: user.nickname || '微信用户',
+    avatarFileId: normalizeAvatarFileId(user.avatarFileId),
+    profileCompleted: isProfileCompleted(user),
     phone: user.phone || '',
     role: user.role,
     enabled: user.enabled !== false,
@@ -59,7 +71,8 @@ async function createUser(openId, phone = '') {
   const user = {
     openId,
     phone,
-    nickname: '微信用户',
+    nickname: '',
+    avatarFileId: '',
     role: canBootstrap ? ROLES.SUPER_ADMIN : ROLES.USER,
     enabled: true,
     createdAt: db.serverDate(),
@@ -116,10 +129,31 @@ async function getCurrentUser(openId) {
   return { ok: true, user: makePublicUser(user) };
 }
 
+async function updateProfile(openId, event) {
+  const user = await findUserByOpenId(openId);
+  if (!user || user.enabled === false) return { ok: false, code: 'NOT_LOGGED_IN', message: '请先登录' };
+  const nickname = String(event.nickname || '').trim().slice(0, 12);
+  const avatarFileId = normalizeAvatarFileId(event.avatarFileId);
+  if (!nickname || nickname === '微信用户') {
+    return { ok: false, code: 'INVALID_NICKNAME', message: '请填写 1 至 12 个字的昵称' };
+  }
+  const duplicate = await db.collection('users').where({ nickname }).limit(1).get();
+  if (duplicate.data.some((item) => item._id !== user._id)) {
+    return { ok: false, code: 'NICKNAME_EXISTS', message: '这个昵称已被使用，请换一个' };
+  }
+  const updatedUser = { ...user, nickname, avatarFileId };
+  await db.collection('users').doc(user._id).update({
+    data: { nickname, avatarFileId, updatedAt: db.serverDate() },
+  });
+  return { ok: true, user: makePublicUser(updatedUser) };
+}
+
 function makeManagedUser(user) {
   return {
     id: user._id,
     nickname: user.nickname || '微信用户',
+    avatarFileId: normalizeAvatarFileId(user.avatarFileId),
+    profileCompleted: isProfileCompleted(user),
     phone: user.phone ? `${user.phone.slice(0, 3)}****${user.phone.slice(-4)}` : '未绑定手机号',
     role: user.role || ROLES.USER,
     enabled: user.enabled !== false,
@@ -175,6 +209,7 @@ exports.main = async (event) => {
     if (event.action === 'loginWithWechat') return await loginWithWechat(openId);
     if (event.action === 'loginWithPhone') return await loginWithPhone(event, openId);
     if (event.action === 'getCurrentUser') return await getCurrentUser(openId);
+    if (event.action === 'updateProfile') return await updateProfile(openId, event);
     if (['listUsers', 'updateUserRole', 'updateUserEnabled'].includes(event.action)) {
       const superAdmin = await requireSuperAdmin(openId);
       if (!superAdmin) return { ok: false, code: 'FORBIDDEN', message: '只有超级管理员可操作用户权限' };

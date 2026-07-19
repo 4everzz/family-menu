@@ -79,6 +79,26 @@ async function syncDailyInventory() {
   return { reset: updates.length, dateKey };
 }
 
+async function attachTemporaryImageUrls(dishes) {
+  const fileIds = [...new Set(dishes.map((dish) => normalizeImageFileId(dish.imageFileId)).filter(Boolean))];
+  if (!fileIds.length) return dishes.map((dish) => ({ ...dish, imageUrl: '' }));
+  const result = await cloud.getTempFileURL({ fileList: fileIds });
+  const imageUrls = new Map((result.fileList || [])
+    .filter((item) => item.status === 0 && item.tempFileURL)
+    .map((item) => [item.fileID, item.tempFileURL]));
+  return dishes.map((dish) => ({
+    ...dish,
+    imageUrl: imageUrls.get(normalizeImageFileId(dish.imageFileId)) || '',
+  }));
+}
+
+async function getCustomerMenu() {
+  await syncDailyInventory();
+  const [dishes, categories] = await Promise.all([getAllDishes(), getAllCategories()]);
+  const visibleDishes = dishes.filter((dish) => dish && dish.id && dish.name && dish.enabled !== false);
+  return { dishes: await attachTemporaryImageUrls(visibleDishes), categories };
+}
+
 async function createOrder(openId, ownerUserId, event) {
   const requestedItems = Array.isArray(event.items) ? event.items : [];
   const remark = String(event.remark || '').trim().slice(0, 80);
@@ -228,6 +248,10 @@ exports.main = async (event) => {
   if (event.action === 'syncDailyInventory') {
     if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
     return { ok: true, ...(await syncDailyInventory()) };
+  }
+  if (event.action === 'getCustomerMenu') {
+    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+    return { ok: true, ...(await getCustomerMenu()) };
   }
   if (event.action === 'listMyOrders') {
     if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };

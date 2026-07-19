@@ -7,7 +7,13 @@ Page({
   async finishLogin(result) {
     getApp().globalData.currentUser = result.user;
     wx.showToast({ title: '登录成功', icon: 'success' });
-    setTimeout(() => wx.navigateBack(), 400);
+    setTimeout(() => {
+      if (result.user.profileCompleted) {
+        wx.navigateBack();
+        return;
+      }
+      wx.redirectTo({ url: '/pages/profile-edit/index' });
+    }, 400);
   },
   async loginWithWechat() {
     if (this.data.isSubmitting) return;

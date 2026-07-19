@@ -1,6 +1,7 @@
 .page-shell { width: 100%; padding: 32rpx 24rpx 168rpx; box-sizing: border-box; }
 .profile-card { display: flex; align-items: center; gap: 20rpx; padding: 28rpx; border-radius: 20rpx; background: #DC2626; color: #FFFFFF; box-shadow: 0 12rpx 28rpx rgba(153, 27, 27, .18); }
 .avatar { width: 92rpx; height: 92rpx; border-radius: 46rpx; display: flex; align-items: center; justify-content: center; background: #FFFFFF; color: #B91C1C; font-size: 42rpx; font-weight: 700; }
+.avatar-image { display: block; }
 .profile-copy { display: flex; flex-direction: column; gap: 6rpx; }
 .profile-name { font-size: 36rpx; font-weight: 700; }
 .profile-note { font-size: 26rpx; opacity: .86; }
