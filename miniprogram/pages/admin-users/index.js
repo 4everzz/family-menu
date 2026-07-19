@@ -21,6 +21,7 @@ Page({
       this.setData({ users: (result.users || []).map((user) => ({
         ...user,
         avatarText: (user.nickname || '微').slice(0, 1),
+        profileStatus: user.profileCompleted ? '资料已完善' : '未完善资料',
         roleText: ROLE_TEXT[user.role] || ROLE_TEXT.user,
         actionText: user.role === 'user' ? '设为管理员' : '撤销管理员',
         statusText: user.enabled ? '正常使用' : '已停用',

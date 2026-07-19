@@ -47,13 +47,11 @@ Page({
   async loadCloudMenu() {
     if (!wx.cloud) return;
     try {
-      const syncResponse = await wx.cloud.callFunction({ name: 'admin-menu', data: { action: 'syncDailyInventory' } });
-      const syncResult = syncResponse.result || {};
-      if (!syncResult.ok) throw new Error(syncResult.message || '库存同步失败');
-      const [cloudDishes, cloudCategories] = await Promise.all([
-        this.getCloudRecords('dishes'),
-        this.getCloudRecords('categories'),
-      ]);
+      const response = await wx.cloud.callFunction({ name: 'admin-menu', data: { action: 'getCustomerMenu' } });
+      const result = response.result || {};
+      if (!result.ok) throw new Error(result.message || '菜单读取失败');
+      const cloudDishes = Array.isArray(result.dishes) ? result.dishes : [];
+      const cloudCategories = Array.isArray(result.categories) ? result.categories : [];
       const validDishes = cloudDishes.filter((item) => item && item.id && item.name && item.enabled !== false).map((item) => ({
         ...item,
         isSoldOut: item.manualSoldOut === true || (Number.isFinite(Number(item.stock)) && Number(item.stock) <= 0),
@@ -72,17 +70,6 @@ Page({
     } catch (error) {
       console.warn('云端菜单读取失败，已使用本地菜单', error);
     }
-  },
-  async getCloudRecords(collectionName) {
-    const db = wx.cloud.database();
-    const pageSize = 20;
-    const records = [];
-    for (let skip = 0; skip < 100; skip += pageSize) {
-      const result = await db.collection(collectionName).skip(skip).limit(pageSize).get();
-      records.push(...result.data);
-      if (result.data.length < pageSize) break;
-    }
-    return records;
   },
   selectCategory(event) {
     const menuScrollTop = this.data.menuScrollTop === 0 ? 1 : 0;

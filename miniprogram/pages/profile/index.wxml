@@ -2,10 +2,12 @@
   <view wx:if="{{loading}}" class="state-card"><text>正在读取账户信息</text></view>
   <view wx:elif="{{user}}">
     <view class="profile-card">
-      <view class="avatar">{{user.avatarText}}</view>
+      <image wx:if="{{user.avatarFileId}}" class="avatar avatar-image" src="{{user.avatarFileId}}" mode="aspectFill" />
+      <view wx:else class="avatar">{{user.avatarText}}</view>
       <view class="profile-copy"><text class="profile-name">{{user.nickname}}</text><text class="profile-note">{{user.roleText}}</text></view>
     </view>
     <view class="menu-group">
+      <view class="menu-row" hover-class="menu-row-active" bindtap="openProfileEdit"><view><text class="menu-title">资料设置</text></view><text class="menu-arrow">></text></view>
       <view class="menu-row" hover-class="menu-row-active" bindtap="openHistory"><view><text class="menu-title">历史订单</text></view><text class="menu-arrow">></text></view>
       <button wx:if="{{!user.phone}}" class="menu-row phone-row" open-type="getPhoneNumber" bindgetphonenumber="bindPhone"><view><text class="menu-title">授权手机号</text></view><text class="menu-arrow">></text></button>
       <view wx:if="{{isManager}}" class="menu-row" hover-class="menu-row-active" bindtap="openManager"><view><text class="menu-title">管理入口</text></view><text class="menu-arrow">></text></view>

@@ -13,6 +13,7 @@
     "pages/admin-dish-detail/index",
     "pages/auth/index",
     "pages/profile/index",
+    "pages/profile-edit/index",
     "pages/admin-users/index"
   ],
   "window": {

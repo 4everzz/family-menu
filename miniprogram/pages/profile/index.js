@@ -21,6 +21,11 @@ Page({
   async loadCurrentUser() {
     this.setData({ loading: true });
     const user = await refreshCurrentUser();
+    if (user && !user.profileCompleted) {
+      this.setData({ loading: false });
+      wx.navigateTo({ url: '/pages/profile-edit/index' });
+      return;
+    }
     const profileUser = user ? {
       ...user,
       avatarText: (user.nickname || '我').slice(0, 1),
@@ -39,6 +44,9 @@ Page({
   },
   openHistory() {
     wx.navigateTo({ url: '/pages/history/index' });
+  },
+  openProfileEdit() {
+    wx.navigateTo({ url: '/pages/profile-edit/index' });
   },
   openManager() {
     wx.navigateTo({ url: '/pages/admin-menu/index' });

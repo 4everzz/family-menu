@@ -5,11 +5,12 @@
   <view wx:else class="user-list">
     <view wx:for="{{users}}" wx:key="id" class="user-card">
       <view class="user-main">
-        <view class="avatar">{{item.avatarText}}</view>
+        <image wx:if="{{item.avatarFileId}}" class="avatar avatar-image" src="{{item.avatarFileId}}" mode="aspectFill" />
+        <view wx:else class="avatar">{{item.avatarText}}</view>
         <view class="user-copy"><text class="user-name">{{item.nickname}}</text><text class="user-phone">{{item.phone}}</text></view>
         <text class="role-tag role-{{item.role}}">{{item.roleText}}</text>
       </view>
-      <view class="user-meta"><text>{{item.statusText}}</text></view>
+      <view class="user-meta"><text>{{item.profileStatus}} · {{item.statusText}}</text></view>
       <view wx:if="{{item.role !== 'super_admin'}}" class="actions">
         <button class="action-button secondary" data-id="{{item.id}}" data-role="{{item.role}}" bindtap="changeRole">{{item.actionText}}</button>
         <button class="action-button {{item.enabled ? 'danger' : 'primary'}}" data-id="{{item.id}}" data-enabled="{{item.enabled}}" data-role="{{item.role}}" bindtap="toggleEnabled">{{item.enabled ? '停用账号' : '恢复账号'}}</button>
