@@ -33,11 +33,11 @@
       <view wx:if="{{dishes.length}}" class="dish-list">
         <view wx:for="{{dishes}}" wx:key="id" class="dish-card" data-id="{{item.id}}" bindtap="openDish">
           <view class="dish-visual" style="background: {{item.color}};">
-            <text>{{item.emoji}}</text>
+            <image wx:if="{{item.imageFileId}}" class="dish-photo" src="{{item.imageFileId}}" mode="aspectFill" />
+            <text wx:else>{{item.emoji}}</text>
           </view>
           <view class="dish-copy">
             <text class="dish-name">{{item.name}}</text>
-            <text class="dish-description">{{item.description}}</text>
             <text class="dish-price">¥{{item.price}}</text>
           </view>
           <view class="dish-action">
@@ -67,9 +67,6 @@
   <view wx:if="{{selectedDish}}" class="dish-modal-mask" bindtap="closeDish">
     <view class="dish-modal" catchtap="stopModalPropagation">
       <button class="modal-close" bindtap="closeDish" aria-label="关闭菜品详情">×</button>
-      <view class="modal-dish-visual" style="background: {{selectedDish.color}};">
-        <text>{{selectedDish.emoji}}</text>
-      </view>
       <view class="modal-heading">
         <view>
           <text class="modal-dish-name">{{selectedDish.name}}</text>

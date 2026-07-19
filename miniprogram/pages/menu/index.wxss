@@ -22,12 +22,12 @@
 .menu-bottom-spacer { height: 120rpx; flex: 0 0 120rpx; }
 .menu-empty-state { margin-top: 120rpx; display: flex; flex-direction: column; align-items: center; gap: 8rpx; color: #64748B; font-size: 25rpx; }
 .menu-empty-state text:first-child { color: #7C2D12; font-size: 29rpx; font-weight: 700; }
-.dish-card { width: 100%; min-height: 148rpx; display: flex; align-items: center; gap: 14rpx; padding: 16rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; box-sizing: border-box; overflow: hidden; box-shadow: 0 6rpx 18rpx rgba(69, 10, 10, .07); }
-.dish-visual { width: 88rpx; height: 88rpx; flex: 0 0 88rpx; border-radius: 14rpx; display: flex; align-items: center; justify-content: center; font-size: 42rpx; }
-.dish-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4rpx; }
-.dish-name { font-size: 29rpx; font-weight: 700; }
-.dish-description { overflow: hidden; color: #64748B; font-size: 23rpx; text-overflow: ellipsis; white-space: nowrap; }
-.dish-price { margin-top: 4rpx; color: #DC2626; font-size: 28rpx; font-weight: 700; }
+.dish-card { width: 100%; min-height: 192rpx; display: flex; align-items: center; gap: 14rpx; padding: 16rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; box-sizing: border-box; overflow: hidden; box-shadow: 0 6rpx 18rpx rgba(69, 10, 10, .07); }
+.dish-visual { width: 192rpx; height: 144rpx; flex: 0 0 192rpx; border-radius: 14rpx; display: flex; align-items: center; justify-content: center; font-size: 52rpx; }
+.dish-photo { width: 100%; height: 100%; border-radius: 14rpx; }
+.dish-copy { min-width: 0; align-self: stretch; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 10rpx; }
+.dish-name { display: -webkit-box; overflow: hidden; color: #450A0A; font-size: 29rpx; font-weight: 700; line-height: 1.35; text-overflow: ellipsis; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.dish-price { color: #DC2626; font-size: 30rpx; font-weight: 700; line-height: 1.2; }
 .dish-action { width: 164rpx; flex: 0 0 164rpx; display: flex; align-items: center; justify-content: flex-end; }
 .soldout-label { padding: 10rpx 14rpx; border-radius: 12rpx; background: #FFFBEB; color: #B45309; font-size: 24rpx; font-weight: 700; white-space: nowrap; }
 .add-button { width: 64rpx !important; min-width: 64rpx; height: 64rpx; margin: 0; padding: 0; border-radius: 32rpx; background: #DC2626; color: #FFFFFF; font-family: sans-serif; font-size: 38rpx; font-weight: 700; line-height: 60rpx; box-shadow: 0 5rpx 10rpx rgba(220, 38, 38, .18); }
@@ -43,7 +43,6 @@
 .dish-modal-mask { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 56rpx 44rpx; box-sizing: border-box; background: rgba(28, 25, 23, .48); }
 .dish-modal { width: 620rpx; max-width: 100%; padding: 20rpx; border: 2rpx solid #FECACA; border-radius: 24rpx; background: #FFFFFF; box-sizing: border-box; overflow: hidden; box-shadow: 0 16rpx 40rpx rgba(28, 25, 23, .22); }
 .modal-close { width: 64rpx; min-width: 64rpx; height: 64rpx; margin: 0 0 2rpx auto; padding: 0; border-radius: 32rpx; background: #FEE2E2; color: #B91C1C; font-size: 40rpx; font-weight: 400; line-height: 58rpx; }
-.modal-dish-visual { height: 108rpx; border-radius: 16rpx; display: flex; align-items: center; justify-content: center; font-size: 64rpx; }
 .modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; padding: 14rpx 0; }
 .modal-dish-name { display: block; font-size: 34rpx; font-weight: 700; }
 .modal-dish-detail { display: block; margin-top: 6rpx; color: #64748B; font-size: 24rpx; line-height: 1.5; }

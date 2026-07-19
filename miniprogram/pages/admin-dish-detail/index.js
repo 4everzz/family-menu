@@ -13,14 +13,17 @@ Page({
       category: '',
       price: '',
       description: '',
+      imageFileId: '',
     },
     editDraft: {
       name: '',
       category: '',
       price: '',
       description: '',
+      imageFileId: '',
     },
     isSubmitting: false,
+    imageUploading: false,
     savingDetails: false,
     inventoryDraft: { dailyStock: '10', stock: '10' },
     savingInventory: false,
@@ -101,6 +104,7 @@ Page({
           category: normalizedDish.category || '',
           price: String(normalizedDish.price),
           description: normalizedDish.description || '',
+          imageFileId: normalizedDish.imageFileId || '',
         },
         inventoryDraft: { dailyStock: String(dailyStock), stock: String(stock) },
       });
@@ -121,6 +125,32 @@ Page({
       newDish: { ...this.data.newDish, category: category ? category.id : '' },
     });
   },
+  async chooseDishImage(event) {
+    const mode = event.currentTarget.dataset.mode;
+    if (this.data.imageUploading) return;
+    try {
+      const selection = await wx.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['album', 'camera'] });
+      const filePath = selection.tempFiles && selection.tempFiles[0] && selection.tempFiles[0].tempFilePath;
+      if (!filePath) return;
+      const extension = (filePath.match(/\.([a-zA-Z0-9]+)$/) || [])[1] || 'jpg';
+      this.setData({ imageUploading: true });
+      const uploaded = await wx.cloud.uploadFile({
+        cloudPath: `dish-images/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension.toLowerCase()}`,
+        filePath,
+      });
+      if (!uploaded.fileID) throw new Error('图片上传失败');
+      if (mode === 'create') {
+        this.setData({ newDish: { ...this.data.newDish, imageFileId: uploaded.fileID } });
+      } else {
+        this.setData({ editDraft: { ...this.data.editDraft, imageFileId: uploaded.fileID } });
+      }
+      wx.showToast({ title: '图片已上传', icon: 'success' });
+    } catch (error) {
+      wx.showToast({ title: error.message || '图片上传失败', icon: 'none' });
+    } finally {
+      this.setData({ imageUploading: false });
+    }
+  },
   cancelCreate() {
     wx.navigateBack();
   },
@@ -140,6 +170,7 @@ Page({
         category: newDish.category,
         price,
         description,
+        imageFileId: newDish.imageFileId,
       });
       if (!result.ok) throw new Error(result.message || '新增失败');
       getApp().globalData.menuUpdatedAt = Date.now();
@@ -179,6 +210,7 @@ Page({
         category: editDraft.category,
         price,
         description: editDraft.description.trim(),
+        imageFileId: editDraft.imageFileId,
       });
       if (!result.ok) throw new Error(result.message || '保存失败');
       const category = this.data.categories.find((item) => item.id === result.dish.category);
@@ -191,6 +223,7 @@ Page({
           category: result.dish.category,
           price: String(result.dish.price),
           description: result.dish.description,
+          imageFileId: result.dish.imageFileId || '',
         },
       });
       wx.showToast({ title: '菜品资料已保存', icon: 'success' });
