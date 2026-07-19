@@ -29,6 +29,7 @@
       <text class="field-label">简介</text>
       <textarea class="description-input" value="{{newDish.description}}" data-field="description" maxlength="60" placeholder="例如：鲜香下饭，现炒更美味" bindinput="updateNewDish" />
     </view>
+    <view class="form-field"><text class="field-label">菜品图片</text><view class="image-upload-row"><image wx:if="{{newDish.imageFileId}}" class="dish-image-preview" src="{{newDish.imageFileId}}" mode="aspectFill" /><view wx:else class="dish-image-placeholder">未添加图片</view><button class="image-button" data-mode="create" bindtap="chooseDishImage" loading="{{imageUploading}}" disabled="{{imageUploading}}">{{newDish.imageFileId ? '更换图片' : '添加图片'}}</button></view></view>
     <view class="form-actions">
       <button class="secondary-button" bindtap="cancelCreate" disabled="{{isSubmitting}}">取消</button>
       <button class="primary-button" bindtap="submitNewDish" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">新增菜品</button>
@@ -61,6 +62,7 @@
         <text class="field-label">简介</text>
         <textarea class="description-input" value="{{editDraft.description}}" data-field="description" maxlength="60" placeholder="用一句话介绍这道菜" bindinput="updateEditDraft" />
       </view>
+      <view class="form-field"><text class="field-label">菜品图片</text><view class="image-upload-row"><image wx:if="{{editDraft.imageFileId}}" class="dish-image-preview" src="{{editDraft.imageFileId}}" mode="aspectFill" /><view wx:else class="dish-image-placeholder">未添加图片</view><button class="image-button" data-mode="edit" bindtap="chooseDishImage" loading="{{imageUploading}}" disabled="{{imageUploading}}">{{editDraft.imageFileId ? '更换图片' : '添加图片'}}</button></view></view>
       <button class="primary-button" bindtap="saveDishDetails" loading="{{savingDetails}}" disabled="{{savingDetails}}">保存基础资料</button>
     </view>
     <view class="operation-card">
@@ -73,7 +75,7 @@
     </view>
     <view class="operation-card">
       <text class="operation-title">库存设置</text>
-      <text class="operation-copy">每日份数会在每天零点恢复为当前设置；剩余份数归零后自动售罄。</text>
+      <text class="operation-copy">每天首次进入点菜页或下单时，剩余份数会恢复为每日份数；归零后自动售罄。</text>
       <view class="form-row">
         <view class="form-field">
           <text class="field-label">每日份数</text>

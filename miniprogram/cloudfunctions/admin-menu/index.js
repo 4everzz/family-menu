@@ -4,6 +4,22 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
 
+function normalizeImageFileId(value) {
+  const imageFileId = String(value || '').trim();
+  return imageFileId.startsWith('cloud://') ? imageFileId.slice(0, 512) : '';
+}
+
+function getChinaDateKey() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = parts.reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 async function getCurrentUser(openId) {
   const result = await db.collection('users').where({ openId, enabled: true }).limit(1).get();
   return result.data[0] || null;
@@ -50,6 +66,19 @@ async function initializeDishInventory() {
   return updates.length;
 }
 
+async function syncDailyInventory() {
+  const dateKey = getChinaDateKey();
+  const dishes = await getAllDishes();
+  const updates = dishes.filter((dish) => dish.stockResetDate !== dateKey).map((dish) => {
+    const dailyStock = Number.isInteger(dish.dailyStock) && dish.dailyStock >= 0 ? dish.dailyStock : 10;
+    return db.collection('dishes').doc(dish._id).update({
+      data: { dailyStock, stock: dailyStock, stockResetDate: dateKey, updatedAt: db.serverDate() },
+    });
+  });
+  await Promise.all(updates);
+  return { reset: updates.length, dateKey };
+}
+
 async function createOrder(openId, ownerUserId, event) {
   const requestedItems = Array.isArray(event.items) ? event.items : [];
   const remark = String(event.remark || '').trim().slice(0, 80);
@@ -69,6 +98,7 @@ async function createOrder(openId, ownerUserId, event) {
 
   try {
     const order = await db.runTransaction(async (transaction) => {
+      const dateKey = getChinaDateKey();
       const checkedItems = [];
       const unavailableNames = [];
       const outOfStockNames = [];
@@ -80,12 +110,14 @@ async function createOrder(openId, ownerUserId, event) {
           continue;
         }
         const dailyStock = Number.isInteger(dish.dailyStock) && dish.dailyStock >= 0 ? dish.dailyStock : 10;
-        const stock = Number.isInteger(dish.stock) && dish.stock >= 0 ? dish.stock : dailyStock;
+        const stock = dish.stockResetDate === dateKey && Number.isInteger(dish.stock) && dish.stock >= 0
+          ? dish.stock
+          : dailyStock;
         if (stock < requestedItem.quantity) {
           outOfStockNames.push(dish.name);
           continue;
         }
-        checkedItems.push({ dish, requestedItem, dailyStock, stock });
+        checkedItems.push({ dish, requestedItem, dailyStock, stock, dateKey });
       }
       if (unavailableNames.length) {
         const error = new Error('菜品已下架或售罄');
@@ -102,9 +134,9 @@ async function createOrder(openId, ownerUserId, event) {
 
       const orderItems = [];
       let total = 0;
-      for (const { dish, requestedItem, dailyStock, stock } of checkedItems) {
+      for (const { dish, requestedItem, dailyStock, stock, dateKey } of checkedItems) {
         await transaction.collection('dishes').doc(dish._id).update({
-          data: { dailyStock, stock: stock - requestedItem.quantity, manualSoldOut: false, updatedAt: db.serverDate() },
+          data: { dailyStock, stock: stock - requestedItem.quantity, stockResetDate: dateKey, manualSoldOut: false, updatedAt: db.serverDate() },
         });
         const price = Number(dish.price);
         const item = {
@@ -116,6 +148,7 @@ async function createOrder(openId, ownerUserId, event) {
           optionsText: requestedItem.options.join('、'),
           emoji: dish.emoji || '🍽',
           color: dish.color || '#D97706',
+          imageFileId: dish.imageFileId || '',
         };
         orderItems.push(item);
         total += price * requestedItem.quantity;
@@ -191,6 +224,10 @@ exports.main = async (event) => {
   if (event.action === 'createOrder') {
     if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
     return createOrder(openId, user._id, event);
+  }
+  if (event.action === 'syncDailyInventory') {
+    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+    return { ok: true, ...(await syncDailyInventory()) };
   }
   if (event.action === 'listMyOrders') {
     if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
@@ -285,7 +322,7 @@ exports.main = async (event) => {
       return { ok: false, code: 'INVALID_STOCK', message: '库存数量无效' };
     }
     const result = await db.collection('dishes').where({ id }).update({
-      data: { dailyStock, stock, updatedAt: db.serverDate() },
+      data: { dailyStock, stock, stockResetDate: getChinaDateKey(), updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
     return { ok: true, dailyStock, stock };
@@ -296,6 +333,7 @@ exports.main = async (event) => {
     const category = String(event.category || '');
     const price = Number(event.price);
     const description = String(event.description || '').trim();
+    const imageFileId = normalizeImageFileId(event.imageFileId);
     if (!id || !name || !category || !Number.isFinite(price) || price <= 0) {
       return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效' };
     }
@@ -309,6 +347,7 @@ exports.main = async (event) => {
       price,
       description: description.slice(0, 60),
       detail: description.slice(0, 60),
+      imageFileId,
     };
     const result = await db.collection('dishes').where({ id }).update({
       data: { ...dish, updatedAt: db.serverDate() },
@@ -321,6 +360,7 @@ exports.main = async (event) => {
     const category = String(event.category || '');
     const price = Number(event.price);
     const description = String(event.description || '').trim();
+    const imageFileId = normalizeImageFileId(event.imageFileId);
     if (!name || !category || !Number.isFinite(price) || price <= 0) {
       return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效' };
     }
@@ -335,7 +375,12 @@ exports.main = async (event) => {
       detail: (description || '新上菜品').slice(0, 60),
       emoji: '菜',
       color: '#D97706',
+      imageFileId,
       enabled: true,
+      dailyStock: 10,
+      stock: 10,
+      manualSoldOut: false,
+      stockResetDate: getChinaDateKey(),
       createdAt: db.serverDate(),
       updatedAt: db.serverDate(),
     };

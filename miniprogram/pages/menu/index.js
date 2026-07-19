@@ -24,17 +24,12 @@ Page({
   },
   onLoad() {
     this.updateMenuHeight();
-    this.loadCloudMenu();
   },
   async onShow() {
     if (!(await requireLogin())) return;
     this.syncTabBar();
+    await this.loadCloudMenu();
     this.renderDishes();
-    const app = getApp();
-    if (this.data.cloudMenuUpdatedAt !== app.globalData.menuUpdatedAt) {
-      this.setData({ cloudMenuUpdatedAt: app.globalData.menuUpdatedAt });
-      this.loadCloudMenu();
-    }
   },
   syncTabBar() {
     const tabBar = this.getTabBar && this.getTabBar();
@@ -52,6 +47,9 @@ Page({
   async loadCloudMenu() {
     if (!wx.cloud) return;
     try {
+      const syncResponse = await wx.cloud.callFunction({ name: 'admin-menu', data: { action: 'syncDailyInventory' } });
+      const syncResult = syncResponse.result || {};
+      if (!syncResult.ok) throw new Error(syncResult.message || '库存同步失败');
       const [cloudDishes, cloudCategories] = await Promise.all([
         this.getCloudRecords('dishes'),
         this.getCloudRecords('categories'),
@@ -196,7 +194,7 @@ Page({
     });
     const cartCount = app.globalData.cart.reduce((total, item) => total + item.quantity, 0);
     const rawTotal = app.globalData.cart.reduce((total, item) => total + item.price * item.quantity, 0);
-    const cartTotal = Number.isInteger(rawTotal) ? String(rawTotal) : rawTotal.toFixed(1);
+    const cartTotal = rawTotal.toFixed(2);
     this.setData({ dishes: rendered, cartCount, cartTotal });
   },
 });
