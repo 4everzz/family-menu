@@ -2,7 +2,7 @@
   <view wx:if="{{loading}}" class="state-card"><text>正在读取账户信息</text></view>
   <view wx:elif="{{user}}">
     <view class="profile-card">
-      <image wx:if="{{user.avatarFileId}}" class="avatar avatar-image" src="{{user.avatarFileId}}" mode="aspectFill" />
+      <image wx:if="{{user.avatarUrl}}" class="avatar avatar-image" src="{{user.avatarUrl}}" mode="aspectFill" />
       <view wx:else class="avatar">{{user.avatarText}}</view>
       <view class="profile-copy"><text class="profile-name">{{user.nickname}}</text><text class="profile-note">{{user.roleText}}</text></view>
     </view>

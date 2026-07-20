@@ -31,6 +31,28 @@ function makePublicUser(user) {
   };
 }
 
+async function attachAvatarUrls(users) {
+  const fileIds = [...new Set(users.map((user) => normalizeAvatarFileId(user.avatarFileId)).filter(Boolean))];
+  if (!fileIds.length) return users.map((user) => ({ ...user, avatarUrl: '' }));
+  try {
+    const result = await cloud.getTempFileURL({ fileList: fileIds });
+    const avatarUrls = new Map((result.fileList || [])
+      .filter((item) => item.status === 0 && item.tempFileURL)
+      .map((item) => [item.fileID, item.tempFileURL]));
+    return users.map((user) => ({
+      ...user,
+      avatarUrl: avatarUrls.get(normalizeAvatarFileId(user.avatarFileId)) || '',
+    }));
+  } catch (error) {
+    return users.map((user) => ({ ...user, avatarUrl: '' }));
+  }
+}
+
+async function makePublicUserWithAvatar(user) {
+  const [publicUser] = await attachAvatarUrls([makePublicUser(user)]);
+  return publicUser;
+}
+
 async function findUserByOpenId(openId) {
   const result = await db.collection('users').where({ openId }).limit(1).get();
   return result.data[0] || null;
@@ -86,12 +108,12 @@ async function loginWithWechat(openId) {
   const existing = await findUserByOpenId(openId);
   if (existing) {
     if (existing.enabled === false) return { ok: false, code: 'ACCOUNT_DISABLED', message: '该账号已被停用' };
-    return { ok: true, user: makePublicUser(existing) };
+    return { ok: true, user: await makePublicUserWithAvatar(existing) };
   }
   const migratedUser = await migrateLegacySuperAdmin(openId);
-  if (migratedUser) return { ok: true, user: makePublicUser(migratedUser) };
+  if (migratedUser) return { ok: true, user: await makePublicUserWithAvatar(migratedUser) };
   const user = await createUser(openId);
-  return { ok: true, user: makePublicUser(user) };
+  return { ok: true, user: await makePublicUserWithAvatar(user) };
 }
 
 async function getPhoneNumber(code) {
@@ -112,21 +134,21 @@ async function loginWithPhone(event, openId) {
   if (currentUser) {
     if (currentUser.enabled === false) return { ok: false, code: 'ACCOUNT_DISABLED', message: '该账号已被停用' };
     await db.collection('users').doc(currentUser._id).update({ data: { phone, updatedAt: db.serverDate() } });
-    return { ok: true, user: makePublicUser({ ...currentUser, phone }) };
+    return { ok: true, user: await makePublicUserWithAvatar({ ...currentUser, phone }) };
   }
   if (phoneUser) {
     if (phoneUser.enabled === false) return { ok: false, code: 'ACCOUNT_DISABLED', message: '该账号已被停用' };
     await db.collection('users').doc(phoneUser._id).update({ data: { openId, updatedAt: db.serverDate() } });
-    return { ok: true, user: makePublicUser({ ...phoneUser, openId }) };
+    return { ok: true, user: await makePublicUserWithAvatar({ ...phoneUser, openId }) };
   }
   const user = await createUser(openId, phone);
-  return { ok: true, user: makePublicUser(user) };
+  return { ok: true, user: await makePublicUserWithAvatar(user) };
 }
 
 async function getCurrentUser(openId) {
   const user = await findUserByOpenId(openId);
   if (!user || user.enabled === false) return { ok: false, code: 'NOT_LOGGED_IN', message: '请先登录' };
-  return { ok: true, user: makePublicUser(user) };
+  return { ok: true, user: await makePublicUserWithAvatar(user) };
 }
 
 async function updateProfile(openId, event) {
@@ -145,7 +167,7 @@ async function updateProfile(openId, event) {
   await db.collection('users').doc(user._id).update({
     data: { nickname, avatarFileId, updatedAt: db.serverDate() },
   });
-  return { ok: true, user: makePublicUser(updatedUser) };
+  return { ok: true, user: await makePublicUserWithAvatar(updatedUser) };
 }
 
 function makeManagedUser(user) {
@@ -168,9 +190,10 @@ async function requireSuperAdmin(openId) {
 async function listManagedUsers() {
   const result = await db.collection('users').limit(100).get();
   const roleOrder = { super_admin: 0, manager: 1, user: 2 };
-  return result.data
+  const users = result.data
     .sort((left, right) => (roleOrder[left.role] || 9) - (roleOrder[right.role] || 9))
     .map(makeManagedUser);
+  return attachAvatarUrls(users);
 }
 
 async function updateManagedUserRole(openId, event) {

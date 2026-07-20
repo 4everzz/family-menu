@@ -42,27 +42,37 @@
           </view>
           <view class="dish-action">
             <text wx:if="{{item.isSoldOut}}" class="soldout-label">已售罄</text>
-            <button wx:elif="{{item.quantity === 0}}" class="add-button" data-id="{{item.id}}" catchtap="addDish" aria-label="添加{{item.name}}">+</button>
-            <view wx:else class="dish-stepper">
-              <button class="dish-stepper-button secondary" data-id="{{item.id}}" catchtap="decreaseDish" aria-label="减少{{item.name}}">−</button>
-              <text class="quantity-label">{{item.quantity}}</text>
-              <button class="dish-stepper-button" data-id="{{item.id}}" catchtap="addDish" aria-label="增加{{item.name}}">+</button>
+            <view wx:else class="dish-quick-add">
+              <text wx:if="{{item.quantity}}" class="quantity-label">{{item.quantity}}</text>
+              <button class="add-button" data-id="{{item.id}}" catchtap="addDish" aria-label="添加{{item.name}}">+</button>
             </view>
           </view>
         </view>
-        <view wx:if="{{cartCount > 0}}" class="menu-bottom-spacer"></view>
       </view>
       <view wx:else class="menu-empty-state"><text>没有找到相关菜品</text><text>换个关键词试试</text></view>
     </scroll-view>
   </view>
 
-  <button wx:if="{{cartCount > 0}}" class="cart-bar" bindtap="goCart">
-    <view class="cart-bar-summary">
-      <text class="cart-bar-count">已选 {{cartCount}} 道</text>
-      <text class="cart-bar-total">¥{{cartTotal}}</text>
+  <view wx:if="{{cartCount > 0}}" class="cart-bar">
+    <view class="cart-bar-main" bindtap="openCartDrawer" aria-label="打开购物车">
+      <view class="cart-icon" aria-hidden="true"><view class="cart-icon-basket"></view><view class="cart-icon-wheel left"></view><view class="cart-icon-wheel right"></view><text class="cart-icon-badge">{{cartCount}}</text></view>
+      <view class="cart-bar-summary"><text class="cart-bar-count">已选 {{cartCount}} 道</text><text class="cart-bar-total">¥{{cartTotal}}</text></view>
     </view>
-    <view class="cart-bar-checkout">去结算</view>
-  </button>
+    <button class="cart-bar-selected" bindtap="goCheckout">选好了</button>
+  </view>
+
+  <view wx:if="{{cartDrawerOpen}}" class="cart-drawer-mask" bindtap="closeCartDrawer">
+    <view class="cart-drawer" catchtap="stopCartDrawerPropagation">
+      <view class="cart-drawer-head"><view><text class="cart-drawer-title">已选菜品</text><text class="cart-drawer-note">已选 {{cartCount}} 道</text></view><button class="cart-drawer-clear-top" bindtap="clearCartWithConfirm">清空</button></view>
+      <scroll-view class="cart-drawer-list" scroll-y>
+        <view wx:for="{{cartItems}}" wx:key="cartKey" class="cart-drawer-item">
+          <view class="cart-drawer-visual" style="background: {{item.color}};"><image wx:if="{{item.imageUrl}}" class="cart-drawer-photo" src="{{item.imageUrl}}" mode="aspectFill" /><text wx:else>{{item.emoji}}</text></view>
+          <view class="cart-drawer-copy"><text class="cart-drawer-name">{{item.name}}</text><text wx:if="{{item.optionsText}}" class="cart-drawer-options">{{item.optionsText}}</text><text class="cart-drawer-price">¥{{item.price}}</text></view>
+          <view class="cart-drawer-stepper"><button class="cart-drawer-stepper-button secondary" data-key="{{item.cartKey}}" bindtap="decreaseCartItem" aria-label="减少{{item.name}}">−</button><text class="cart-drawer-quantity">{{item.quantity}}</text><button class="cart-drawer-stepper-button" data-key="{{item.cartKey}}" bindtap="increaseCartItem" aria-label="增加{{item.name}}">+</button></view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
 
   <view wx:if="{{selectedDish}}" class="dish-modal-mask" bindtap="closeDish">
     <view class="dish-modal" catchtap="stopModalPropagation">
@@ -74,10 +84,10 @@
         </view>
         <text class="modal-dish-price">¥{{selectedDish.price}}</text>
       </view>
-      <view class="modal-option-section">
+      <view wx:if="{{selectedDish.spiceOptions.length}}" class="modal-option-section">
         <text class="modal-option-title">辣度</text>
         <view class="modal-choice-row">
-          <button wx:for="{{['不辣', '微辣', '正常辣', '特辣']}}" wx:key="*this" data-value="{{item}}" bindtap="selectDetailSpicy" class="modal-choice {{selectedSpicy === item ? 'selected' : ''}}">{{item}}</button>
+          <button wx:for="{{selectedDish.spiceOptions}}" wx:key="*this" data-value="{{item}}" bindtap="selectDetailSpicy" class="modal-choice {{selectedSpicy === item ? 'selected' : ''}}">{{item}}</button>
         </view>
       </view>
       <view class="modal-option-section modal-extra-section">

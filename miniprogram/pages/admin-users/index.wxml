@@ -5,7 +5,7 @@
   <view wx:else class="user-list">
     <view wx:for="{{users}}" wx:key="id" class="user-card">
       <view class="user-main">
-        <image wx:if="{{item.avatarFileId}}" class="avatar avatar-image" src="{{item.avatarFileId}}" mode="aspectFill" />
+        <image wx:if="{{item.avatarUrl}}" class="avatar avatar-image" src="{{item.avatarUrl}}" mode="aspectFill" />
         <view wx:else class="avatar">{{item.avatarText}}</view>
         <view class="user-copy"><text class="user-name">{{item.nickname}}</text><text class="user-phone">{{item.phone}}</text></view>
         <text class="role-tag role-{{item.role}}">{{item.roleText}}</text>
