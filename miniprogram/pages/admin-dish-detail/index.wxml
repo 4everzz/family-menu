@@ -25,6 +25,7 @@
         <view class="picker-value">{{categories[categoryIndex].name || '请选择分类'}}</view>
       </picker>
     </view>
+    <view class="form-field"><text class="field-label">辣度设置</text><view class="spice-choice-row"><button wx:for="{{newSpiceChoices}}" wx:key="label" class="spice-choice {{item.selected ? 'selected' : ''}}" data-mode="create" data-value="{{item.label}}" bindtap="toggleDishSpice">{{item.label}}</button></view><view wx:if="{{newDish.spiceOptions.length}}" class="default-spice-row"><text class="default-spice-label">默认辣度</text><button wx:for="{{newDish.spiceOptions}}" wx:key="*this" class="default-spice-choice {{newDish.defaultSpice === item ? 'selected' : ''}}" data-mode="create" data-value="{{item}}" bindtap="selectDefaultSpice">{{item}}</button></view></view>
     <view class="form-field">
       <text class="field-label">简介</text>
       <textarea class="description-input" value="{{newDish.description}}" data-field="description" maxlength="60" placeholder="例如：鲜香下饭，现炒更美味" bindinput="updateNewDish" />
@@ -58,6 +59,7 @@
           <view class="picker-value">{{categories[categoryIndex].name || '请选择分类'}}</view>
         </picker>
       </view>
+      <view class="form-field"><text class="field-label">辣度设置</text><view class="spice-choice-row"><button wx:for="{{editSpiceChoices}}" wx:key="label" class="spice-choice {{item.selected ? 'selected' : ''}}" data-mode="edit" data-value="{{item.label}}" bindtap="toggleDishSpice">{{item.label}}</button></view><view wx:if="{{editDraft.spiceOptions.length}}" class="default-spice-row"><text class="default-spice-label">默认辣度</text><button wx:for="{{editDraft.spiceOptions}}" wx:key="*this" class="default-spice-choice {{editDraft.defaultSpice === item ? 'selected' : ''}}" data-mode="edit" data-value="{{item}}" bindtap="selectDefaultSpice">{{item}}</button></view></view>
       <view class="form-field">
         <text class="field-label">简介</text>
         <textarea class="description-input" value="{{editDraft.description}}" data-field="description" maxlength="60" placeholder="用一句话介绍这道菜" bindinput="updateEditDraft" />

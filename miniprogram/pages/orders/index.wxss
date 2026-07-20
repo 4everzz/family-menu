@@ -1,9 +1,18 @@
-.page-shell { padding: 24rpx 24rpx 168rpx; }
-.order-list { display: flex; flex-direction: column; gap: 16rpx; }
+.page-shell { padding: 24rpx 24rpx calc(208rpx + env(safe-area-inset-bottom)); }
+.order-page, .order-section, .order-list { display: flex; flex-direction: column; }
+.order-page { gap: 32rpx; }
+.order-section { gap: 16rpx; }
+.section-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4rpx; }
+.section-title { color: #450A0A; font-size: 32rpx; font-weight: 700; }
+.section-count { color: #78716C; font-size: 24rpx; }
+.order-list { gap: 16rpx; }
 .order-card { padding: 24rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; display: flex; flex-direction: column; gap: 16rpx; box-shadow: 0 8rpx 22rpx rgba(69, 10, 10, .07); }
 .order-head, .order-foot { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; }
 .order-id { font-size: 30rpx; font-weight: 700; }
 .order-status { padding: 6rpx 14rpx; border-radius: 8rpx; background: #FEE2E2; color: #B91C1C; font-size: 24rpx; font-weight: 700; }
+.completed-order-card { border-color: #E2E8F0; }
+.completed-status { background: #F1F5F9; color: #475569; }
+.completed-hint { margin-top: 8rpx; padding: 12rpx 8rpx 24rpx; color: #64748B; font-size: 24rpx; line-height: 1.5; text-align: center; }
 .order-items, .order-foot { color: #64748B; font-size: 26rpx; }
 .order-remark, .order-note { color: #7C2D12; font-size: 26rpx; line-height: 1.55; }
 .progress-row { display: flex; justify-content: space-between; gap: 8rpx; padding: 16rpx; border-radius: 12rpx; background: #FFF7F7; }

@@ -1,4 +1,5 @@
 const { requireLogin } = require('../../utils/auth-guard');
+const { changeCartQuantity, clearCart, getCartItems, submitCartOrder } = require('../../utils/cart-store');
 
 Page({
   data: {
@@ -29,9 +30,7 @@ Page({
       confirmColor: '#DC2626',
       success: (result) => {
         if (!result.confirm) return;
-        const app = getApp();
-        app.globalData.cart = [];
-        app.saveCart();
+        clearCart();
         this.setData({ remark: '' });
         this.renderCart();
         wx.showToast({ title: '购物车已清空', icon: 'success' });
@@ -39,24 +38,11 @@ Page({
     });
   },
   async submitOrder() {
-    const app = getApp();
     if (this.data.isSubmitting) return;
     if (!(await requireLogin())) return;
-    if (!app.globalData.cart.length) {
-      wx.showToast({ title: '请先选择菜品', icon: 'none' });
-      return;
-    }
     this.setData({ isSubmitting: true });
     try {
-      const response = await wx.cloud.callFunction({
-        name: 'admin-menu',
-        data: {
-          action: 'createOrder',
-          items: app.globalData.cart.map((item) => ({ id: item.id, quantity: item.quantity, options: item.options || [] })),
-          remark: this.data.remark.trim(),
-        },
-      });
-      const result = response.result || {};
+      const result = await submitCartOrder(this.data.remark);
       if (!result.ok || !result.order) {
         const dishNames = Array.isArray(result.dishNames) && result.dishNames.length
           ? result.dishNames.join('、')
@@ -66,11 +52,6 @@ Page({
           : (result.message || '提交订单失败');
         throw new Error(message);
       }
-      app.globalData.orders.unshift(result.order);
-      app.saveOrders();
-      app.globalData.cart = [];
-      app.saveCart();
-      getApp().globalData.menuUpdatedAt = Date.now();
       this.setData({ remark: '' });
       wx.showToast({ title: '订单已提交', icon: 'success' });
       setTimeout(() => wx.switchTab({ url: '/pages/orders/index' }), 500);
@@ -81,22 +62,12 @@ Page({
     }
   },
   changeQuantity(cartKey, delta) {
-    const app = getApp();
-    const item = app.globalData.cart.find((cartItem) => (cartItem.cartKey || `${cartItem.id}|${(cartItem.options || ['正常辣']).join('|')}`) === cartKey);
-    if (!item) return;
-    item.quantity += delta;
-    app.globalData.cart = app.globalData.cart.filter((cartItem) => cartItem.quantity > 0);
-    app.saveCart();
+    if (!changeCartQuantity(cartKey, delta)) return;
     this.renderCart();
   },
   renderCart() {
-    const cart = getApp().globalData.cart;
-    const items = cart.map((item) => ({
-      ...item,
-      cartKey: item.cartKey || `${item.id}|${(item.options || ['正常辣']).join('|')}`,
-      optionsText: (item.options || []).join(' · '),
-    }));
-    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const items = getCartItems();
+    const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     this.setData({ items, total: total.toFixed(2) });
   },
 });

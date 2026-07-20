@@ -3,10 +3,40 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
+const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
 
 function normalizeImageFileId(value) {
   const imageFileId = String(value || '').trim();
   return imageFileId.startsWith('cloud://') ? imageFileId.slice(0, 512) : '';
+}
+
+function normalizeSpiceOptions(value) {
+  const selected = Array.isArray(value) ? value.map((item) => String(item || '').trim()) : [];
+  return SPICE_LEVELS.filter((level) => selected.includes(level));
+}
+
+function getDishSpiceConfig(dish, categories) {
+  const spiceOptions = normalizeSpiceOptions(dish.spiceOptions);
+  if (Array.isArray(dish.spiceOptions)) {
+    const defaultSpice = spiceOptions.includes(dish.defaultSpice) ? dish.defaultSpice : (spiceOptions[0] || '');
+    return { spiceOptions, defaultSpice };
+  }
+  const category = categories.find((item) => item.id === dish.category);
+  const isSpicyCategory = category && (category.name === '川菜' || category.name === '湘菜');
+  return isSpicyCategory ? { spiceOptions: SPICE_LEVELS, defaultSpice: '正常辣' } : { spiceOptions: [], defaultSpice: '' };
+}
+
+function applyDishSpiceConfig(dishes, categories) {
+  return dishes.map((dish) => ({ ...dish, ...getDishSpiceConfig(dish, categories) }));
+}
+
+function normalizeDishOrderOptions(options, dish, categories) {
+  const spiceConfig = getDishSpiceConfig(dish, categories);
+  const requested = Array.isArray(options) ? options.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6) : [];
+  const nonSpiceOptions = requested.filter((item) => !SPICE_LEVELS.includes(item));
+  if (!spiceConfig.spiceOptions.length) return nonSpiceOptions;
+  const selectedSpice = requested.find((item) => spiceConfig.spiceOptions.includes(item)) || spiceConfig.defaultSpice;
+  return selectedSpice ? [selectedSpice, ...nonSpiceOptions] : nonSpiceOptions;
 }
 
 function getChinaDateKey() {
@@ -95,7 +125,7 @@ async function attachTemporaryImageUrls(dishes) {
 async function getCustomerMenu() {
   await syncDailyInventory();
   const [dishes, categories] = await Promise.all([getAllDishes(), getAllCategories()]);
-  const visibleDishes = dishes.filter((dish) => dish && dish.id && dish.name && dish.enabled !== false);
+  const visibleDishes = applyDishSpiceConfig(dishes.filter((dish) => dish && dish.id && dish.name && dish.enabled !== false), categories);
   return { dishes: await attachTemporaryImageUrls(visibleDishes), categories };
 }
 
@@ -116,6 +146,7 @@ async function createOrder(openId, ownerUserId, event) {
   }, []);
   if (!mergedItems.length) return { ok: false, code: 'EMPTY_ORDER', message: '请先选择菜品' };
 
+  const categories = await getAllCategories();
   try {
     const order = await db.runTransaction(async (transaction) => {
       const dateKey = getChinaDateKey();
@@ -137,7 +168,7 @@ async function createOrder(openId, ownerUserId, event) {
           outOfStockNames.push(dish.name);
           continue;
         }
-        checkedItems.push({ dish, requestedItem, dailyStock, stock, dateKey });
+        checkedItems.push({ dish, requestedItem: { ...requestedItem, options: normalizeDishOrderOptions(requestedItem.options, dish, categories) }, dailyStock, stock, dateKey });
       }
       if (unavailableNames.length) {
         const error = new Error('菜品已下架或售罄');
@@ -173,7 +204,10 @@ async function createOrder(openId, ownerUserId, event) {
         orderItems.push(item);
         total += price * requestedItem.quantity;
       }
-      const createdAt = new Date().toLocaleString('zh-CN');
+      const createdAt = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      }).format(new Date());
       const order = {
         id: `HJ${Date.now().toString().slice(-8)}`,
         ownerUserId,
@@ -272,7 +306,10 @@ exports.main = async (event) => {
     return completed ? { ok: true } : { ok: false, code: 'ORDER_NOT_ACTIVE', message: '订单已完成或不存在' };
   }
   if (event.action === 'initializeDishInventory') return { ok: true, initialized: await initializeDishInventory() };
-  if (event.action === 'listDishes') return { ok: true, dishes: await getAllDishes() };
+  if (event.action === 'listDishes') {
+    const [dishes, categories] = await Promise.all([getAllDishes(), getAllCategories()]);
+    return { ok: true, dishes: applyDishSpiceConfig(dishes, categories) };
+  }
   if (event.action === 'listCategories') return { ok: true, categories: await getAllCategories() };
   if (event.action === 'addCategory') {
     const name = String(event.name || '').trim();
@@ -358,6 +395,8 @@ exports.main = async (event) => {
     const price = Number(event.price);
     const description = String(event.description || '').trim();
     const imageFileId = normalizeImageFileId(event.imageFileId);
+    const spiceOptions = normalizeSpiceOptions(event.spiceOptions);
+    const defaultSpice = spiceOptions.includes(event.defaultSpice) ? event.defaultSpice : (spiceOptions[0] || '');
     if (!id || !name || !category || !Number.isFinite(price) || price <= 0) {
       return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效' };
     }
@@ -372,6 +411,8 @@ exports.main = async (event) => {
       description: description.slice(0, 60),
       detail: description.slice(0, 60),
       imageFileId,
+      spiceOptions,
+      defaultSpice,
     };
     const result = await db.collection('dishes').where({ id }).update({
       data: { ...dish, updatedAt: db.serverDate() },
@@ -385,6 +426,8 @@ exports.main = async (event) => {
     const price = Number(event.price);
     const description = String(event.description || '').trim();
     const imageFileId = normalizeImageFileId(event.imageFileId);
+    const spiceOptions = normalizeSpiceOptions(event.spiceOptions);
+    const defaultSpice = spiceOptions.includes(event.defaultSpice) ? event.defaultSpice : (spiceOptions[0] || '');
     if (!name || !category || !Number.isFinite(price) || price <= 0) {
       return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效' };
     }
@@ -400,6 +443,8 @@ exports.main = async (event) => {
       emoji: '菜',
       color: '#D97706',
       imageFileId,
+      spiceOptions,
+      defaultSpice,
       enabled: true,
       dailyStock: 10,
       stock: 10,

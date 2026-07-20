@@ -1,0 +1,16 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card">正在确认菜品</view>
+  <view wx:else>
+    <view class="page-head"><text class="page-title">确认订单</text><text class="page-copy">小家菜馆子 · 家庭堂食</text></view>
+    <view class="order-card">
+      <text class="section-title">菜品详情</text>
+      <view wx:for="{{items}}" wx:key="cartKey" class="order-item">
+        <view class="order-visual" style="background: {{item.color}};"><image wx:if="{{item.imageUrl}}" class="order-photo" src="{{item.imageUrl}}" mode="aspectFill" /><text wx:else>{{item.emoji}}</text></view>
+        <view class="order-copy"><text class="order-name">{{item.name}}</text><text wx:if="{{item.optionsText}}" class="order-options">{{item.optionsText}}</text></view>
+        <view class="order-price"><text>¥{{item.price}}</text><text class="order-quantity">{{item.quantity}} 份</text></view>
+      </view>
+    </view>
+    <view class="remark-card"><text class="section-title">订单备注</text><textarea class="remark-input" value="{{remark}}" maxlength="80" placeholder="例如：少辣、不要香菜" bindinput="updateRemark" /></view>
+  </view>
+  <view wx:if="{{!loading}}" class="checkout-footer"><button class="continue-button" bindtap="continueOrdering" disabled="{{isSubmitting}}">继续点餐</button><button class="confirm-button" bindtap="submitOrder" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">确认下单 ¥{{total}}</button></view>
+</view>

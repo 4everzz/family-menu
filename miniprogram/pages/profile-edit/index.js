@@ -5,6 +5,7 @@ Page({
     loading: true,
     nickname: '',
     avatarFileId: '',
+    avatarUrl: '',
     avatarText: '我',
     imageUploading: false,
     saving: false,
@@ -19,6 +20,7 @@ Page({
       loading: false,
       nickname: user.profileCompleted ? user.nickname : '',
       avatarFileId: user.avatarFileId || '',
+      avatarUrl: user.avatarUrl || '',
       avatarText: (user.nickname || '我').slice(0, 1),
     });
   },
@@ -37,7 +39,7 @@ Page({
         filePath,
       });
       if (!result.fileID) throw new Error('头像上传失败');
-      this.setData({ avatarFileId: result.fileID });
+      this.setData({ avatarFileId: result.fileID, avatarUrl: filePath });
     } catch (error) {
       wx.showToast({ title: error.message || '头像上传失败', icon: 'none' });
     } finally {

@@ -8,7 +8,7 @@
     <view class="form-card">
       <view class="avatar-section">
         <button class="avatar-picker" open-type="chooseAvatar" bindchooseavatar="chooseAvatar" loading="{{imageUploading}}" disabled="{{imageUploading}}" aria-label="选择头像">
-          <image wx:if="{{avatarFileId}}" class="avatar-image" src="{{avatarFileId}}" mode="aspectFill" />
+          <image wx:if="{{avatarUrl}}" class="avatar-image" src="{{avatarUrl}}" mode="aspectFill" />
           <view wx:else class="avatar-fallback">{{avatarText}}</view>
         </button>
         <view class="avatar-copy"><text class="field-label">头像</text><text class="field-note">可选，可随时更换</text></view>

@@ -1,3 +1,9 @@
+const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
+
+function makeSpiceChoices(options) {
+  return SPICE_LEVELS.map((label) => ({ label, selected: options.includes(label) }));
+}
+
 Page({
   data: {
     id: '',
@@ -7,6 +13,9 @@ Page({
     dish: null,
     categoryName: '',
     categories: [],
+    spiceLevels: SPICE_LEVELS,
+    newSpiceChoices: makeSpiceChoices([]),
+    editSpiceChoices: makeSpiceChoices([]),
     categoryIndex: 0,
     newDish: {
       name: '',
@@ -14,6 +23,8 @@ Page({
       price: '',
       description: '',
       imageFileId: '',
+      spiceOptions: [],
+      defaultSpice: '',
     },
     editDraft: {
       name: '',
@@ -21,6 +32,8 @@ Page({
       price: '',
       description: '',
       imageFileId: '',
+      spiceOptions: [],
+      defaultSpice: '',
     },
     isSubmitting: false,
     imageUploading: false,
@@ -105,7 +118,10 @@ Page({
           price: String(normalizedDish.price),
           description: normalizedDish.description || '',
           imageFileId: normalizedDish.imageFileId || '',
+          spiceOptions: normalizedDish.spiceOptions || [],
+          defaultSpice: normalizedDish.defaultSpice || '',
         },
+        editSpiceChoices: makeSpiceChoices(normalizedDish.spiceOptions || []),
         inventoryDraft: { dailyStock: String(dailyStock), stock: String(stock) },
       });
     } catch (error) {
@@ -124,6 +140,24 @@ Page({
       categoryIndex,
       newDish: { ...this.data.newDish, category: category ? category.id : '' },
     });
+  },
+  toggleDishSpice(event) {
+    const { mode, value } = event.currentTarget.dataset;
+    const draftKey = mode === 'create' ? 'newDish' : 'editDraft';
+    const draft = this.data[draftKey];
+    const spiceOptions = draft.spiceOptions.includes(value)
+      ? draft.spiceOptions.filter((item) => item !== value)
+      : [...draft.spiceOptions, value];
+    const defaultSpice = spiceOptions.includes(draft.defaultSpice) ? draft.defaultSpice : (spiceOptions[0] || '');
+    const choiceKey = mode === 'create' ? 'newSpiceChoices' : 'editSpiceChoices';
+    this.setData({ [draftKey]: { ...draft, spiceOptions, defaultSpice }, [choiceKey]: makeSpiceChoices(spiceOptions) });
+  },
+  selectDefaultSpice(event) {
+    const { mode, value } = event.currentTarget.dataset;
+    const draftKey = mode === 'create' ? 'newDish' : 'editDraft';
+    const draft = this.data[draftKey];
+    if (!draft.spiceOptions.includes(value)) return;
+    this.setData({ [draftKey]: { ...draft, defaultSpice: value } });
   },
   async chooseDishImage(event) {
     const mode = event.currentTarget.dataset.mode;
@@ -171,6 +205,8 @@ Page({
         price,
         description,
         imageFileId: newDish.imageFileId,
+        spiceOptions: newDish.spiceOptions,
+        defaultSpice: newDish.defaultSpice,
       });
       if (!result.ok) throw new Error(result.message || '新增失败');
       getApp().globalData.menuUpdatedAt = Date.now();
@@ -211,6 +247,8 @@ Page({
         price,
         description: editDraft.description.trim(),
         imageFileId: editDraft.imageFileId,
+        spiceOptions: editDraft.spiceOptions,
+        defaultSpice: editDraft.defaultSpice,
       });
       if (!result.ok) throw new Error(result.message || '保存失败');
       const category = this.data.categories.find((item) => item.id === result.dish.category);
@@ -224,6 +262,8 @@ Page({
           price: String(result.dish.price),
           description: result.dish.description,
           imageFileId: result.dish.imageFileId || '',
+          spiceOptions: result.dish.spiceOptions || [],
+          defaultSpice: result.dish.defaultSpice || '',
         },
       });
       wx.showToast({ title: '菜品资料已保存', icon: 'success' });
