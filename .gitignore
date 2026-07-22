@@ -7,3 +7,4 @@ miniprogram/project.private.config.json
 chk*.js
 gen_docx.py
 *.docx
+docs/.obsidian/
