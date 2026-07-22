@@ -8,6 +8,7 @@ Page({
     editDraft: { name: '', sort: '' },
     isAdding: false,
     isSaving: false,
+    isDeleting: false,
   },
   onShow() {
     this.loadCategories();
@@ -47,7 +48,7 @@ Page({
     this.setData({ editDraft: { ...this.data.editDraft, [field]: event.detail.value } });
   },
   selectCategory(event) {
-    if (this.data.isAdding || this.data.isSaving) return;
+    if (this.data.isAdding || this.data.isSaving || this.data.isDeleting) return;
     const category = this.data.categories.find((item) => item.id === event.currentTarget.dataset.id);
     if (!category) return;
     this.setData({
@@ -91,7 +92,7 @@ Page({
     }
   },
   async saveCategory() {
-    if (!this.data.editId || !this.isValidDraft(this.data.editDraft) || this.data.isAdding || this.data.isSaving) {
+    if (!this.data.editId || !this.isValidDraft(this.data.editDraft) || this.data.isAdding || this.data.isSaving || this.data.isDeleting) {
       wx.showToast({ title: '请填写分类名称和非负整数排序', icon: 'none' });
       return;
     }
@@ -111,6 +112,41 @@ Page({
       wx.showToast({ title: error.message || '保存分类失败', icon: 'none' });
     } finally {
       this.setData({ isSaving: false });
+    }
+  },
+  async deleteCategory() {
+    if (!this.data.editId || this.data.isAdding || this.data.isSaving || this.data.isDeleting) return;
+    const category = this.data.categories.find((item) => item.id === this.data.editId);
+    const confirmed = await new Promise((resolve) => {
+      wx.showModal({
+        title: '删除分类',
+        content: `确定删除“${category ? category.name : '该'}”分类吗？删除后不可恢复；分类下有菜品时不能删除。`,
+        confirmText: '确认删除',
+        confirmColor: '#DC2626',
+        success: (result) => resolve(result.confirm),
+        fail: () => resolve(false),
+      });
+    });
+    if (!confirmed) return;
+
+    this.setData({ isDeleting: true });
+    try {
+      const result = await this.callAdmin('deleteCategory', { id: this.data.editId });
+      if (!result.ok) {
+        if (result.code === 'CATEGORY_IN_USE') {
+          wx.showToast({ title: '分类下仍有菜品，请先转移或删除菜品', icon: 'none' });
+          return;
+        }
+        throw new Error(result.message || '删除分类失败');
+      }
+      getApp().globalData.menuUpdatedAt = Date.now();
+      this.cancelEdit();
+      wx.showToast({ title: '分类已删除', icon: 'success' });
+      await this.loadCategories();
+    } catch (error) {
+      wx.showToast({ title: error.message || '删除分类失败', icon: 'none' });
+    } finally {
+      this.setData({ isDeleting: false });
     }
   },
 });

@@ -1,4 +1,4 @@
-.page-shell { padding: 24rpx; }
+.page-shell { padding: 24rpx 24rpx calc(208rpx + env(safe-area-inset-bottom)); }
 .detail-card { margin-bottom: 16rpx; padding: 24rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; display: flex; flex-direction: column; gap: 16rpx; box-shadow: 0 8rpx 22rpx rgba(69, 10, 10, .06); }
 .detail-head, .detail-dish, .detail-total { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .detail-id { font-size: 30rpx; font-weight: 700; }

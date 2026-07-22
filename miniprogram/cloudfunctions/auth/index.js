@@ -25,7 +25,6 @@ function makePublicUser(user) {
     nickname: user.nickname || '微信用户',
     avatarFileId: normalizeAvatarFileId(user.avatarFileId),
     profileCompleted: isProfileCompleted(user),
-    phone: user.phone || '',
     role: user.role,
     enabled: user.enabled !== false,
   };
@@ -58,11 +57,6 @@ async function findUserByOpenId(openId) {
   return result.data[0] || null;
 }
 
-async function findUserByPhone(phone) {
-  const result = await db.collection('users').where({ phone }).limit(1).get();
-  return result.data[0] || null;
-}
-
 async function isLegacyManager(openId) {
   const result = await db.collection('admins').where({ openId, enabled: true }).limit(1).get();
   return result.data.length > 0;
@@ -88,11 +82,10 @@ async function migrateLegacySuperAdmin(openId) {
   return { ...legacyUser, openId, nickname: legacyUser.nickname || '微信用户' };
 }
 
-async function createUser(openId, phone = '') {
+async function createUser(openId) {
   const canBootstrap = await isLegacyManager(openId) && !(await hasSuperAdmin());
   const user = {
     openId,
-    phone,
     nickname: '',
     avatarFileId: '',
     role: canBootstrap ? ROLES.SUPER_ADMIN : ROLES.USER,
@@ -113,35 +106,6 @@ async function loginWithWechat(openId) {
   const migratedUser = await migrateLegacySuperAdmin(openId);
   if (migratedUser) return { ok: true, user: await makePublicUserWithAvatar(migratedUser) };
   const user = await createUser(openId);
-  return { ok: true, user: await makePublicUserWithAvatar(user) };
-}
-
-async function getPhoneNumber(code) {
-  if (!code) return '';
-  const result = await cloud.openapi.phonenumber.getPhoneNumber({ code });
-  const phoneInfo = result.phoneInfo || {};
-  return phoneInfo.purePhoneNumber || phoneInfo.phoneNumber || '';
-}
-
-async function loginWithPhone(event, openId) {
-  const phone = await getPhoneNumber(event.code);
-  if (!/^1\d{10}$/.test(phone)) return { ok: false, code: 'PHONE_AUTH_FAILED', message: '手机号授权失败，请重试' };
-  const currentUser = await findUserByOpenId(openId);
-  const phoneUser = await findUserByPhone(phone);
-  if (currentUser && phoneUser && currentUser._id !== phoneUser._id) {
-    return { ok: false, code: 'PHONE_IN_USE', message: '该手机号已绑定其他账号' };
-  }
-  if (currentUser) {
-    if (currentUser.enabled === false) return { ok: false, code: 'ACCOUNT_DISABLED', message: '该账号已被停用' };
-    await db.collection('users').doc(currentUser._id).update({ data: { phone, updatedAt: db.serverDate() } });
-    return { ok: true, user: await makePublicUserWithAvatar({ ...currentUser, phone }) };
-  }
-  if (phoneUser) {
-    if (phoneUser.enabled === false) return { ok: false, code: 'ACCOUNT_DISABLED', message: '该账号已被停用' };
-    await db.collection('users').doc(phoneUser._id).update({ data: { openId, updatedAt: db.serverDate() } });
-    return { ok: true, user: await makePublicUserWithAvatar({ ...phoneUser, openId }) };
-  }
-  const user = await createUser(openId, phone);
   return { ok: true, user: await makePublicUserWithAvatar(user) };
 }
 
@@ -176,7 +140,6 @@ function makeManagedUser(user) {
     nickname: user.nickname || '微信用户',
     avatarFileId: normalizeAvatarFileId(user.avatarFileId),
     profileCompleted: isProfileCompleted(user),
-    phone: user.phone ? `${user.phone.slice(0, 3)}****${user.phone.slice(-4)}` : '未绑定手机号',
     role: user.role || ROLES.USER,
     enabled: user.enabled !== false,
   };
@@ -230,7 +193,6 @@ exports.main = async (event) => {
   const { OPENID: openId } = cloud.getWXContext();
   try {
     if (event.action === 'loginWithWechat') return await loginWithWechat(openId);
-    if (event.action === 'loginWithPhone') return await loginWithPhone(event, openId);
     if (event.action === 'getCurrentUser') return await getCurrentUser(openId);
     if (event.action === 'updateProfile') return await updateProfile(openId, event);
     if (['listUsers', 'updateUserRole', 'updateUserEnabled'].includes(event.action)) {

@@ -5,6 +5,5 @@
   </view>
   <view class="login-actions">
     <button class="primary-button" bindtap="loginWithWechat" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">微信登录</button>
-    <button class="secondary-button" open-type="getPhoneNumber" bindgetphonenumber="loginWithPhone" disabled="{{isSubmitting}}">授权手机号并登录</button>
   </view>
 </view>

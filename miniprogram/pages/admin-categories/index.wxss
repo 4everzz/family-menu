@@ -13,7 +13,7 @@
 .primary-button, .secondary-button { min-height: 88rpx; margin: 0; padding: 0 24rpx; border-radius: 14rpx; font-size: 29rpx; font-weight: 700; line-height: 88rpx; box-sizing: border-box; }
 .primary-button { background: #DC2626; color: #FFFFFF; }
 .secondary-button { border: 2rpx solid #FCA5A5; background: #FFF1F2; color: #B91C1C; }
-.primary-button[disabled], .secondary-button[disabled], .category-row[disabled] { opacity: .55; }
+.primary-button[disabled], .secondary-button[disabled], .danger-button[disabled], .category-row[disabled] { opacity: .55; }
 .list-head { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; padding: 32rpx 4rpx 16rpx; }
 .list-count { color: #64748B; font-size: 24rpx; }
 .category-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
@@ -25,5 +25,8 @@
 .edit-card { margin-top: 24rpx; }
 .form-actions { display: flex; gap: 16rpx; }
 .form-actions .primary-button, .form-actions .secondary-button { flex: 1; min-width: 0; }
+.danger-zone { display: flex; flex-direction: column; gap: 16rpx; padding-top: 20rpx; border-top: 2rpx solid #FEE2E2; }
+.danger-copy { color: #9F1239; font-size: 24rpx; line-height: 1.5; }
+.danger-button { min-height: 88rpx; margin: 0; padding: 0 24rpx; border: 2rpx solid #FDA4AF; border-radius: 14rpx; background: #FFF1F2; color: #BE123C; font-size: 29rpx; font-weight: 700; line-height: 84rpx; box-sizing: border-box; }
 .state-card { margin-top: 120rpx; }
 .access-card { margin-top: 160rpx; }

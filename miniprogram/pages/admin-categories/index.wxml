@@ -7,7 +7,7 @@
   <view wx:elif="{{hasAccess}}">
     <view class="page-head">
       <text class="page-title">管理分类</text>
-      <text class="page-copy">名称可修改，排序数字越小越靠前。为避免影响已有菜品，分类不提供删除。</text>
+      <text class="page-copy">名称可修改，排序数字越小越靠前。仅空分类可删除，已有菜品的分类请先处理菜品。</text>
     </view>
 
     <view class="form-card">
@@ -22,7 +22,7 @@
           <input class="form-input" type="number" value="{{newDraft.sort}}" data-field="sort" bindinput="updateNewDraft" />
         </view>
       </view>
-      <button class="primary-button" bindtap="addCategory" loading="{{isAdding}}" disabled="{{isAdding || isSaving}}">新增分类</button>
+      <button class="primary-button" bindtap="addCategory" loading="{{isAdding}}" disabled="{{isAdding || isSaving || isDeleting}}">新增分类</button>
     </view>
 
     <view class="list-head">
@@ -30,7 +30,7 @@
       <text class="list-count">{{categories.length}} 个</text>
     </view>
     <view class="category-list">
-      <button wx:for="{{categories}}" wx:key="id" class="category-row {{item.isEditing ? 'is-editing' : ''}}" data-id="{{item.id}}" bindtap="selectCategory" disabled="{{isAdding || isSaving}}">
+      <button wx:for="{{categories}}" wx:key="id" class="category-row {{item.isEditing ? 'is-editing' : ''}}" data-id="{{item.id}}" bindtap="selectCategory" disabled="{{isAdding || isSaving || isDeleting}}">
         <text class="category-name">{{item.name}}</text>
         <text class="category-sort">排序 {{item.sortText}}</text>
       </button>
@@ -49,8 +49,12 @@
         </view>
       </view>
       <view class="form-actions">
-        <button class="secondary-button" bindtap="cancelEdit" disabled="{{isSaving}}">取消</button>
-        <button class="primary-button" bindtap="saveCategory" loading="{{isSaving}}" disabled="{{isSaving}}">保存修改</button>
+        <button class="secondary-button" bindtap="cancelEdit" disabled="{{isSaving || isDeleting}}">取消</button>
+        <button class="primary-button" bindtap="saveCategory" loading="{{isSaving}}" disabled="{{isSaving || isDeleting}}">保存修改</button>
+      </view>
+      <view class="danger-zone">
+        <text class="danger-copy">只有分类下没有菜品时才可以删除，删除后不可恢复。</text>
+        <button class="danger-button" bindtap="deleteCategory" loading="{{isDeleting}}" disabled="{{isSaving || isDeleting}}">删除分类</button>
       </view>
     </view>
   </view>

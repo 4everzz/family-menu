@@ -1,10 +1,15 @@
-.page-shell { padding: 24rpx; }
+.page-shell { padding: 24rpx 24rpx calc(208rpx + env(safe-area-inset-bottom)); }
+.history-page { display: flex; flex-direction: column; gap: 16rpx; }
+.section-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4rpx; }
+.section-title { color: #450A0A; font-size: 32rpx; font-weight: 700; }
+.section-count { color: #78716C; font-size: 24rpx; }
 .history-list { width: 100%; display: flex; flex-direction: column; gap: 16rpx; }
 .history-card { width: 100%; align-self: stretch; padding: 24rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; color: #450A0A; display: flex; flex-direction: column; gap: 14rpx; text-align: left; box-shadow: 0 8rpx 22rpx rgba(69, 10, 10, .07); box-sizing: border-box; }
 .history-card:active { opacity: .88; }
 .history-head, .history-foot, .history-foot > view { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .history-id { font-size: 30rpx; font-weight: 700; }
 .history-status { padding: 6rpx 14rpx; border-radius: 8rpx; background: #FEE2E2; color: #B91C1C; font-size: 24rpx; font-weight: 700; }
+.completed-status { background: #F1F5F9; color: #475569; }
 .history-summary { overflow: hidden; color: #64748B; font-size: 26rpx; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
 .history-foot { color: #64748B; font-size: 24rpx; }
 .history-total { color: #DC2626; font-size: 34rpx; font-weight: 700; }

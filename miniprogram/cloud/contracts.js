@@ -1,15 +1,13 @@
+// 云开发集合与业务状态约定，供后续新增页面或云函数时统一参考。
 const ROLES = {
-  GUEST: 'guest',
   USER: 'user',
   MANAGER: 'manager',
+  SUPER_ADMIN: 'super_admin',
 };
 
 const ORDER_STATUS = {
-  SUBMITTED: 'submitted',
-  COOKING: 'cooking',
-  SERVING: 'serving',
-  COMPLETED: 'completed',
-  CANCELLED: 'cancelled',
+  COOKING: '制作中',
+  COMPLETED: '已完成',
 };
 
 const COLLECTIONS = {
@@ -19,17 +17,8 @@ const COLLECTIONS = {
   ORDERS: 'orders',
 };
 
-const ORDER_STATUS_LABELS = {
-  [ORDER_STATUS.SUBMITTED]: '已提交',
-  [ORDER_STATUS.COOKING]: '制作中',
-  [ORDER_STATUS.SERVING]: '待上菜',
-  [ORDER_STATUS.COMPLETED]: '已完成',
-  [ORDER_STATUS.CANCELLED]: '已取消',
-};
-
 module.exports = {
   ROLES,
   ORDER_STATUS,
-  ORDER_STATUS_LABELS,
   COLLECTIONS,
 };
