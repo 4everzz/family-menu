@@ -54,20 +54,4 @@ Page({
   openUserManager() {
     wx.navigateTo({ url: '/pages/admin-users/index' });
   },
-  async bindPhone(event) {
-    const code = event.detail && event.detail.code;
-    if (!code) {
-      wx.showToast({ title: '未完成手机号授权', icon: 'none' });
-      return;
-    }
-    try {
-      const result = await callAuth('loginWithPhone', { code });
-      if (!result.ok || !result.user) throw new Error(result.message || '手机号授权失败');
-      getApp().globalData.currentUser = result.user;
-      wx.showToast({ title: '手机号已授权', icon: 'success' });
-      this.loadCurrentUser();
-    } catch (error) {
-      wx.showToast({ title: error.message || '手机号授权失败', icon: 'none' });
-    }
-  },
 });

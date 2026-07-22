@@ -34,13 +34,17 @@ Page({
       imageFileId: '',
       spiceOptions: [],
       defaultSpice: '',
+      enabled: true,
+      manualSoldOut: false,
+      dailyStock: '10',
+      stock: '10',
     },
+    draftStatusText: '在售',
+    draftStatusClass: '',
     isSubmitting: false,
     imageUploading: false,
     savingDetails: false,
-    inventoryDraft: { dailyStock: '10', stock: '10' },
-    savingInventory: false,
-    savingStatus: false,
+    deleting: false,
   },
   onLoad(options) {
     if (options.mode === 'create') {
@@ -62,6 +66,22 @@ Page({
       data: { action, ...payload },
     });
     return response.result || {};
+  },
+  getDraftStatus(draft) {
+    const isOffline = draft.enabled === false || draft.manualSoldOut === true || Number(draft.stock) <= 0;
+    return {
+      text: draft.enabled === false ? '已下架' : ((draft.manualSoldOut === true || Number(draft.stock) <= 0) ? '已售罄' : '在售'),
+      className: isOffline ? 'is-offline' : '',
+    };
+  },
+  setEditDraft(editDraft, extra = {}) {
+    const status = this.getDraftStatus(editDraft);
+    this.setData({
+      editDraft,
+      draftStatusText: status.text,
+      draftStatusClass: status.className,
+      ...extra,
+    });
   },
   async loadCategoriesForCreate() {
     this.setData({ loading: true });
@@ -105,6 +125,20 @@ Page({
       const dailyStock = Number.isInteger(dish.dailyStock) && dish.dailyStock >= 0 ? dish.dailyStock : 10;
       const stock = Number.isInteger(dish.stock) && dish.stock >= 0 ? dish.stock : dailyStock;
       const normalizedDish = { ...dish, dailyStock, stock, manualSoldOut: dish.manualSoldOut === true };
+      const editDraft = {
+        name: normalizedDish.name || '',
+        category: normalizedDish.category || '',
+        price: String(normalizedDish.price),
+        description: normalizedDish.description || '',
+        imageFileId: normalizedDish.imageFileId || '',
+        spiceOptions: normalizedDish.spiceOptions || [],
+        defaultSpice: normalizedDish.defaultSpice || '',
+        enabled: normalizedDish.enabled !== false,
+        manualSoldOut: normalizedDish.manualSoldOut === true,
+        dailyStock: String(dailyStock),
+        stock: String(stock),
+      };
+      const draftStatus = this.getDraftStatus(editDraft);
       this.setData({
         hasAccess: true,
         loading: false,
@@ -112,17 +146,10 @@ Page({
         categoryName: category ? category.name : dish.category,
         categories: categoryResult.categories,
         categoryIndex: Math.max(0, categoryResult.categories.findIndex((item) => item.id === dish.category)),
-        editDraft: {
-          name: normalizedDish.name || '',
-          category: normalizedDish.category || '',
-          price: String(normalizedDish.price),
-          description: normalizedDish.description || '',
-          imageFileId: normalizedDish.imageFileId || '',
-          spiceOptions: normalizedDish.spiceOptions || [],
-          defaultSpice: normalizedDish.defaultSpice || '',
-        },
+        editDraft,
         editSpiceChoices: makeSpiceChoices(normalizedDish.spiceOptions || []),
-        inventoryDraft: { dailyStock: String(dailyStock), stock: String(stock) },
+        draftStatusText: draftStatus.text,
+        draftStatusClass: draftStatus.className,
       });
     } catch (error) {
       wx.showToast({ title: '读取菜品失败', icon: 'none' });
@@ -150,14 +177,24 @@ Page({
       : [...draft.spiceOptions, value];
     const defaultSpice = spiceOptions.includes(draft.defaultSpice) ? draft.defaultSpice : (spiceOptions[0] || '');
     const choiceKey = mode === 'create' ? 'newSpiceChoices' : 'editSpiceChoices';
-    this.setData({ [draftKey]: { ...draft, spiceOptions, defaultSpice }, [choiceKey]: makeSpiceChoices(spiceOptions) });
+    const nextDraft = { ...draft, spiceOptions, defaultSpice };
+    if (mode === 'edit') {
+      this.setEditDraft(nextDraft, { [choiceKey]: makeSpiceChoices(spiceOptions) });
+      return;
+    }
+    this.setData({ [draftKey]: nextDraft, [choiceKey]: makeSpiceChoices(spiceOptions) });
   },
   selectDefaultSpice(event) {
     const { mode, value } = event.currentTarget.dataset;
     const draftKey = mode === 'create' ? 'newDish' : 'editDraft';
     const draft = this.data[draftKey];
     if (!draft.spiceOptions.includes(value)) return;
-    this.setData({ [draftKey]: { ...draft, defaultSpice: value } });
+    const nextDraft = { ...draft, defaultSpice: value };
+    if (mode === 'edit') {
+      this.setEditDraft(nextDraft);
+      return;
+    }
+    this.setData({ [draftKey]: nextDraft });
   },
   async chooseDishImage(event) {
     const mode = event.currentTarget.dataset.mode;
@@ -176,7 +213,7 @@ Page({
       if (mode === 'create') {
         this.setData({ newDish: { ...this.data.newDish, imageFileId: uploaded.fileID } });
       } else {
-        this.setData({ editDraft: { ...this.data.editDraft, imageFileId: uploaded.fileID } });
+        this.setEditDraft({ ...this.data.editDraft, imageFileId: uploaded.fileID });
       }
       wx.showToast({ title: '图片已上传', icon: 'success' });
     } catch (error) {
@@ -220,22 +257,25 @@ Page({
   },
   updateEditDraft(event) {
     const { field } = event.currentTarget.dataset;
-    this.setData({ editDraft: { ...this.data.editDraft, [field]: event.detail.value } });
+    this.setEditDraft({ ...this.data.editDraft, [field]: event.detail.value });
   },
   selectEditCategory(event) {
     const categoryIndex = Number(event.detail.value);
     const category = this.data.categories[categoryIndex];
-    this.setData({
-      categoryIndex,
-      editDraft: { ...this.data.editDraft, category: category ? category.id : '' },
-    });
+    this.setEditDraft({ ...this.data.editDraft, category: category ? category.id : '' }, { categoryIndex });
   },
   async saveDishDetails() {
     const { editDraft } = this.data;
     const name = editDraft.name.trim();
     const price = Number(editDraft.price);
+    const dailyStock = Number(editDraft.dailyStock);
+    const stock = Number(editDraft.stock);
     if (!name || !editDraft.category || !Number.isFinite(price) || price <= 0) {
       wx.showToast({ title: '请填写菜名、分类和有效价格', icon: 'none' });
+      return;
+    }
+    if (!Number.isInteger(dailyStock) || !Number.isInteger(stock) || dailyStock < 0 || stock < 0 || stock > dailyStock) {
+      wx.showToast({ title: '库存需为非负整数，且剩余不超过每日份数', icon: 'none' });
       return;
     }
     this.setData({ savingDetails: true });
@@ -249,24 +289,33 @@ Page({
         imageFileId: editDraft.imageFileId,
         spiceOptions: editDraft.spiceOptions,
         defaultSpice: editDraft.defaultSpice,
+        enabled: editDraft.enabled !== false,
+        manualSoldOut: editDraft.manualSoldOut === true,
+        dailyStock,
+        stock,
       });
       if (!result.ok) throw new Error(result.message || '保存失败');
       const category = this.data.categories.find((item) => item.id === result.dish.category);
       getApp().globalData.menuUpdatedAt = Date.now();
-      this.setData({
+      const nextDraft = {
+        name: result.dish.name,
+        category: result.dish.category,
+        price: String(result.dish.price),
+        description: result.dish.description,
+        imageFileId: result.dish.imageFileId || '',
+        spiceOptions: result.dish.spiceOptions || [],
+        defaultSpice: result.dish.defaultSpice || '',
+        enabled: result.dish.enabled !== false,
+        manualSoldOut: result.dish.manualSoldOut === true,
+        dailyStock: String(result.dish.dailyStock),
+        stock: String(result.dish.stock),
+      };
+      this.setEditDraft(nextDraft, {
         dish: { ...this.data.dish, ...result.dish },
         categoryName: category ? category.name : result.dish.category,
-        editDraft: {
-          name: result.dish.name,
-          category: result.dish.category,
-          price: String(result.dish.price),
-          description: result.dish.description,
-          imageFileId: result.dish.imageFileId || '',
-          spiceOptions: result.dish.spiceOptions || [],
-          defaultSpice: result.dish.defaultSpice || '',
-        },
+        editSpiceChoices: makeSpiceChoices(result.dish.spiceOptions || []),
       });
-      wx.showToast({ title: '菜品资料已保存', icon: 'success' });
+      wx.showToast({ title: '菜品已保存', icon: 'success' });
     } catch (error) {
       wx.showToast({ title: '保存失败，请检查权限', icon: 'none' });
     } finally {
@@ -274,60 +323,31 @@ Page({
     }
   },
   async toggleDishEnabled() {
-    const enabled = this.data.dish.enabled === false;
-    this.setData({ savingStatus: true });
-    try {
-      const result = await this.callAdmin('updateDishEnabled', { id: this.data.id, enabled });
-      if (!result.ok) throw new Error(result.message || '状态更新失败');
-      getApp().globalData.menuUpdatedAt = Date.now();
-      this.setData({ dish: { ...this.data.dish, enabled: result.enabled } });
-      wx.showToast({ title: result.enabled ? '菜品已恢复上架' : '菜品已下架', icon: 'success' });
-    } catch (error) {
-      wx.showToast({ title: '更新失败，请检查权限', icon: 'none' });
-    } finally {
-      this.setData({ savingStatus: false });
-    }
-  },
-  updateInventoryDraft(event) {
-    const { field } = event.currentTarget.dataset;
-    this.setData({ inventoryDraft: { ...this.data.inventoryDraft, [field]: event.detail.value } });
-  },
-  async saveInventory() {
-    const dailyStock = Number(this.data.inventoryDraft.dailyStock);
-    const stock = Number(this.data.inventoryDraft.stock);
-    if (!Number.isInteger(dailyStock) || !Number.isInteger(stock) || dailyStock < 0 || stock < 0 || stock > dailyStock) {
-      wx.showToast({ title: '库存需为非负整数，且剩余不超过每日份数', icon: 'none' });
-      return;
-    }
-    this.setData({ savingInventory: true });
-    try {
-      const result = await this.callAdmin('updateDishInventory', { id: this.data.id, dailyStock, stock });
-      if (!result.ok) throw new Error(result.message || '保存失败');
-      getApp().globalData.menuUpdatedAt = Date.now();
-      this.setData({
-        dish: { ...this.data.dish, dailyStock: result.dailyStock, stock: result.stock },
-        inventoryDraft: { dailyStock: String(result.dailyStock), stock: String(result.stock) },
-      });
-      wx.showToast({ title: '库存已保存', icon: 'success' });
-    } catch (error) {
-      wx.showToast({ title: '保存失败，请检查权限', icon: 'none' });
-    } finally {
-      this.setData({ savingInventory: false });
-    }
+    this.setEditDraft({ ...this.data.editDraft, enabled: this.data.editDraft.enabled === false });
   },
   async toggleManualSoldOut() {
-    const manualSoldOut = this.data.dish.manualSoldOut !== true;
-    this.setData({ savingStatus: true });
+    this.setEditDraft({ ...this.data.editDraft, manualSoldOut: this.data.editDraft.manualSoldOut !== true });
+  },
+  async deleteDish() {
+    if (this.data.deleting) return;
+    const modal = await new Promise((resolve) => wx.showModal({
+      title: '永久删除菜品',
+      content: `确定永久删除“${this.data.dish.name}”吗？删除后不可恢复。`,
+      confirmText: '确认删除',
+      confirmColor: '#DC2626',
+      success: resolve,
+    }));
+    if (!modal.confirm) return;
+    this.setData({ deleting: true });
     try {
-      const result = await this.callAdmin('updateDishManualSoldOut', { id: this.data.id, manualSoldOut });
-      if (!result.ok) throw new Error(result.message || '更新失败');
+      const result = await this.callAdmin('deleteDish', { id: this.data.id });
+      if (!result.ok) throw new Error(result.message || '删除失败');
       getApp().globalData.menuUpdatedAt = Date.now();
-      this.setData({ dish: { ...this.data.dish, manualSoldOut: result.manualSoldOut } });
-      wx.showToast({ title: result.manualSoldOut ? '菜品已设为售罄' : '菜品已恢复销售', icon: 'success' });
+      wx.showToast({ title: '菜品已删除', icon: 'success' });
+      setTimeout(() => wx.navigateBack(), 400);
     } catch (error) {
-      wx.showToast({ title: '更新失败，请检查权限', icon: 'none' });
-    } finally {
-      this.setData({ savingStatus: false });
+      wx.showToast({ title: error.message || '删除失败，请检查权限', icon: 'none' });
+      this.setData({ deleting: false });
     }
   },
 });

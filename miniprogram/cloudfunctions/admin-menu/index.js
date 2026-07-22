@@ -271,6 +271,43 @@ async function completeOrder(id) {
   return result.stats.updated > 0;
 }
 
+async function deleteDish(id) {
+  const dishResult = await db.collection('dishes').where({ id }).limit(1).get();
+  const dish = dishResult.data[0];
+  if (!dish) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
+
+  const imageFileId = normalizeImageFileId(dish.imageFileId);
+  let isSharedImage = false;
+  if (imageFileId) {
+    const imageUsers = await db.collection('dishes').where({ imageFileId }).limit(2).get();
+    isSharedImage = imageUsers.data.some((item) => item._id !== dish._id);
+  }
+
+  await db.collection('dishes').doc(dish._id).remove();
+  if (imageFileId && !isSharedImage) {
+    try {
+      await cloud.deleteFile({ fileList: [imageFileId] });
+    } catch (error) {
+      // 菜品已删除，图片清理失败不影响历史订单与主流程。
+    }
+  }
+  return { ok: true, id };
+}
+
+async function deleteCategory(id) {
+  const categoryResult = await db.collection('categories').where({ id }).limit(1).get();
+  const category = categoryResult.data[0];
+  if (!category) return { ok: false, code: 'NOT_FOUND', message: '分类不存在' };
+
+  const dishResult = await db.collection('dishes').where({ category: id }).limit(1).get();
+  if (dishResult.data.length) {
+    return { ok: false, code: 'CATEGORY_IN_USE', message: '该分类下仍有菜品，请先转移或删除菜品' };
+  }
+
+  await db.collection('categories').doc(category._id).remove();
+  return { ok: true, id };
+}
+
 exports.main = async (event) => {
   const { OPENID: openId } = cloud.getWXContext();
   const user = await getCurrentUser(openId);
@@ -345,6 +382,11 @@ exports.main = async (event) => {
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '分类不存在' };
     return { ok: true, category: { id, ...category } };
   }
+  if (event.action === 'deleteCategory') {
+    const id = String(event.id || '');
+    if (!id) return { ok: false, code: 'INVALID_CATEGORY', message: '分类无效' };
+    return deleteCategory(id);
+  }
   if (event.action === 'updateDishPrice') {
     const id = String(event.id || '');
     const price = Number(event.price);
@@ -400,6 +442,18 @@ exports.main = async (event) => {
     if (!id || !name || !category || !Number.isFinite(price) || price <= 0) {
       return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效' };
     }
+    const existingResult = await db.collection('dishes').where({ id }).limit(1).get();
+    const existingDish = existingResult.data[0];
+    if (!existingDish) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
+    const fallbackDailyStock = Number.isInteger(existingDish.dailyStock) && existingDish.dailyStock >= 0 ? existingDish.dailyStock : 10;
+    const fallbackStock = Number.isInteger(existingDish.stock) && existingDish.stock >= 0 ? existingDish.stock : fallbackDailyStock;
+    const enabled = typeof event.enabled === 'boolean' ? event.enabled : existingDish.enabled !== false;
+    const manualSoldOut = typeof event.manualSoldOut === 'boolean' ? event.manualSoldOut : existingDish.manualSoldOut === true;
+    const dailyStock = event.dailyStock === undefined ? fallbackDailyStock : Number(event.dailyStock);
+    const stock = event.stock === undefined ? Math.min(fallbackStock, dailyStock) : Number(event.stock);
+    if (!Number.isInteger(dailyStock) || !Number.isInteger(stock) || dailyStock < 0 || stock < 0 || stock > dailyStock) {
+      return { ok: false, code: 'INVALID_STOCK', message: '库存数量无效' };
+    }
     const categoryResult = await db.collection('categories').where({ id: category }).limit(1).get();
     if (!categoryResult.data.length) {
       return { ok: false, code: 'INVALID_CATEGORY', message: '分类不存在' };
@@ -413,12 +467,21 @@ exports.main = async (event) => {
       imageFileId,
       spiceOptions,
       defaultSpice,
+      enabled,
+      manualSoldOut,
+      dailyStock,
+      stock,
+      stockResetDate: getChinaDateKey(),
     };
     const result = await db.collection('dishes').where({ id }).update({
       data: { ...dish, updatedAt: db.serverDate() },
     });
-    if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
     return { ok: true, dish: { id, ...dish } };
+  }
+  if (event.action === 'deleteDish') {
+    const id = String(event.id || '');
+    if (!id) return { ok: false, code: 'INVALID_DISH', message: '菜品无效' };
+    return deleteDish(id);
   }
   if (event.action === 'addDish') {
     const name = String(event.name || '').trim();

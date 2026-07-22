@@ -1,33 +1,11 @@
 .page-shell { min-height: 100vh; padding: 24rpx calc(24rpx + env(safe-area-inset-right)) calc(48rpx + env(safe-area-inset-bottom)) calc(24rpx + env(safe-area-inset-left)); box-sizing: border-box; background: #FFF5F5; }
-.create-form, .dish-summary, .operation-card, .state-card { display: flex; flex-direction: column; gap: 18rpx; padding: 28rpx; border: 2rpx solid #FEE2E2; border-radius: 18rpx; background: #FFFFFF; box-shadow: 0 6rpx 18rpx rgba(69, 10, 10, .06); }
-.form-head { display: flex; flex-direction: column; gap: 8rpx; margin-bottom: 4rpx; }
-.page-title, .dish-name, .state-title { color: #450A0A; font-size: 40rpx; font-weight: 700; line-height: 1.3; }
-.page-copy, .operation-copy, .state-copy { color: #64748B; font-size: 25rpx; line-height: 1.5; }
-.form-row { display: flex; gap: 16rpx; }
-.form-field { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 8rpx; }
-.form-field-name { flex: 1.5; }
-.form-field-price { flex: .8; }
-.field-label { color: #7C2D12; font-size: 24rpx; font-weight: 600; line-height: 1.3; }
-.form-input, .picker-value, .description-input { width: 100%; border: 2rpx solid #FECACA; border-radius: 12rpx; background: #FFFFFF; color: #450A0A; font-size: 27rpx; box-sizing: border-box; }
-.form-input, .picker-value { min-height: 80rpx; padding: 0 18rpx; line-height: 76rpx; }
-.description-input { height: 144rpx; padding: 16rpx 18rpx; line-height: 1.5; }
-.spice-choice-row, .default-spice-row { display: flex; flex-wrap: wrap; gap: 12rpx; }.spice-choice, .default-spice-choice { min-width: 132rpx; height: 64rpx; margin: 0; padding: 0 16rpx; border: 2rpx solid #FECACA; border-radius: 12rpx; background: #FFFFFF; color: #7C2D12; font-size: 24rpx; line-height: 60rpx; }.spice-choice.selected, .default-spice-choice.selected { border-color: #DC2626; background: #FEE2E2; color: #B91C1C; font-weight: 700; }.default-spice-row { align-items: center; margin-top: 16rpx; }.default-spice-label { margin-right: 4rpx; color: #78716C; font-size: 24rpx; }
+.create-form, .dish-summary, .operation-card, .state-card, .delete-area { display: flex; flex-direction: column; gap: 18rpx; padding: 28rpx; border: 2rpx solid #FEE2E2; border-radius: 18rpx; background: #FFFFFF; box-shadow: 0 6rpx 18rpx rgba(69, 10, 10, .06); }
+.form-head { display: flex; flex-direction: column; gap: 8rpx; margin-bottom: 4rpx; }.page-title, .dish-name, .state-title { color: #450A0A; font-size: 40rpx; font-weight: 700; line-height: 1.3; }.page-copy, .operation-copy, .state-copy, .delete-copy { color: #64748B; font-size: 25rpx; line-height: 1.5; }
+.form-row { display: flex; gap: 16rpx; }.form-field { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 8rpx; }.form-field-name { flex: 1.5; }.form-field-price { flex: .8; }.field-label { color: #7C2D12; font-size: 24rpx; font-weight: 600; line-height: 1.3; }
+.form-input, .picker-value, .description-input { width: 100%; border: 2rpx solid #FECACA; border-radius: 12rpx; background: #FFFFFF; color: #450A0A; font-size: 27rpx; box-sizing: border-box; }.form-input, .picker-value { min-height: 88rpx; padding: 0 18rpx; line-height: 84rpx; }.description-input { height: 144rpx; padding: 16rpx 18rpx; line-height: 1.5; }
+.spice-choice-grid, .default-spice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }.spice-choice, .default-spice-choice { width: 100%; min-width: 0; height: 88rpx; margin: 0; padding: 0 12rpx; border: 2rpx solid #FECACA; border-radius: 12rpx; background: #FFFFFF; color: #7C2D12; font-size: 25rpx; line-height: 84rpx; box-sizing: border-box; }.spice-choice.selected, .default-spice-choice.selected { border-color: #DC2626; background: #FEE2E2; color: #B91C1C; font-weight: 700; }.default-spice-section { display: flex; flex-direction: column; gap: 10rpx; margin-top: 10rpx; }.default-spice-label { color: #78716C; font-size: 24rpx; }
 .image-upload-row { display: flex; align-items: center; gap: 16rpx; }.dish-image-preview, .dish-image-placeholder { width: 136rpx; height: 136rpx; flex: 0 0 136rpx; border-radius: 14rpx; box-sizing: border-box; }.dish-image-preview { background: #FEE2E2; }.dish-image-placeholder { display: flex; align-items: center; justify-content: center; padding: 12rpx; border: 2rpx dashed #FCA5A5; background: #FFF7F7; color: #9F1239; font-size: 22rpx; text-align: center; }.image-button { min-width: 184rpx; height: 88rpx; margin: 0; padding: 0 18rpx; border: 2rpx solid #FCA5A5; border-radius: 12rpx; background: #FFFFFF; color: #B91C1C; font-size: 26rpx; font-weight: 700; line-height: 84rpx; box-sizing: border-box; }.image-button[disabled] { opacity: .55; }
-.form-actions { display: flex; gap: 16rpx; margin-top: 4rpx; }
-.primary-button, .secondary-button, .status-button { min-height: 88rpx; margin: 0; padding: 0 20rpx; border-radius: 12rpx; font-size: 28rpx; font-weight: 700; line-height: 88rpx; box-sizing: border-box; }
-.primary-button { flex: 1; background: #DC2626; color: #FFFFFF; }
-.secondary-button { flex: .7; border: 2rpx solid #FECACA; background: #FFFFFF; color: #B91C1C; }
-.dish-summary { gap: 10rpx; }
-.dish-category { color: #7C2D12; font-size: 26rpx; line-height: 1.3; }
-.dish-status { color: #15803D; font-size: 25rpx; font-weight: 600; line-height: 1.3; }
-.dish-status.is-offline { color: #B91C1C; }
-.operation-card { margin-top: 20rpx; }
-.operation-title { color: #450A0A; font-size: 32rpx; font-weight: 700; line-height: 1.3; }
-.operation-card .primary-button { width: 100%; }
-.status-actions { display: flex; gap: 16rpx; }
-.status-button, .soldout-button { min-width: 0; flex: 1; border: 2rpx solid #FECACA; background: #FFF1F2; color: #B91C1C; }
-.soldout-button { border-color: #FDE68A; background: #FFFBEB; color: #B45309; }
-.status-button.restore-button, .soldout-button.restore-button { border-color: #BBF7D0; background: #F0FDF4; color: #15803D; }
-.primary-button[disabled], .secondary-button[disabled], .status-button[disabled], .soldout-button[disabled] { opacity: .55; }
-.state-card { gap: 12rpx; margin-top: 96rpx; }
-.access-card { margin-top: 160rpx; }
+.form-actions, .status-actions { display: flex; gap: 16rpx; }.primary-button, .secondary-button, .status-button, .soldout-button, .delete-button { min-height: 88rpx; margin: 0; padding: 0 20rpx; border-radius: 12rpx; font-size: 28rpx; font-weight: 700; line-height: 88rpx; box-sizing: border-box; }.primary-button { flex: 1; background: #DC2626; color: #FFFFFF; }.secondary-button { flex: .7; border: 2rpx solid #FECACA; background: #FFFFFF; color: #B91C1C; }.save-dish-button { width: 100%; margin-top: 4rpx; }
+.dish-summary { gap: 10rpx; }.dish-category { color: #7C2D12; font-size: 26rpx; line-height: 1.3; }.dish-status { color: #15803D; font-size: 25rpx; font-weight: 600; line-height: 1.3; }.dish-status.is-offline { color: #B91C1C; }.operation-card, .delete-area { margin-top: 20rpx; }.operation-title, .delete-title { color: #450A0A; font-size: 32rpx; font-weight: 700; line-height: 1.3; }.settings-divider { height: 2rpx; background: #FEE2E2; }
+.status-button, .soldout-button { min-width: 0; flex: 1; border: 2rpx solid #FECACA; background: #FFF1F2; color: #B91C1C; }.soldout-button { border-color: #FDE68A; background: #FFFBEB; color: #B45309; }.status-button.restore-button, .soldout-button.restore-button { border-color: #BBF7D0; background: #F0FDF4; color: #15803D; }
+.delete-area { border-color: #FCA5A5; background: #FFF7F7; }.delete-title { color: #B91C1C; }.delete-button { width: 100%; border: 2rpx solid #DC2626; background: #FFFFFF; color: #B91C1C; }.primary-button[disabled], .secondary-button[disabled], .status-button[disabled], .soldout-button[disabled], .delete-button[disabled] { opacity: .55; }.state-card { gap: 12rpx; margin-top: 96rpx; }.access-card { margin-top: 160rpx; }

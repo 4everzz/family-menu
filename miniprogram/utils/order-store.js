@@ -12,19 +12,26 @@ function toDate(value) {
   return null;
 }
 
+function padNumber(value) {
+  return String(value).padStart(2, '0');
+}
+
 function formatChinaDateTime(value, fallback) {
   const date = toDate(value);
   if (!date) return fallback || '';
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(date);
+
+  // 真机上部分基础库不支持 Intl，这里手动按北京时间格式化。
+  const chinaOffsetMs = 8 * 60 * 60 * 1000;
+  const chinaDate = new Date(date.getTime() + chinaOffsetMs);
+
+  const year = chinaDate.getUTCFullYear();
+  const month = padNumber(chinaDate.getUTCMonth() + 1);
+  const day = padNumber(chinaDate.getUTCDate());
+  const hour = padNumber(chinaDate.getUTCHours());
+  const minute = padNumber(chinaDate.getUTCMinutes());
+  const second = padNumber(chinaDate.getUTCSeconds());
+
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
 function normalizeOrder(order) {
@@ -33,6 +40,7 @@ function normalizeOrder(order) {
     cartKey: item.cartKey || `${item.id}|${(item.options || []).join('|')}`,
     optionsText: item.optionsText || (item.options || []).join('、'),
   }));
+
   return {
     ...order,
     items,

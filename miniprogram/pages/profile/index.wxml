@@ -9,7 +9,6 @@
     <view class="menu-group">
       <view class="menu-row" hover-class="menu-row-active" bindtap="openProfileEdit"><view><text class="menu-title">资料设置</text></view><text class="menu-arrow">></text></view>
       <view class="menu-row" hover-class="menu-row-active" bindtap="openHistory"><view><text class="menu-title">历史订单</text></view><text class="menu-arrow">></text></view>
-      <button wx:if="{{!user.phone}}" class="menu-row phone-row" open-type="getPhoneNumber" bindgetphonenumber="bindPhone"><view><text class="menu-title">授权手机号</text></view><text class="menu-arrow">></text></button>
       <view wx:if="{{isManager}}" class="menu-row" hover-class="menu-row-active" bindtap="openManager"><view><text class="menu-title">管理入口</text></view><text class="menu-arrow">></text></view>
       <view wx:if="{{isSuperAdmin}}" class="menu-row" hover-class="menu-row-active" bindtap="openUserManager"><view><text class="menu-title">账户管理</text></view><text class="menu-arrow">></text></view>
     </view>

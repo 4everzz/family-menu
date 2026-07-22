@@ -1,32 +1,44 @@
-# 微信云开发接入准备
+# 当前微信云开发数据约定
 
-当前小程序仍使用本机内存和本机缓存保存购物车与订单。本目录定义了接入微信云开发后需要使用的数据字段和状态名称，尚未创建任何线上资源。
+当前小程序已经接入微信云开发，云环境 ID 为 `cloud1-d2gua37h7753f3812`。
 
-当前开发环境 ID：`cloud1-d2gua37h7753f3812`。
+前端通过 `wx.cloud.callFunction` 调用云函数，云函数负责身份校验、订单创建、库存扣减和管理操作。前端不能直接决定管理员权限或直接扣库存。
 
-## 需要创建的数据集合
+## 数据集合
 
-| 集合 | 用途 | 最小字段 |
+| 集合 | 用途 | 当前关键字段 |
 | --- | --- | --- |
-| users | 已注册用户和管理者身份 | role、account、phone、passwordHash、nickname、createdAt |
-| categories | 菜品分类 | name、sort、icon、enabled |
-| dishes | 菜品信息 | name、price、categoryId、description、image、soldOut、enabled |
-| orders | 点餐订单 | ownerKey、items、subtotal、discount、total、remark、status、createdAt |
+| `users` | 微信登录用户和角色 | `openId`、`nickname`、`avatarFileId`、`role`、`enabled`、`createdAt` |
+| `categories` | 菜品分类 | `id`、`name`、`sort`、`createdAt`、`updatedAt` |
+| `dishes` | 菜品和每日库存 | `id`、`name`、`category`、`price`、`description`、`imageFileId`、`enabled`、`dailyStock`、`stock`、`manualSoldOut`、`spiceOptions`、`defaultSpice` |
+| `orders` | 顾客订单 | `id`、`ownerUserId`、`ownerOpenId`、`items`、`total`、`remark`、`status`、`createdAtServer` |
+
+## 用户角色
+
+| 角色值 | 含义 | 权限 |
+| --- | --- | --- |
+| `user` | 普通用户 | 点菜、下单、查看自己的订单 |
+| `manager` | 管理员 | 管理菜品、分类和订单 |
+| `super_admin` | 超级管理员 | 具有管理员权限，并可管理其他用户角色 |
 
 ## 订单状态
 
+当前家庭使用流程只有两步：
+
 ```text
-submitted -> cooking -> serving -> completed
-                    -> cancelled
+制作中 -> 已完成
 ```
 
-游客订单使用匿名 `ownerKey`，只能查看自己当前微信和当前设备创建的订单。注册用户使用自己的用户编号；管理者账号才能读取全部订单和修改菜品。
+订单创建和库存扣减必须在 `admin-menu` 云函数的事务中完成，避免多人同时下单时把库存扣成负数。
 
-## 后续接入顺序
+## 图片与时间
 
-1. 在微信开发者工具创建云开发环境。
-2. 创建上述四个集合。
-3. 配置集合访问规则。
-4. 将菜单读取、创建订单和管理者登录逐步替换为云函数调用。
+- 菜品图片和用户头像保存在微信云存储，数据库只保存 `cloud://` 格式的文件 ID。
+- 云函数读取文件 ID 后生成临时访问链接，前端不可长期保存该链接。
+- `createdAtServer` 使用云端时间作为排序来源；前端展示时统一转换为北京时间。
 
-不要把管理者密码、AppSecret 或云环境密钥写入小程序代码。
+## 安全边界
+
+- 小程序前端只负责展示和提交请求，不承担权限判断。
+- 管理相关云函数必须从当前微信 OpenID 读取用户角色。
+- 不要把管理员密码、AppSecret、云环境密钥或订阅消息密钥写进小程序代码。
