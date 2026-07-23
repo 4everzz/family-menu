@@ -1,5 +1,6 @@
 const { requireLogin } = require('../../utils/auth-guard');
 const { getCartItems, getCartSummary, submitCartOrder } = require('../../utils/cart-store');
+const { callAdminMenu } = require('../../utils/shop-context');
 
 Page({
   data: {
@@ -21,8 +22,7 @@ Page({
     }
     this.setData({ loading: true });
     try {
-      const response = await wx.cloud.callFunction({ name: 'admin-menu', data: { action: 'getCustomerMenu' } });
-      const result = response.result || {};
+      const result = await callAdminMenu('getCustomerMenu');
       const imageUrls = new Map((result.dishes || []).map((dish) => [dish.id, dish.imageUrl || '']));
       const items = rawItems.map((item) => ({ ...item, imageUrl: imageUrls.get(item.id) || item.imageUrl || '' }));
       const summary = getCartSummary();

@@ -1,8 +1,11 @@
+const { callAdminMenu, ensureCurrentShop } = require('../../utils/shop-context');
+
 Page({
   data: {
     loading: true,
     hasAccess: false,
     navigatingTarget: '',
+    shopName: '',
     stats: [
       { label: '制作中订单', value: '—' },
       { label: '可点菜品', value: '—' },
@@ -14,15 +17,12 @@ Page({
     this.loadAccess();
   },
   async callAdmin(action, payload = {}) {
-    const response = await wx.cloud.callFunction({
-      name: 'admin-menu',
-      data: { action, ...payload },
-    });
-    return response.result || {};
+    return callAdminMenu(action, payload);
   },
   async loadAccess() {
     this.setData({ loading: true });
     try {
+      const shop = await ensureCurrentShop();
       const [categoryResult, dishResult, orderResult] = await Promise.all([
         this.callAdmin('listCategories'),
         this.callAdmin('listDishes'),
@@ -37,6 +37,7 @@ Page({
         this.setData({
           hasAccess: true,
           loading: false,
+          shopName: shop.name || '当前店铺',
           stats: [
             { label: '制作中订单', value: String(makingOrders) },
             { label: '可点菜品', value: String(availableDishes) },
@@ -81,6 +82,17 @@ Page({
       fail: () => {
         this.setData({ navigatingTarget: '' });
         wx.showToast({ title: '打开分类管理失败', icon: 'none' });
+      },
+    });
+  },
+  openShopSettings() {
+    if (this.data.navigatingTarget) return;
+    this.setData({ navigatingTarget: 'settings' });
+    wx.navigateTo({
+      url: '/pages/admin-shop-settings/index',
+      fail: () => {
+        this.setData({ navigatingTarget: '' });
+        wx.showToast({ title: '打开店铺设置失败', icon: 'none' });
       },
     });
   },

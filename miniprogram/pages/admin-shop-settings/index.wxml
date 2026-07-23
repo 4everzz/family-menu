@@ -1,0 +1,20 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card"><text>正在读取店铺设置</text></view>
+  <view wx:else>
+    <view class="settings-card">
+      <text class="section-title">{{shopName}}</text>
+      <view class="setting-row"><view><text class="setting-title">接收新订单</text><text class="setting-note">关闭后顾客仍可浏览菜单，但无法提交订单</text></view><switch checked="{{acceptingOrders}}" color="#DC2626" bindchange="toggleAcceptingOrders" /></view>
+      <view class="date-section"><text class="setting-title">指定不营业日期</text><text class="setting-note">仅关闭选定的具体日期，不设置固定周休</text><view class="date-picker-row"><picker mode="date" value="{{selectedDate}}" start="{{selectedDate}}" bindchange="changeDate"><view class="date-value">{{selectedDate}}</view></picker><button class="date-add-button" bindtap="addClosedDate">添加</button></view></view>
+      <view wx:if="{{closedDates.length}}" class="date-list"><view wx:for="{{closedDates}}" wx:key="*this" class="date-item"><text>{{item}}</text><button class="date-remove-button" data-date="{{item}}" bindtap="removeClosedDate">移除</button></view></view>
+      <view wx:else class="empty-date"><text>暂未设置不营业日期</text></view>
+      <button class="save-button" loading="{{saving}}" disabled="{{saving}}" bindtap="saveOperatingRules">保存营业设置</button>
+    </view>
+
+    <view class="security-card">
+      <text class="section-title">店铺码</text>
+      <text class="setting-note">重置后，原店铺码和二维码将立即失效</text>
+      <view wx:if="{{latestShopCode}}" class="new-code-row"><text class="new-code">新店铺码：{{latestShopCode}}</text><button class="copy-code-button" bindtap="copyLatestShopCode">复制</button></view>
+      <button class="rotate-button" loading="{{rotating}}" disabled="{{rotating}}" bindtap="rotateShopCode">{{rotateConfirming ? '再次点击确认重置' : '重置店铺码'}}</button>
+    </view>
+  </view>
+</view>

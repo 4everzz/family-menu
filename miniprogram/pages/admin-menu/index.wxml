@@ -7,6 +7,7 @@
   <view wx:elif="{{hasAccess}}" class="manage-card">
     <view class="page-head">
       <text class="page-title">管理中心</text>
+      <text class="page-copy">当前管理：{{shopName}}</text>
     </view>
     <view class="stats-grid">
       <view wx:for="{{stats}}" wx:key="label" class="stat-card">
@@ -18,6 +19,7 @@
       <button class="manage-button" bindtap="openDishesPage" loading="{{navigatingTarget === 'dishes'}}" disabled="{{!!navigatingTarget}}">管理菜品</button>
       <button class="manage-button" bindtap="openOrdersPage" loading="{{navigatingTarget === 'orders'}}" disabled="{{!!navigatingTarget}}">管理订单</button>
       <button class="manage-button" bindtap="openCategoriesPage" loading="{{navigatingTarget === 'categories'}}" disabled="{{!!navigatingTarget}}">管理分类</button>
+      <button class="manage-button" bindtap="openShopSettings" loading="{{navigatingTarget === 'settings'}}" disabled="{{!!navigatingTarget}}">店铺设置</button>
     </view>
   </view>
 

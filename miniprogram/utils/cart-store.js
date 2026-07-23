@@ -36,15 +36,10 @@ function clearCart() {
 async function submitCartOrder(remark) {
   const app = getApp();
   if (!app.globalData.cart.length) return { ok: false, code: 'EMPTY_ORDER', message: '请先选择菜品' };
-  const response = await wx.cloud.callFunction({
-    name: 'admin-menu',
-    data: {
-      action: 'createOrder',
-      items: app.globalData.cart.map((item) => ({ id: item.id, quantity: item.quantity, options: item.options || [] })),
-      remark: String(remark || '').trim(),
-    },
+  const result = await callAdminMenu('createOrder', {
+    items: app.globalData.cart.map((item) => ({ id: item.id, quantity: item.quantity, options: item.options || [] })),
+    remark: String(remark || '').trim(),
   });
-  const result = response.result || {};
   if (!result.ok || !result.order) return result;
   app.globalData.orders.unshift(result.order);
   app.saveOrders();
@@ -60,3 +55,4 @@ module.exports = {
   getCartSummary,
   submitCartOrder,
 };
+const { callAdminMenu } = require('./shop-context');

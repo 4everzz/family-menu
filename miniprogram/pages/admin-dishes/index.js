@@ -1,3 +1,5 @@
+const { callAdminMenu } = require('../../utils/shop-context');
+
 Page({
   data: {
     loading: true,
@@ -33,11 +35,7 @@ Page({
     this.setData({ gridHeight });
   },
   async callAdmin(action, payload = {}) {
-    const response = await wx.cloud.callFunction({
-      name: 'admin-menu',
-      data: { action, ...payload },
-    });
-    return response.result || {};
+    return callAdminMenu(action, payload);
   },
   async loadDishes() {
     this.setData({ loading: true });

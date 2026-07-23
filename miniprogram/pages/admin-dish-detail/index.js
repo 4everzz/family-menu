@@ -1,4 +1,5 @@
 const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
+const { callAdminMenu } = require('../../utils/shop-context');
 
 function makeSpiceChoices(options) {
   return SPICE_LEVELS.map((label) => ({ label, selected: options.includes(label) }));
@@ -61,11 +62,7 @@ Page({
     this.loadDish();
   },
   async callAdmin(action, payload = {}) {
-    const response = await wx.cloud.callFunction({
-      name: 'admin-menu',
-      data: { action, ...payload },
-    });
-    return response.result || {};
+    return callAdminMenu(action, payload);
   },
   getDraftStatus(draft) {
     const isOffline = draft.enabled === false || draft.manualSoldOut === true || Number(draft.stock) <= 0;

@@ -1,0 +1,262 @@
+const cloud = require('wx-server-sdk');
+const crypto = require('crypto');
+
+cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
+
+const db = cloud.database();
+const DEFAULT_SHOP_ID = 'default-family-shop';
+const DEFAULT_TABLE_ID = 'default-family-table';
+const ROLE = {
+  CUSTOMER: 'customer',
+  STORE_ADMIN: 'store_admin',
+  SUPER_ADMIN: 'super_admin',
+};
+
+function getChinaDateKey() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = parts.reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function createEntryCode() {
+  return crypto.randomBytes(4).toString('hex').toUpperCase();
+}
+
+function hashEntryCode(code) {
+  return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+
+function normalizeShopCode(value) {
+  const code = String(value || '').trim().toUpperCase();
+  return /^[A-Z0-9]{8}$/.test(code) ? code : '';
+}
+
+async function findUserByOpenId(openId) {
+  const result = await db.collection('users').where({ openId, enabled: true }).limit(1).get();
+  return result.data[0] || null;
+}
+
+async function requireSuperAdmin(openId) {
+  const user = await findUserByOpenId(openId);
+  return user && user.role === ROLE.SUPER_ADMIN ? user : null;
+}
+
+async function getAllDocuments(collectionName) {
+  const pageSize = 100;
+  const documents = [];
+  for (let skip = 0; skip < 10000; skip += pageSize) {
+    const result = await db.collection(collectionName).skip(skip).limit(pageSize).get();
+    documents.push(...result.data);
+    if (result.data.length < pageSize) break;
+  }
+  return documents;
+}
+
+async function ensureDefaultShop() {
+  const existing = await db.collection('shops').doc(DEFAULT_SHOP_ID).get().catch(() => null);
+  if (existing && existing.data) return { shop: existing.data, shopCode: '' };
+
+  const shopCode = createEntryCode();
+  const shop = {
+    name: '家庭店',
+    enabled: true,
+    acceptingOrders: true,
+    closedDates: [],
+    orderEntryMode: 'store_entry',
+    shopCodeHash: hashEntryCode(shopCode),
+    shopCodeVersion: 1,
+    createdAt: db.serverDate(),
+    updatedAt: db.serverDate(),
+  };
+  await db.collection('shops').doc(DEFAULT_SHOP_ID).set({ data: shop });
+  return { shop, shopCode };
+}
+
+async function ensureDefaultTable() {
+  const existing = await db.collection('shop_tables').doc(DEFAULT_TABLE_ID).get().catch(() => null);
+  if (existing && existing.data) return { table: existing.data, tableCode: '' };
+
+  const tableCode = createEntryCode();
+  const table = {
+    shopId: DEFAULT_SHOP_ID,
+    name: '家庭桌',
+    enabled: true,
+    entryCodeHash: hashEntryCode(tableCode),
+    entryCodeVersion: 1,
+    sort: 0,
+    createdAt: db.serverDate(),
+    updatedAt: db.serverDate(),
+  };
+  await db.collection('shop_tables').doc(DEFAULT_TABLE_ID).set({ data: table });
+  return { table, tableCode };
+}
+
+async function ensureDefaultMemberships(users) {
+  let created = 0;
+  let upgraded = 0;
+  for (const user of users) {
+    const role = user.role === 'manager' || user.role === ROLE.SUPER_ADMIN
+      ? ROLE.STORE_ADMIN
+      : ROLE.CUSTOMER;
+    const existing = await db.collection('shop_members').where({
+      shopId: DEFAULT_SHOP_ID,
+      userId: user._id,
+    }).limit(1).get();
+    if (!existing.data.length) {
+      await db.collection('shop_members').add({
+        data: {
+          shopId: DEFAULT_SHOP_ID,
+          userId: user._id,
+          role,
+          enabled: user.enabled !== false,
+          createdAt: db.serverDate(),
+          updatedAt: db.serverDate(),
+        },
+      });
+      created += 1;
+      continue;
+    }
+    const member = existing.data[0];
+    if (role === ROLE.STORE_ADMIN && member.role !== ROLE.STORE_ADMIN) {
+      await db.collection('shop_members').doc(member._id).update({
+        data: { role, enabled: user.enabled !== false, updatedAt: db.serverDate() },
+      });
+      upgraded += 1;
+    }
+  }
+  return { created, upgraded };
+}
+
+async function attachDefaultShopId(collectionName) {
+  const documents = await getAllDocuments(collectionName);
+  const pending = documents.filter((item) => !item.shopId);
+  for (const item of pending) {
+    await db.collection(collectionName).doc(item._id).update({
+      data: { shopId: DEFAULT_SHOP_ID, updatedAt: db.serverDate() },
+    });
+  }
+  return pending.length;
+}
+
+async function migrateDefaultShop(openId) {
+  const superAdmin = await requireSuperAdmin(openId);
+  if (!superAdmin) return { ok: false, code: 'FORBIDDEN', message: '只有超级管理员可以执行数据迁移' };
+
+  const [shopResult, tableResult, users] = await Promise.all([
+    ensureDefaultShop(),
+    ensureDefaultTable(),
+    getAllDocuments('users'),
+  ]);
+  const memberships = await ensureDefaultMemberships(users);
+  const [categories, dishes, orders] = await Promise.all([
+    attachDefaultShopId('categories'),
+    attachDefaultShopId('dishes'),
+    attachDefaultShopId('orders'),
+  ]);
+  return {
+    ok: true,
+    migratedAt: getChinaDateKey(),
+    shop: { id: DEFAULT_SHOP_ID, name: shopResult.shop.name, orderEntryMode: shopResult.shop.orderEntryMode },
+    initialCodes: {
+      shopCode: shopResult.shopCode,
+      tableCode: tableResult.tableCode,
+    },
+    memberships,
+    migrated: { categories, dishes, orders },
+  };
+}
+
+async function listMyShops(openId) {
+  const user = await findUserByOpenId(openId);
+  if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+  const memberships = await db.collection('shop_members').where({ userId: user._id, enabled: true }).get();
+  if (!memberships.data.length) return { ok: true, shops: [] };
+  const shops = [];
+  for (const member of memberships.data) {
+    const result = await db.collection('shops').doc(member.shopId).get().catch(() => null);
+    const shop = result && result.data;
+    if (shop && shop.enabled !== false) {
+      shops.push({
+        id: shop._id,
+        name: shop.name,
+        role: member.role,
+        orderEntryMode: shop.orderEntryMode,
+        acceptingOrders: shop.acceptingOrders !== false,
+        closedToday: Array.isArray(shop.closedDates) && shop.closedDates.includes(getChinaDateKey()),
+      });
+    }
+  }
+  return { ok: true, shops };
+}
+
+async function joinWithShopCode(openId, event) {
+  const user = await findUserByOpenId(openId);
+  if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+  const shopCode = normalizeShopCode(event.shopCode);
+  if (!shopCode) return { ok: false, code: 'INVALID_SHOP_CODE', message: '请输入 8 位店铺码' };
+
+  const result = await db.collection('shops').where({ shopCodeHash: hashEntryCode(shopCode) }).limit(1).get();
+  const shop = result.data[0];
+  if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺码无效或店铺已停用' };
+
+  const membershipResult = await db.collection('shop_members').where({
+    shopId: shop._id,
+    userId: user._id,
+  }).limit(1).get();
+  const member = membershipResult.data[0];
+  if (member) {
+    if (member.enabled === false) return { ok: false, code: 'MEMBERSHIP_DISABLED', message: '你暂时无法进入该店铺' };
+    return {
+      ok: true,
+      joined: false,
+      shop: { id: shop._id, name: shop.name, role: member.role, orderEntryMode: shop.orderEntryMode },
+    };
+  }
+
+  await db.collection('shop_members').add({
+    data: {
+      shopId: shop._id,
+      userId: user._id,
+      role: ROLE.CUSTOMER,
+      enabled: true,
+      createdAt: db.serverDate(),
+      updatedAt: db.serverDate(),
+    },
+  });
+  return {
+    ok: true,
+    joined: true,
+    shop: { id: shop._id, name: shop.name, role: ROLE.CUSTOMER, orderEntryMode: shop.orderEntryMode },
+  };
+}
+
+async function getMigrationStatus(openId) {
+  const superAdmin = await requireSuperAdmin(openId);
+  if (!superAdmin) return { ok: false, code: 'FORBIDDEN', message: '只有超级管理员可以查看迁移状态' };
+  const shop = await db.collection('shops').doc(DEFAULT_SHOP_ID).get().catch(() => null);
+  return { ok: true, migrated: !!(shop && shop.data) };
+}
+
+exports.main = async (event) => {
+  const { OPENID: openId } = cloud.getWXContext();
+  try {
+    if (event.action === 'migrateDefaultShop') return await migrateDefaultShop(openId);
+    if (event.action === 'listMyShops') return await listMyShops(openId);
+    if (event.action === 'joinWithShopCode') return await joinWithShopCode(openId, event);
+    if (event.action === 'getMigrationStatus') return await getMigrationStatus(openId);
+    return { ok: false, code: 'UNKNOWN_ACTION', message: '未知操作' };
+  } catch (error) {
+    console.error('shop-access 执行失败', { action: event.action, message: error.message, stack: error.stack });
+    return {
+      ok: false,
+      code: 'SHOP_ACCESS_ERROR',
+      message: '店铺服务暂时不可用，请稍后重试',
+      debugMessage: event.action === 'migrateDefaultShop' ? String(error.message || '未知云端错误') : '',
+    };
+  }
+};

@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/menu/index",
+    "pages/shop-entry/index",
     "pages/detail/index",
     "pages/cart/index",
     "pages/checkout/index",
@@ -8,6 +9,8 @@
     "pages/history/index",
     "pages/history-detail/index",
     "pages/admin-menu/index",
+    "pages/admin-shops/index",
+    "pages/admin-shop-settings/index",
     "pages/admin-dishes/index",
     "pages/admin-orders/index",
     "pages/admin-categories/index",
