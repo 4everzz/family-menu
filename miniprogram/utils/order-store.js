@@ -50,11 +50,7 @@ function normalizeOrder(order) {
 }
 
 async function callOrderApi(action, payload = {}) {
-  const response = await wx.cloud.callFunction({
-    name: 'admin-menu',
-    data: { action, ...payload },
-  });
-  return response.result || {};
+  return callAdminMenu(action, payload);
 }
 
 async function loadMyOrders() {
@@ -70,3 +66,4 @@ async function loadMyOrder(id) {
 }
 
 module.exports = { loadMyOrders, loadMyOrder, formatChinaDateTime };
+const { callAdminMenu } = require('./shop-context');

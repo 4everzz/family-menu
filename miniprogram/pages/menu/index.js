@@ -1,6 +1,7 @@
 const { dishes: defaultDishes, categories: defaultCategories } = require('../../data/menu');
 const { requireLogin } = require('../../utils/auth-guard');
 const { changeCartQuantity, clearCart, getCartItems, getCartSummary } = require('../../utils/cart-store');
+const { callAdminMenu } = require('../../utils/shop-context');
 
 const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
 
@@ -34,12 +35,9 @@ Page({
     cartDrawerOpen: false,
     cartItems: [],
     cartRemark: '',
+    menuError: '',
     selectedDish: null,
     selectedSpicy: '',
-    quickRemarkOptions: [
-      { label: '少油', selected: false },
-      { label: '少盐', selected: false },
-    ],
     customRemark: '',
   },
   onLoad() {
@@ -69,10 +67,13 @@ Page({
     this.setData({ menuHeight });
   },
   async loadCloudMenu() {
-    if (!wx.cloud) return;
+    if (!wx.cloud) {
+      menuDishes = [];
+      this.setData({ categories: [{ id: 'all', name: '全部' }], menuError: '店铺服务未初始化' }, () => this.renderDishes());
+      return;
+    }
     try {
-      const response = await wx.cloud.callFunction({ name: 'admin-menu', data: { action: 'getCustomerMenu' } });
-      const result = response.result || {};
+      const result = await callAdminMenu('getCustomerMenu');
       if (!result.ok) throw new Error(result.message || '菜单读取失败');
       const cloudDishes = Array.isArray(result.dishes) ? result.dishes : [];
       const cloudCategories = Array.isArray(result.categories) ? result.categories : [];
@@ -81,7 +82,6 @@ Page({
         ...normalizeDishSpiceConfig(item, spiceCategories),
         isSoldOut: item.manualSoldOut === true || (Number.isFinite(Number(item.stock)) && Number(item.stock) <= 0),
       }));
-      if (!validDishes.length) return;
       menuDishes = validDishes;
       const validCategories = cloudCategories.filter((item) => item && item.id && item.name && item.id !== 'all').sort((left, right) => {
         const leftSort = Number.isInteger(left.sort) ? left.sort : Number.MAX_SAFE_INTEGER;
@@ -91,9 +91,10 @@ Page({
       const categories = validCategories.length
         ? [{ id: 'all', name: '全部' }, ...validCategories]
         : defaultCategories;
-      this.setData({ categories, activeCategory: 'all', menuScrollTop: 0 }, () => this.renderDishes());
+      this.setData({ categories, activeCategory: 'all', menuScrollTop: 0, menuError: '' }, () => this.renderDishes());
     } catch (error) {
-      console.warn('云端菜单读取失败，已使用本地菜单', error);
+      menuDishes = [];
+      this.setData({ categories: [{ id: 'all', name: '全部' }], activeCategory: 'all', menuError: error.message || '暂时无法读取店铺菜单' }, () => this.renderDishes());
     }
   },
   selectCategory(event) {
@@ -125,7 +126,6 @@ Page({
     this.setData({
       selectedDish: dish,
       selectedSpicy: dish.defaultSpice || '',
-      quickRemarkOptions: this.data.quickRemarkOptions.map((item) => ({ ...item, selected: false })),
       customRemark: '',
     });
   },
@@ -136,25 +136,17 @@ Page({
   selectDetailSpicy(event) {
     this.setData({ selectedSpicy: event.currentTarget.dataset.value });
   },
-  toggleQuickRemark(event) {
-    const value = event.currentTarget.dataset.value;
-    const quickRemarkOptions = this.data.quickRemarkOptions.map((item) => (
-      item.label === value ? { ...item, selected: !item.selected } : item
-    ));
-    this.setData({ quickRemarkOptions });
-  },
   updateCustomRemark(event) {
     this.setData({ customRemark: event.detail.value });
   },
   async addSelectedDish() {
     if (!(await requireLogin())) return;
-    const { selectedDish, selectedSpicy, quickRemarkOptions, customRemark } = this.data;
+    const { selectedDish, selectedSpicy, customRemark } = this.data;
     if (!selectedDish || selectedDish.isSoldOut) {
       wx.showToast({ title: '该菜品已售罄', icon: 'none' });
       return;
     }
     const options = selectedSpicy ? [selectedSpicy] : [];
-    quickRemarkOptions.filter((item) => item.selected).forEach((item) => options.push(item.label));
     if (customRemark.trim()) options.push(`备注：${customRemark.trim()}`);
     this.addCartItem(selectedDish, options);
     this.closeDish();
@@ -232,7 +224,7 @@ Page({
       : menuDishes.filter((item) => item.category === this.data.activeCategory);
     const keyword = this.data.keyword.trim();
     const filtered = keyword
-      ? categoryDishes.filter((item) => item.name.includes(keyword) || item.description.includes(keyword))
+      ? categoryDishes.filter((item) => item.name.includes(keyword) || String(item.description || '').includes(keyword))
       : categoryDishes;
     const rendered = filtered.map((dish) => {
       const quantity = app.globalData.cart

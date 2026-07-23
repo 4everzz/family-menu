@@ -11,6 +11,10 @@
 .menu-row view { flex: 1; min-width: 0; display: flex; }
 .menu-title { font-size: 32rpx; line-height: 1.25; font-weight: 700; }
 .menu-arrow { width: 44rpx; margin-left: 20rpx; color: #B91C1C; font-size: 46rpx; line-height: 1; text-align: right; flex-shrink: 0; }
+.migration-button { width: 100%; min-height: 112rpx; margin: 0; padding: 0 28rpx; border: 2rpx solid #FECACA; border-radius: 20rpx; background: #FFF1F2; color: #B91C1C; font-size: 32rpx; font-weight: 700; line-height: 108rpx; text-align: left; box-sizing: border-box; }
+.migration-button::after { border: 0; }
+.migration-button[disabled] { color: #94A3B8; background: #F8FAFC; border-color: #E2E8F0; }
+.migration-error { display: block; padding: 4rpx 8rpx 0; color: #B91C1C; font-size: 22rpx; line-height: 1.5; word-break: break-all; }
 .guest-note { display: block; margin: 28rpx 12rpx 0; color: #64748B; font-size: 24rpx; line-height: 1.5; text-align: center; }
 .state-card { margin-top: 120rpx; padding: 32rpx 28rpx; border: 2rpx solid #FEE2E2; border-radius: 18rpx; background: #FFFFFF; color: #64748B; font-size: 28rpx; text-align: center; box-shadow: 0 8rpx 20rpx rgba(69, 10, 10, .05); }
 .guest-card { background: #7C2D12; }

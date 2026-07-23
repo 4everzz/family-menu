@@ -49,7 +49,7 @@
           </view>
         </view>
       </view>
-      <view wx:else class="menu-empty-state"><text>没有找到相关菜品</text><text>换个关键词试试</text></view>
+      <view wx:else class="menu-empty-state"><text>{{menuError || '没有找到相关菜品'}}</text><text>{{menuError ? '请重新扫描商家二维码后再试' : '换个关键词试试'}}</text></view>
     </scroll-view>
   </view>
 
@@ -92,9 +92,6 @@
       </view>
       <view class="modal-option-section modal-extra-section">
         <text class="modal-option-title">备注</text>
-        <view class="modal-quick-row">
-          <button wx:for="{{quickRemarkOptions}}" wx:key="label" data-value="{{item.label}}" bindtap="toggleQuickRemark" class="modal-quick-button {{item.selected ? 'selected' : ''}}">{{item.label}}</button>
-        </view>
         <textarea class="modal-remark-input" value="{{customRemark}}" maxlength="40" placeholder="例如：不要香菜、打包" bindinput="updateCustomRemark" />
       </view>
       <button class="modal-add-button" bindtap="addSelectedDish" disabled="{{selectedDish.isSoldOut}}">{{selectedDish.isSoldOut ? '该菜品已售罄' : '加入购物车'}}</button>

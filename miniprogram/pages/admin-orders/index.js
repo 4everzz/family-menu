@@ -1,3 +1,5 @@
+const { callAdminMenu } = require('../../utils/shop-context');
+
 Page({
   data: {
     loading: true,
@@ -11,11 +13,7 @@ Page({
     this.loadOrders();
   },
   async callAdmin(action, payload = {}) {
-    const response = await wx.cloud.callFunction({
-      name: 'admin-menu',
-      data: { action, ...payload },
-    });
-    return response.result || {};
+    return callAdminMenu(action, payload);
   },
   async loadOrders() {
     this.setData({ loading: true });

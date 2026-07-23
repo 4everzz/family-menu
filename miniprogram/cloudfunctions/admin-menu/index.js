@@ -59,19 +59,49 @@ function isManager(user) {
   return user && (user.role === 'manager' || user.role === 'super_admin');
 }
 
-async function getAllDishes() {
+async function getShopContext(user, event, requireStoreAdmin = false) {
+  const shopId = String(event.shopId || '').trim();
+  if (!shopId) {
+    const error = new Error('请先通过店铺二维码进入点餐');
+    error.code = 'SHOP_CONTEXT_REQUIRED';
+    throw error;
+  }
+  const shopResult = await db.collection('shops').doc(shopId).get();
+  const shop = shopResult.data;
+  if (!shop || shop.enabled === false) {
+    const error = new Error('店铺不存在或已停用');
+    error.code = 'SHOP_NOT_AVAILABLE';
+    throw error;
+  }
+  if (user.role === 'super_admin') return { shopId, shop, member: null };
+  const memberResult = await db.collection('shop_members').where({ shopId, userId: user._id, enabled: true }).limit(1).get();
+  const member = memberResult.data[0];
+  if (!member) {
+    const error = new Error('没有该店铺的访问权限');
+    error.code = 'SHOP_ACCESS_DENIED';
+    throw error;
+  }
+  if (requireStoreAdmin && member.role !== 'store_admin') {
+    const error = new Error('没有该店铺的管理权限');
+    error.code = 'SHOP_ADMIN_REQUIRED';
+    throw error;
+  }
+  return { shopId, shop, member };
+}
+
+async function getAllDishes(shopId) {
   const pageSize = 100;
   const dishes = [];
   for (let skip = 0; skip < 1000; skip += pageSize) {
-    const result = await db.collection('dishes').skip(skip).limit(pageSize).get();
+    const result = await db.collection('dishes').where({ shopId }).skip(skip).limit(pageSize).get();
     dishes.push(...result.data);
     if (result.data.length < pageSize) break;
   }
   return dishes.sort((left, right) => Number(left.id.slice(1)) - Number(right.id.slice(1)));
 }
 
-async function getAllCategories() {
-  const result = await db.collection('categories').get();
+async function getAllCategories(shopId) {
+  const result = await db.collection('categories').where({ shopId }).get();
   return result.data.sort((left, right) => {
     const leftSort = Number.isInteger(left.sort) ? left.sort : Number.MAX_SAFE_INTEGER;
     const rightSort = Number.isInteger(right.sort) ? right.sort : Number.MAX_SAFE_INTEGER;
@@ -79,8 +109,8 @@ async function getAllCategories() {
   });
 }
 
-async function initializeDishInventory() {
-  const dishes = await getAllDishes();
+async function initializeDishInventory(shopId) {
+  const dishes = await getAllDishes(shopId);
   const updates = dishes.filter((dish) => (
     !Number.isInteger(dish.dailyStock)
     || !Number.isInteger(dish.stock)
@@ -96,9 +126,9 @@ async function initializeDishInventory() {
   return updates.length;
 }
 
-async function syncDailyInventory() {
+async function syncDailyInventory(shopId) {
   const dateKey = getChinaDateKey();
-  const dishes = await getAllDishes();
+  const dishes = await getAllDishes(shopId);
   const updates = dishes.filter((dish) => dish.stockResetDate !== dateKey).map((dish) => {
     const dailyStock = Number.isInteger(dish.dailyStock) && dish.dailyStock >= 0 ? dish.dailyStock : 10;
     return db.collection('dishes').doc(dish._id).update({
@@ -122,16 +152,17 @@ async function attachTemporaryImageUrls(dishes) {
   }));
 }
 
-async function getCustomerMenu() {
-  await syncDailyInventory();
-  const [dishes, categories] = await Promise.all([getAllDishes(), getAllCategories()]);
+async function getCustomerMenu(shopId) {
+  await syncDailyInventory(shopId);
+  const [dishes, categories] = await Promise.all([getAllDishes(shopId), getAllCategories(shopId)]);
   const visibleDishes = applyDishSpiceConfig(dishes.filter((dish) => dish && dish.id && dish.name && dish.enabled !== false), categories);
   return { dishes: await attachTemporaryImageUrls(visibleDishes), categories };
 }
 
-async function createOrder(openId, ownerUserId, event) {
+async function createOrder(openId, ownerUserId, shopContext, event) {
   const requestedItems = Array.isArray(event.items) ? event.items : [];
   const remark = String(event.remark || '').trim().slice(0, 80);
+  let table = null;
   const mergedItems = requestedItems.reduce((result, item) => {
     const id = String(item.id || '');
     const quantity = Number(item.quantity);
@@ -146,7 +177,17 @@ async function createOrder(openId, ownerUserId, event) {
   }, []);
   if (!mergedItems.length) return { ok: false, code: 'EMPTY_ORDER', message: '请先选择菜品' };
 
-  const categories = await getAllCategories();
+  if (shopContext.shop.acceptingOrders === false || (shopContext.shop.closedDates || []).includes(getChinaDateKey())) {
+    return { ok: false, code: 'SHOP_NOT_ACCEPTING', message: '店铺当前暂停接单' };
+  }
+  if (shopContext.shop.orderEntryMode === 'table_required') {
+    const tableId = String(event.tableId || '').trim();
+    if (!tableId) return { ok: false, code: 'TABLE_REQUIRED', message: '请扫描本店桌码后下单' };
+    const tableResult = await db.collection('shop_tables').where({ _id: tableId, shopId: shopContext.shopId, enabled: true }).limit(1).get();
+    table = tableResult.data[0] || null;
+    if (!table) return { ok: false, code: 'INVALID_TABLE', message: '桌码无效，请重新扫描' };
+  }
+  const categories = await getAllCategories(shopContext.shopId);
   try {
     const order = await db.runTransaction(async (transaction) => {
       const dateKey = getChinaDateKey();
@@ -154,7 +195,7 @@ async function createOrder(openId, ownerUserId, event) {
       const unavailableNames = [];
       const outOfStockNames = [];
       for (const requestedItem of mergedItems) {
-        const dishResult = await transaction.collection('dishes').where({ id: requestedItem.id }).limit(1).get();
+        const dishResult = await transaction.collection('dishes').where({ id: requestedItem.id, shopId: shopContext.shopId }).limit(1).get();
         const dish = dishResult.data[0];
         if (!dish || dish.enabled === false || dish.manualSoldOut === true) {
           unavailableNames.push(dish ? dish.name : '菜品');
@@ -210,6 +251,10 @@ async function createOrder(openId, ownerUserId, event) {
       }).format(new Date());
       const order = {
         id: `HJ${Date.now().toString().slice(-8)}`,
+        shopId: shopContext.shopId,
+        tableId: table ? table._id : '',
+        tableName: table ? table.name : '',
+        orderChannel: table ? 'table' : 'store_entry',
         ownerUserId,
         ownerOpenId: openId,
         status: '制作中',
@@ -236,32 +281,30 @@ async function createOrder(openId, ownerUserId, event) {
   }
 }
 
-async function listOrders(filter) {
-  const collection = db.collection('orders');
-  const query = Object.keys(filter).length ? collection.where(filter) : collection;
-  const result = await query.orderBy('createdAtServer', 'desc').limit(100).get();
+async function listOrders(shopId) {
+  const result = await db.collection('orders').where({ shopId }).orderBy('createdAtServer', 'desc').limit(100).get();
   return result.data;
 }
 
-async function listMyOrders(userId, openId) {
+async function listMyOrders(userId, openId, shopId) {
   const [ownedResult, legacyResult] = await Promise.all([
-    db.collection('orders').where({ ownerUserId: userId }).orderBy('createdAtServer', 'desc').limit(100).get(),
-    db.collection('orders').where({ ownerOpenId: openId }).orderBy('createdAtServer', 'desc').limit(100).get(),
+    db.collection('orders').where({ ownerUserId: userId, shopId }).orderBy('createdAtServer', 'desc').limit(100).get(),
+    db.collection('orders').where({ ownerOpenId: openId, shopId }).orderBy('createdAtServer', 'desc').limit(100).get(),
   ]);
   const orders = [...ownedResult.data, ...legacyResult.data];
   return [...new Map(orders.map((item) => [item._id, item])).values()]
     .sort((left, right) => new Date(right.createdAtServer || 0).getTime() - new Date(left.createdAtServer || 0).getTime());
 }
 
-async function getMyOrder(id, userId, openId) {
-  const ownedResult = await db.collection('orders').where({ id, ownerUserId: userId }).limit(1).get();
+async function getMyOrder(id, userId, openId, shopId) {
+  const ownedResult = await db.collection('orders').where({ id, ownerUserId: userId, shopId }).limit(1).get();
   if (ownedResult.data[0]) return ownedResult.data[0];
-  const legacyResult = await db.collection('orders').where({ id, ownerOpenId: openId }).limit(1).get();
+  const legacyResult = await db.collection('orders').where({ id, ownerOpenId: openId, shopId }).limit(1).get();
   return legacyResult.data[0] || null;
 }
 
-async function completeOrder(id) {
-  const result = await db.collection('orders').where({ id, status: '制作中' }).update({
+async function completeOrder(id, shopId) {
+  const result = await db.collection('orders').where({ id, shopId, status: '制作中' }).update({
     data: {
       status: '已完成',
       statusNote: '订单已完成，感谢使用小家菜单',
@@ -271,8 +314,8 @@ async function completeOrder(id) {
   return result.stats.updated > 0;
 }
 
-async function deleteDish(id) {
-  const dishResult = await db.collection('dishes').where({ id }).limit(1).get();
+async function deleteDish(id, shopId) {
+  const dishResult = await db.collection('dishes').where({ id, shopId }).limit(1).get();
   const dish = dishResult.data[0];
   if (!dish) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
 
@@ -294,12 +337,12 @@ async function deleteDish(id) {
   return { ok: true, id };
 }
 
-async function deleteCategory(id) {
-  const categoryResult = await db.collection('categories').where({ id }).limit(1).get();
+async function deleteCategory(id, shopId) {
+  const categoryResult = await db.collection('categories').where({ id, shopId }).limit(1).get();
   const category = categoryResult.data[0];
   if (!category) return { ok: false, code: 'NOT_FOUND', message: '分类不存在' };
 
-  const dishResult = await db.collection('dishes').where({ category: id }).limit(1).get();
+  const dishResult = await db.collection('dishes').where({ category: id, shopId }).limit(1).get();
   if (dishResult.data.length) {
     return { ok: false, code: 'CATEGORY_IN_USE', message: '该分类下仍有菜品，请先转移或删除菜品' };
   }
@@ -310,54 +353,47 @@ async function deleteCategory(id) {
 
 exports.main = async (event) => {
   const { OPENID: openId } = cloud.getWXContext();
-  const user = await getCurrentUser(openId);
-  if (event.action === 'getIdentity') return { ok: true, user: user ? { id: user._id, role: user.role } : null };
-  if (event.action === 'createOrder') {
+  try {
+    const user = await getCurrentUser(openId);
+    if (event.action === 'getIdentity') return { ok: true, user: user ? { id: user._id, role: user.role } : null };
     if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
-    return createOrder(openId, user._id, event);
-  }
-  if (event.action === 'syncDailyInventory') {
-    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
-    return { ok: true, ...(await syncDailyInventory()) };
-  }
-  if (event.action === 'getCustomerMenu') {
-    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
-    return { ok: true, ...(await getCustomerMenu()) };
-  }
-  if (event.action === 'listMyOrders') {
-    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
-    return { ok: true, orders: await listMyOrders(user._id, openId) };
-  }
-  if (event.action === 'getMyOrder') {
-    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
-    const id = String(event.id || '');
-    const order = id ? await getMyOrder(id, user._id, openId) : null;
-    return order ? { ok: true, order } : { ok: false, code: 'NOT_FOUND', message: '订单不存在' };
-  }
-  if (!isManager(user)) return { ok: false, code: 'FORBIDDEN', message: '没有管理员权限' };
-  if (event.action === 'listAdminOrders') return { ok: true, orders: await listOrders({}) };
+    const customerActions = ['createOrder', 'syncDailyInventory', 'getCustomerMenu', 'listMyOrders', 'getMyOrder'];
+    if (customerActions.includes(event.action)) {
+      const shopContext = await getShopContext(user, event);
+      if (event.action === 'createOrder') return createOrder(openId, user._id, shopContext, event);
+      if (event.action === 'syncDailyInventory') return { ok: true, ...(await syncDailyInventory(shopContext.shopId)) };
+      if (event.action === 'getCustomerMenu') return { ok: true, ...(await getCustomerMenu(shopContext.shopId)) };
+      if (event.action === 'listMyOrders') return { ok: true, orders: await listMyOrders(user._id, openId, shopContext.shopId) };
+      const id = String(event.id || '');
+      const order = id ? await getMyOrder(id, user._id, openId, shopContext.shopId) : null;
+      return order ? { ok: true, order } : { ok: false, code: 'NOT_FOUND', message: '订单不存在' };
+    }
+    const shopContext = await getShopContext(user, event, true);
+    const shopId = shopContext.shopId;
+    if (event.action === 'listAdminOrders') return { ok: true, orders: await listOrders(shopId) };
   if (event.action === 'completeOrder') {
     const id = String(event.id || '');
     if (!id) return { ok: false, code: 'INVALID_ORDER', message: '订单无效' };
-    const completed = await completeOrder(id);
+    const completed = await completeOrder(id, shopId);
     return completed ? { ok: true } : { ok: false, code: 'ORDER_NOT_ACTIVE', message: '订单已完成或不存在' };
   }
-  if (event.action === 'initializeDishInventory') return { ok: true, initialized: await initializeDishInventory() };
+  if (event.action === 'initializeDishInventory') return { ok: true, initialized: await initializeDishInventory(shopId) };
   if (event.action === 'listDishes') {
-    const [dishes, categories] = await Promise.all([getAllDishes(), getAllCategories()]);
+    const [dishes, categories] = await Promise.all([getAllDishes(shopId), getAllCategories(shopId)]);
     return { ok: true, dishes: applyDishSpiceConfig(dishes, categories) };
   }
-  if (event.action === 'listCategories') return { ok: true, categories: await getAllCategories() };
+  if (event.action === 'listCategories') return { ok: true, categories: await getAllCategories(shopId) };
   if (event.action === 'addCategory') {
     const name = String(event.name || '').trim();
     const sort = Number(event.sort);
     if (!name || !Number.isInteger(sort) || sort < 0) {
       return { ok: false, code: 'INVALID_CATEGORY', message: '分类名称或排序无效' };
     }
-    const duplicate = await db.collection('categories').where({ name: name.slice(0, 12) }).limit(1).get();
+    const duplicate = await db.collection('categories').where({ shopId, name: name.slice(0, 12) }).limit(1).get();
     if (duplicate.data.length) return { ok: false, code: 'CATEGORY_EXISTS', message: '已有同名分类' };
     const category = {
       id: `c${Date.now()}`,
+      shopId,
       name: name.slice(0, 12),
       sort,
       createdAt: db.serverDate(),
@@ -373,10 +409,10 @@ exports.main = async (event) => {
     if (!id || !name || !Number.isInteger(sort) || sort < 0) {
       return { ok: false, code: 'INVALID_CATEGORY', message: '分类名称或排序无效' };
     }
-    const duplicate = await db.collection('categories').where({ name: name.slice(0, 12) }).limit(1).get();
+    const duplicate = await db.collection('categories').where({ shopId, name: name.slice(0, 12) }).limit(1).get();
     if (duplicate.data.some((item) => item.id !== id)) return { ok: false, code: 'CATEGORY_EXISTS', message: '已有同名分类' };
     const category = { name: name.slice(0, 12), sort };
-    const result = await db.collection('categories').where({ id }).update({
+    const result = await db.collection('categories').where({ id, shopId }).update({
       data: { ...category, updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '分类不存在' };
@@ -385,13 +421,13 @@ exports.main = async (event) => {
   if (event.action === 'deleteCategory') {
     const id = String(event.id || '');
     if (!id) return { ok: false, code: 'INVALID_CATEGORY', message: '分类无效' };
-    return deleteCategory(id);
+    return deleteCategory(id, shopId);
   }
   if (event.action === 'updateDishPrice') {
     const id = String(event.id || '');
     const price = Number(event.price);
     if (!id || !Number.isFinite(price) || price <= 0) return { ok: false, code: 'INVALID_PRICE', message: '价格无效' };
-    const result = await db.collection('dishes').where({ id }).update({
+    const result = await db.collection('dishes').where({ id, shopId }).update({
       data: { price, updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
@@ -401,7 +437,7 @@ exports.main = async (event) => {
     const id = String(event.id || '');
     const enabled = event.enabled === true;
     if (!id) return { ok: false, code: 'INVALID_DISH', message: '菜品无效' };
-    const result = await db.collection('dishes').where({ id }).update({
+    const result = await db.collection('dishes').where({ id, shopId }).update({
       data: { enabled, updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
@@ -411,7 +447,7 @@ exports.main = async (event) => {
     const id = String(event.id || '');
     const manualSoldOut = event.manualSoldOut === true;
     if (!id) return { ok: false, code: 'INVALID_DISH', message: '菜品无效' };
-    const result = await db.collection('dishes').where({ id }).update({
+    const result = await db.collection('dishes').where({ id, shopId }).update({
       data: { manualSoldOut, updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
@@ -424,7 +460,7 @@ exports.main = async (event) => {
     if (!id || !Number.isInteger(dailyStock) || !Number.isInteger(stock) || dailyStock < 0 || stock < 0 || stock > dailyStock) {
       return { ok: false, code: 'INVALID_STOCK', message: '库存数量无效' };
     }
-    const result = await db.collection('dishes').where({ id }).update({
+    const result = await db.collection('dishes').where({ id, shopId }).update({
       data: { dailyStock, stock, stockResetDate: getChinaDateKey(), updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
@@ -442,7 +478,7 @@ exports.main = async (event) => {
     if (!id || !name || !category || !Number.isFinite(price) || price <= 0) {
       return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效' };
     }
-    const existingResult = await db.collection('dishes').where({ id }).limit(1).get();
+    const existingResult = await db.collection('dishes').where({ id, shopId }).limit(1).get();
     const existingDish = existingResult.data[0];
     if (!existingDish) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
     const fallbackDailyStock = Number.isInteger(existingDish.dailyStock) && existingDish.dailyStock >= 0 ? existingDish.dailyStock : 10;
@@ -454,7 +490,7 @@ exports.main = async (event) => {
     if (!Number.isInteger(dailyStock) || !Number.isInteger(stock) || dailyStock < 0 || stock < 0 || stock > dailyStock) {
       return { ok: false, code: 'INVALID_STOCK', message: '库存数量无效' };
     }
-    const categoryResult = await db.collection('categories').where({ id: category }).limit(1).get();
+    const categoryResult = await db.collection('categories').where({ id: category, shopId }).limit(1).get();
     if (!categoryResult.data.length) {
       return { ok: false, code: 'INVALID_CATEGORY', message: '分类不存在' };
     }
@@ -473,7 +509,7 @@ exports.main = async (event) => {
       stock,
       stockResetDate: getChinaDateKey(),
     };
-    const result = await db.collection('dishes').where({ id }).update({
+    const result = await db.collection('dishes').where({ id, shopId }).update({
       data: { ...dish, updatedAt: db.serverDate() },
     });
     return { ok: true, dish: { id, ...dish } };
@@ -481,7 +517,7 @@ exports.main = async (event) => {
   if (event.action === 'deleteDish') {
     const id = String(event.id || '');
     if (!id) return { ok: false, code: 'INVALID_DISH', message: '菜品无效' };
-    return deleteDish(id);
+    return deleteDish(id, shopId);
   }
   if (event.action === 'addDish') {
     const name = String(event.name || '').trim();
@@ -494,10 +530,11 @@ exports.main = async (event) => {
     if (!name || !category || !Number.isFinite(price) || price <= 0) {
       return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效' };
     }
-    const categoryResult = await db.collection('categories').where({ id: category }).limit(1).get();
+    const categoryResult = await db.collection('categories').where({ id: category, shopId }).limit(1).get();
     if (!categoryResult.data.length) return { ok: false, code: 'INVALID_CATEGORY', message: '分类不存在' };
     const dish = {
       id: `d${Date.now()}`,
+      shopId,
       category,
       name: name.slice(0, 20),
       price,
@@ -519,5 +556,13 @@ exports.main = async (event) => {
     await db.collection('dishes').add({ data: dish });
     return { ok: true, dish };
   }
-  return { ok: false, code: 'UNKNOWN_ACTION', message: '未知操作' };
+    return { ok: false, code: 'UNKNOWN_ACTION', message: '未知操作' };
+  } catch (error) {
+    console.error('admin-menu 执行失败', { action: event.action, message: error.message, code: error.code });
+    return {
+      ok: false,
+      code: error.code || 'ADMIN_MENU_ERROR',
+      message: error.code ? error.message : '服务暂时不可用，请稍后重试',
+    };
+  }
 };
