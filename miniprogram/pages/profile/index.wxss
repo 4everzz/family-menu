@@ -22,3 +22,8 @@
 .phone-row::after { border: 0; }
 .phone-row view { flex: 1; min-width: 0; display: flex; }
 .login-button { width: 100%; min-height: 92rpx; margin: 28rpx 0 0; padding: 0 24rpx; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; line-height: 92rpx; box-sizing: border-box; }
+
+.section-head { padding: 8rpx 4rpx; }.section-title { color: #450A0A; font-size: 31rpx; font-weight: 700; }
+.shop-row { min-height: 96rpx; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; padding: 0 4rpx; border-bottom: 2rpx solid #FFF1F1; }.shop-row-active { opacity: .6; }
+.shop-row-name { display: block; color: #450A0A; font-size: 28rpx; font-weight: 600; }
+.shop-row-role { display: block; margin-top: 4rpx; color: #7F1D1D; font-size: 23rpx; }

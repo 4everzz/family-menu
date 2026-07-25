@@ -1,9 +1,18 @@
 const { dishes: defaultDishes, categories: defaultCategories } = require('../../data/menu');
 const { requireLogin } = require('../../utils/auth-guard');
 const { changeCartQuantity, clearCart, getCartItems, getCartSummary } = require('../../utils/cart-store');
+const { setCurrentShop, getCurrentShop } = require('../../utils/shop-store');
 const { callAdminMenu } = require('../../utils/shop-context');
 
 const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
+
+function readTableCode(value) {
+  const candidate = String(value || '').trim().toUpperCase();
+  const directCode = candidate.replace(/^TABLE:/, '');
+  if (/^[A-Z0-9]{8}$/.test(directCode)) return directCode;
+  const match = candidate.match(/(?:^|[?&])TABLECODE=([A-Z0-9]{8})(?:&|$)/);
+  return match ? match[1] : '';
+}
 
 function normalizeDishSpiceConfig(dish, categories = defaultCategories) {
   const hasExplicitConfig = Array.isArray(dish.spiceOptions);
@@ -39,6 +48,8 @@ Page({
     selectedDish: null,
     selectedSpicy: '',
     customRemark: '',
+    shopName: '当前店铺',
+    tableName: '暂未扫码',
   },
   onLoad() {
     this.updateMenuHeight();
@@ -46,6 +57,25 @@ Page({
   async onShow() {
     if (!(await requireLogin())) return;
     this.syncTabBar();
+    var shop = getCurrentShop();
+    if (!shop || !shop.id) {
+      try {
+        var shopsRes = await wx.cloud.callFunction({ name: 'shop-access', data: { action: 'listMyShops' } });
+        var shops = (shopsRes.result && shopsRes.result.ok && shopsRes.result.shops) || [];
+        if (shops.length > 0) {
+          var joinRes = await wx.cloud.callFunction({ name: 'shop-access', data: { action: 'rejoinShop', shopId: shops[0].id } });
+          var joinData = joinRes.result || {};
+          if (joinData.ok && joinData.shop) {
+            setCurrentShop(joinData.shop);
+          }
+        }
+      } catch (e) {}
+    }
+    shop = getCurrentShop();
+    this.setData({
+      shopName: shop && shop.name ? shop.name : '当前店铺',
+      tableName: shop && shop.tableName ? shop.tableName : '暂未扫码',
+    });
     await this.loadCloudMenu();
     this.renderDishes();
   },
@@ -94,7 +124,8 @@ Page({
       this.setData({ categories, activeCategory: 'all', menuScrollTop: 0, menuError: '' }, () => this.renderDishes());
     } catch (error) {
       menuDishes = [];
-      this.setData({ categories: [{ id: 'all', name: '全部' }], activeCategory: 'all', menuError: error.message || '暂时无法读取店铺菜单' }, () => this.renderDishes());
+      var msg = error.message || '暂时无法读取店铺菜单';
+      this.setData({ categories: [{ id: 'all', name: '全部' }], activeCategory: 'all', menuError: msg }, () => this.renderDishes());
     }
   },
   selectCategory(event) {
@@ -201,6 +232,40 @@ Page({
         this.setData({ cartDrawerOpen: false, cartRemark: '' });
         this.renderDishes();
       },
+    });
+  },
+  goToMyShops() {
+    wx.switchTab({ url: '/pages/profile/index' });
+  },
+  scanTableCodeFromMenu() {
+    wx.scanCode({
+      success: async (result) => {
+        const tableCode = readTableCode(result.result || result.path || '');
+        if (!tableCode) {
+          wx.showToast({ title: '未识别到桌码', icon: 'none' });
+          return;
+        }
+        wx.showLoading({ title: '确认桌位' });
+        try {
+          const response = await wx.cloud.callFunction({
+            name: 'shop-access',
+            data: { action: 'joinWithTableCode', tableCode },
+          });
+          const data = response.result || {};
+          if (!data.ok || !data.shop || !setCurrentShop(data.shop)) throw new Error(data.message || '桌位确认失败');
+          this.setData({
+            shopName: data.shop.name || this.data.shopName,
+            tableName: data.shop.tableName || '暂未扫码',
+          });
+          await this.loadCloudMenu();
+          wx.showToast({ title: `已确认${data.shop.tableName || '桌位'}`, icon: 'success' });
+        } catch (error) {
+          wx.showToast({ title: error.message || '桌位确认失败', icon: 'none' });
+        } finally {
+          wx.hideLoading();
+        }
+      },
+      fail: () => wx.showToast({ title: '未完成扫码', icon: 'none' }),
     });
   },
   goCheckout() {

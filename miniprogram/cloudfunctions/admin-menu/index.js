@@ -1,8 +1,10 @@
 const cloud = require('wx-server-sdk');
+const crypto = require('crypto');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
+const _ = db.command;
 const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
 
 function normalizeImageFileId(value) {
@@ -50,6 +52,16 @@ function getChinaDateKey() {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+function getChinaDayRange() {
+  const [year, month, day] = getChinaDateKey().split('-').map(Number);
+  const start = new Date(Date.UTC(year, month - 1, day) - 8 * 60 * 60 * 1000);
+  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+}
+
+function hashEntryToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
 async function getCurrentUser(openId) {
   const result = await db.collection('users').where({ openId, enabled: true }).limit(1).get();
   return result.data[0] || null;
@@ -87,6 +99,70 @@ async function getShopContext(user, event, requireStoreAdmin = false) {
     throw error;
   }
   return { shopId, shop, member };
+}
+
+async function getCustomerShopContext(user, event) {
+  const shopId = String(event.shopId || '').trim();
+  const entryToken = String(event.entryToken || '').trim();
+  if (!shopId) {
+    const error = new Error('请扫描当前店铺二维码后点餐');
+    error.code = 'ENTRY_SESSION_REQUIRED';
+    throw error;
+  }
+  const shopResult = await db.collection('shops').doc(shopId).get();
+  const shop = shopResult.data;
+  if (!shop || shop.enabled === false) {
+    const error = new Error('店铺不存在或已停用');
+    error.code = 'SHOP_NOT_AVAILABLE';
+    throw error;
+  }
+  const isViewAction = ['getCustomerMenu', 'listMyOrders', 'getMyOrder'].includes(event.action);
+  if (entryToken) {
+    const sessionResult = await db.collection('shop_entry_sessions').where({
+      userId: user._id,
+      shopId,
+      tokenHash: hashEntryToken(entryToken),
+    }).limit(1).get();
+    const session = sessionResult.data[0];
+    if (!session || new Date(session.expiresAt || 0).getTime() <= Date.now()) {
+      if (isViewAction) {
+        // 浏览操作：会话过期后降级为成员身份浏览，不强制扫码
+        return { shopId, shop, table: null, session: null };
+      }
+      const error = new Error('本次点餐已失效，请重新扫描店铺二维码');
+      error.code = 'ENTRY_SESSION_EXPIRED';
+      throw error;
+    }
+    let table = null;
+    if (session.tableId) {
+      const tableResult = await db.collection('shop_tables').doc(session.tableId).get().catch(() => null);
+      table = tableResult && tableResult.data;
+      if (!table || table.shopId !== shopId || table.enabled === false) {
+        if (isViewAction) {
+          return { shopId, shop, table: null, session: null };
+        }
+        const error = new Error('当前桌位已失效，请重新扫描桌码');
+        error.code = 'TABLE_NOT_AVAILABLE';
+        throw error;
+      }
+    }
+    if (shop.orderEntryMode === 'table_required' && !table) {
+      if (isViewAction) {
+        return { shopId, shop, table: null, session: null };
+      }
+      const error = new Error('请扫描本店桌码后下单');
+      error.code = 'TABLE_REQUIRED';
+      throw error;
+    }
+    return { shopId, shop, table, session };
+  }
+  // 没有会话令牌：仅浏览操作可通过店铺成员身份访问
+  if (isViewAction) {
+    return { shopId, shop, table: null, session: null };
+  }
+  const error = new Error('请先扫描店铺二维码后下单');
+  error.code = 'ENTRY_SESSION_REQUIRED';
+  throw error;
 }
 
 async function getAllDishes(shopId) {
@@ -162,7 +238,7 @@ async function getCustomerMenu(shopId) {
 async function createOrder(openId, ownerUserId, shopContext, event) {
   const requestedItems = Array.isArray(event.items) ? event.items : [];
   const remark = String(event.remark || '').trim().slice(0, 80);
-  let table = null;
+  const table = shopContext.table || null;
   const mergedItems = requestedItems.reduce((result, item) => {
     const id = String(item.id || '');
     const quantity = Number(item.quantity);
@@ -181,10 +257,6 @@ async function createOrder(openId, ownerUserId, shopContext, event) {
     return { ok: false, code: 'SHOP_NOT_ACCEPTING', message: '店铺当前暂停接单' };
   }
   if (shopContext.shop.orderEntryMode === 'table_required') {
-    const tableId = String(event.tableId || '').trim();
-    if (!tableId) return { ok: false, code: 'TABLE_REQUIRED', message: '请扫描本店桌码后下单' };
-    const tableResult = await db.collection('shop_tables').where({ _id: tableId, shopId: shopContext.shopId, enabled: true }).limit(1).get();
-    table = tableResult.data[0] || null;
     if (!table) return { ok: false, code: 'INVALID_TABLE', message: '桌码无效，请重新扫描' };
   }
   const categories = await getAllCategories(shopContext.shopId);
@@ -286,6 +358,61 @@ async function listOrders(shopId) {
   return result.data;
 }
 
+async function getAllTodayOrders(shopId) {
+  const { start, end } = getChinaDayRange();
+  const orders = [];
+  const pageSize = 100;
+  for (let skip = 0; skip < 10000; skip += pageSize) {
+    const result = await db.collection('orders').where({
+      shopId,
+      createdAtServer: _.gte(start).and(_.lt(end)),
+    }).skip(skip).limit(pageSize).get();
+    orders.push(...result.data);
+    if (result.data.length < pageSize) break;
+  }
+  return orders;
+}
+
+async function getTodayDashboard(shopId) {
+  await syncDailyInventory(shopId);
+  const [orders, dishes] = await Promise.all([getAllTodayOrders(shopId), getAllDishes(shopId)]);
+  const sales = new Map();
+  let revenue = 0;
+  let completedCount = 0;
+  let makingCount = 0;
+
+  orders.forEach((order) => {
+    revenue += Number(order.total) || 0;
+    if (order.status === '已完成') completedCount += 1;
+    if (order.status === '制作中') makingCount += 1;
+    (Array.isArray(order.items) ? order.items : []).forEach((item) => {
+      const quantity = Number(item.quantity) || 0;
+      if (quantity <= 0) return;
+      const key = item.id || item.name;
+      const current = sales.get(key) || { name: item.name || '未命名菜品', quantity: 0 };
+      current.quantity += quantity;
+      sales.set(key, current);
+    });
+  });
+
+  const topDishes = [...sales.values()]
+    .sort((left, right) => right.quantity - left.quantity || left.name.localeCompare(right.name, 'zh-CN'))
+    .slice(0, 5);
+  const soldOutCount = dishes.filter((dish) => dish.enabled !== false && (
+    dish.manualSoldOut === true || (Number.isInteger(dish.stock) && dish.stock <= 0)
+  )).length;
+
+  return {
+    dateKey: getChinaDateKey(),
+    orderCount: orders.length,
+    completedCount,
+    makingCount,
+    soldOutCount,
+    revenue: Number(revenue.toFixed(2)),
+    topDishes,
+  };
+}
+
 async function listMyOrders(userId, openId, shopId) {
   const [ownedResult, legacyResult] = await Promise.all([
     db.collection('orders').where({ ownerUserId: userId, shopId }).orderBy('createdAtServer', 'desc').limit(100).get(),
@@ -359,7 +486,7 @@ exports.main = async (event) => {
     if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
     const customerActions = ['createOrder', 'syncDailyInventory', 'getCustomerMenu', 'listMyOrders', 'getMyOrder'];
     if (customerActions.includes(event.action)) {
-      const shopContext = await getShopContext(user, event);
+      const shopContext = await getCustomerShopContext(user, event);
       if (event.action === 'createOrder') return createOrder(openId, user._id, shopContext, event);
       if (event.action === 'syncDailyInventory') return { ok: true, ...(await syncDailyInventory(shopContext.shopId)) };
       if (event.action === 'getCustomerMenu') return { ok: true, ...(await getCustomerMenu(shopContext.shopId)) };
@@ -371,6 +498,7 @@ exports.main = async (event) => {
     const shopContext = await getShopContext(user, event, true);
     const shopId = shopContext.shopId;
     if (event.action === 'listAdminOrders') return { ok: true, orders: await listOrders(shopId) };
+    if (event.action === 'getTodayDashboard') return { ok: true, dashboard: await getTodayDashboard(shopId) };
   if (event.action === 'completeOrder') {
     const id = String(event.id || '');
     if (!id) return { ok: false, code: 'INVALID_ORDER', message: '订单无效' };

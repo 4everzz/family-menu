@@ -1,6 +1,20 @@
 <view class="page-shell">
   <view wx:if="{{loading}}" class="state-card"><text>正在读取店铺设置</text></view>
   <view wx:else>
+    <view class="entry-card">
+      <text class="section-title">点餐入口方式</text>
+      <text class="setting-note">选择顾客进入当前店铺并提交订单时需要扫描的码</text>
+      <view class="entry-mode-grid">
+        <button class="entry-mode-button {{orderEntryMode === 'store_entry' ? 'selected' : ''}}" data-mode="store_entry" loading="{{changingEntryMode && orderEntryMode !== 'store_entry'}}" disabled="{{changingEntryMode}}" bindtap="changeOrderEntryMode">
+          <text class="entry-mode-title">店铺码进入</text><text class="entry-mode-note">扫描通用店铺码</text>
+        </button>
+        <button class="entry-mode-button {{orderEntryMode === 'table_required' ? 'selected' : ''}}" data-mode="table_required" loading="{{changingEntryMode && orderEntryMode !== 'table_required'}}" disabled="{{changingEntryMode}}" bindtap="changeOrderEntryMode">
+          <text class="entry-mode-title">必须扫桌码</text><text class="entry-mode-note">仅堂食桌位可下单</text>
+        </button>
+      </view>
+      <text wx:if="{{orderEntryMode === 'table_required'}}" class="entry-mode-tip">当前为桌码模式，请保持至少一张桌位处于可使用状态。</text>
+    </view>
+
     <view class="settings-card">
       <text class="section-title">{{shopName}}</text>
       <view class="setting-row"><view><text class="setting-title">接收新订单</text><text class="setting-note">关闭后顾客仍可浏览菜单，但无法提交订单</text></view><switch checked="{{acceptingOrders}}" color="#DC2626" bindchange="toggleAcceptingOrders" /></view>
@@ -14,7 +28,36 @@
       <text class="section-title">店铺码</text>
       <text class="setting-note">重置后，原店铺码和二维码将立即失效</text>
       <view wx:if="{{latestShopCode}}" class="new-code-row"><text class="new-code">新店铺码：{{latestShopCode}}</text><button class="copy-code-button" bindtap="copyLatestShopCode">复制</button></view>
+      <button wx:if="{{latestShopCode}}" class="copy-qr-button" bindtap="copyLatestShopQrContent">复制二维码内容</button>
       <button class="rotate-button" loading="{{rotating}}" disabled="{{rotating}}" bindtap="rotateShopCode">{{rotateConfirming ? '再次点击确认重置' : '重置店铺码'}}</button>
+    </view>
+
+    <view class="table-card">
+      <text class="section-title">堂食桌位</text>
+      <text class="setting-note">固定桌位码可用于生成并张贴桌码二维码</text>
+      <view class="table-add-row"><input class="table-name-input" value="{{tableName}}" maxlength="16" placeholder="例如：1号桌" bindinput="updateTableName" /><button class="table-add-button" loading="{{addingTable}}" disabled="{{addingTable}}" bindtap="addTable">新增</button></view>
+      <view wx:if="{{latestTableCode}}" class="new-table-code-row"><view class="new-table-code" bindtap="copyLatestTableCode"><text>{{latestTableName}}新码：{{latestTableCode}}</text></view><button class="copy-code-button" bindtap="openTableQr">查看二维码</button></view>
+      <view wx:if="{{tables.length}}" class="table-list">
+        <view wx:for="{{tables}}" wx:key="id" class="table-item">
+          <view class="table-copy">
+            <text class="table-name">{{item.name}}</text>
+            <text class="table-status {{item.enabled ? 'active' : 'disabled'}}">{{item.enabled ? '可使用' : '已停用'}}</text>
+          </view>
+          <view class="table-actions">
+            <button class="table-action-button secondary" data-id="{{item.id}}" data-enabled="{{!item.enabled}}" loading="{{tableActionId === item.id}}" disabled="{{!!tableActionId}}" bindtap="toggleTableEnabled">{{item.enabled ? '停用' : '恢复'}}</button>
+            <button class="table-action-button" data-id="{{item.id}}" data-name="{{item.name}}" disabled="{{!!tableActionId}}" bindtap="rotateTableCode">重置码</button>
+          </view>
+        </view>
+      </view>
+      <view wx:else class="empty-date"><text>暂未新增堂食桌位</text></view>
+    </view>
+    <view wx:if="{{showTableQr}}" class="qr-mask" bindtap="closeTableQr">
+      <view class="qr-dialog" catchtap="stopQrTap">
+        <text class="qr-title">{{qrTableName}}桌码</text>
+        <canvas class="table-qrcode" canvas-id="table-qrcode" style="width: {{qrCanvasSize}}px; height: {{qrCanvasSize}}px;"></canvas>
+        <text class="qr-content">{{qrContent}}</text>
+        <button class="qr-close-button" bindtap="closeTableQr">关闭</button>
+      </view>
     </view>
   </view>
 </view>

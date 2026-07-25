@@ -1,4 +1,5 @@
 const { ensureCurrentShop } = require('../../utils/shop-context');
+const drawQrcode = require('./weapp-qrcode');
 
 function getChinaDateKey() {
   const chinaTime = new Date(Date.now() + 8 * 60 * 60 * 1000);
@@ -16,9 +17,21 @@ Page({
     rotateConfirming: false,
     shopName: '',
     acceptingOrders: true,
+    orderEntryMode: 'store_entry',
+    changingEntryMode: false,
     closedDates: [],
     selectedDate: getChinaDateKey(),
     latestShopCode: '',
+    tables: [],
+    tableName: '',
+    addingTable: false,
+    tableActionId: '',
+    latestTableCode: '',
+    latestTableName: '',
+    showTableQr: false,
+    qrTableName: '',
+    qrContent: '',
+    qrCanvasSize: 260,
   },
   onShow() {
     this.loadSettings();
@@ -34,13 +47,18 @@ Page({
   async loadSettings() {
     this.setData({ loading: true });
     try {
-      const result = await this.callShopAdmin('getShopSettings');
-      if (!result.ok || !result.settings) throw new Error(result.message || '读取店铺设置失败');
+      const [result, tableResult] = await Promise.all([
+        this.callShopAdmin('getShopSettings'),
+        this.callShopAdmin('listTables'),
+      ]);
+      if (!result.ok || !result.settings || !tableResult.ok) throw new Error(result.message || tableResult.message || '读取店铺设置失败');
       this.setData({
         loading: false,
         shopName: result.settings.name,
         acceptingOrders: result.settings.acceptingOrders !== false,
+        orderEntryMode: result.settings.orderEntryMode === 'table_required' ? 'table_required' : 'store_entry',
         closedDates: result.settings.closedDates || [],
+        tables: tableResult.tables || [],
       });
     } catch (error) {
       this.setData({ loading: false });
@@ -49,6 +67,35 @@ Page({
   },
   toggleAcceptingOrders(event) {
     this.setData({ acceptingOrders: event.detail.value === true });
+  },
+  changeOrderEntryMode(event) {
+    const orderEntryMode = event.currentTarget.dataset.mode;
+    if (!['store_entry', 'table_required'].includes(orderEntryMode)
+      || orderEntryMode === this.data.orderEntryMode
+      || this.data.changingEntryMode) return;
+    const isTableRequired = orderEntryMode === 'table_required';
+    wx.showModal({
+      title: isTableRequired ? '启用桌码点餐' : '启用店铺码点餐',
+      content: isTableRequired
+        ? '启用后，顾客必须扫描有效桌码才能提交订单。'
+        : '启用后，顾客扫描店铺通用码即可进入并提交订单。',
+      confirmText: '确认切换',
+      confirmColor: '#DC2626',
+      success: async (choice) => {
+        if (!choice.confirm) return;
+        this.setData({ changingEntryMode: true });
+        try {
+          const result = await this.callShopAdmin('updateOrderEntryMode', { orderEntryMode });
+          if (!result.ok || !result.settings) throw new Error(result.message || '切换入口方式失败');
+          this.setData({ orderEntryMode: result.settings.orderEntryMode });
+          wx.showToast({ title: '入口方式已更新', icon: 'success' });
+        } catch (error) {
+          wx.showToast({ title: error.message || '切换入口方式失败', icon: 'none' });
+        } finally {
+          this.setData({ changingEntryMode: false });
+        }
+      },
+    });
   },
   changeDate(event) {
     this.setData({ selectedDate: event.detail.value });
@@ -116,6 +163,113 @@ Page({
       fail: () => wx.showToast({ title: '复制失败，请重试', icon: 'none' }),
     });
   },
+  copyLatestShopQrContent() {
+    const shopCode = this.data.latestShopCode;
+    if (!shopCode) return;
+    wx.setClipboardData({
+      data: `SHOP:${shopCode}`,
+      success: () => wx.showToast({ title: '二维码内容已复制', icon: 'success' }),
+      fail: () => wx.showToast({ title: '复制失败，请重试', icon: 'none' }),
+    });
+  },
+  updateTableName(event) {
+    this.setData({ tableName: event.detail.value });
+  },
+  async addTable() {
+    const name = this.data.tableName.trim();
+    if (!name || this.data.addingTable) return;
+    this.setData({ addingTable: true });
+    try {
+      const result = await this.callShopAdmin('addTable', { name });
+      if (!result.ok || !result.table || !result.tableCode) throw new Error(result.message || '新增桌位失败');
+      this.setData({
+        tableName: '',
+        latestTableName: result.table.name,
+        latestTableCode: result.tableCode,
+        tables: [...this.data.tables, result.table].sort((left, right) => left.sort - right.sort || left.name.localeCompare(right.name, 'zh-CN')),
+      });
+      wx.setClipboardData({ data: result.tableCode, success: () => wx.showToast({ title: '桌位码已复制', icon: 'success' }) });
+    } catch (error) {
+      wx.showToast({ title: error.message || '新增桌位失败', icon: 'none' });
+    } finally {
+      this.setData({ addingTable: false });
+    }
+  },
+  async toggleTableEnabled(event) {
+    const id = event.currentTarget.dataset.id;
+    const enabled = event.currentTarget.dataset.enabled === true || event.currentTarget.dataset.enabled === 'true';
+    if (!id || this.data.tableActionId) return;
+    this.setData({ tableActionId: id });
+    try {
+      const result = await this.callShopAdmin('updateTableEnabled', { id, enabled });
+      if (!result.ok || !result.table) throw new Error(result.message || '更新桌位失败');
+      this.setData({ tables: this.data.tables.map((table) => (table.id === id ? result.table : table)) });
+    } catch (error) {
+      wx.showToast({ title: error.message || '更新桌位失败', icon: 'none' });
+    } finally {
+      this.setData({ tableActionId: '' });
+    }
+  },
+  rotateTableCode(event) {
+    const id = event.currentTarget.dataset.id;
+    const name = event.currentTarget.dataset.name;
+    if (!id || this.data.tableActionId) return;
+    wx.showModal({
+      title: '重置桌位码',
+      content: `重置后，${name}的原桌码将立即失效。`,
+      confirmText: '确认重置',
+      confirmColor: '#DC2626',
+      success: async (choice) => {
+        if (!choice.confirm) return;
+        this.setData({ tableActionId: id });
+        try {
+          const result = await this.callShopAdmin('rotateTableCode', { id });
+          if (!result.ok || !result.tableCode) throw new Error(result.message || '重置桌位码失败');
+          this.setData({ latestTableName: name, latestTableCode: result.tableCode });
+          wx.setClipboardData({ data: result.tableCode, success: () => wx.showToast({ title: '新桌位码已复制', icon: 'success' }) });
+        } catch (error) {
+          wx.showToast({ title: error.message || '重置桌位码失败', icon: 'none' });
+        } finally {
+          this.setData({ tableActionId: '' });
+        }
+      },
+    });
+  },
+  copyLatestTableCode() {
+    if (!this.data.latestTableCode) return;
+    wx.setClipboardData({
+      data: this.data.latestTableCode,
+      success: () => wx.showToast({ title: '桌位码已复制', icon: 'success' }),
+      fail: () => wx.showToast({ title: '复制失败，请重试', icon: 'none' }),
+    });
+  },
+  openTableQr() {
+    const tableCode = this.data.latestTableCode;
+    if (!tableCode) return;
+    const qrContent = `TABLE:${tableCode}`;
+    const systemInfo = wx.getSystemInfoSync ? wx.getSystemInfoSync() : { windowWidth: 375 };
+    const qrCanvasSize = Math.floor(Math.min(systemInfo.windowWidth - 88, systemInfo.windowWidth * 0.7));
+    this.setData({
+      showTableQr: true,
+      qrTableName: this.data.latestTableName,
+      qrContent,
+      qrCanvasSize,
+    }, () => {
+      drawQrcode({
+        width: qrCanvasSize,
+        height: qrCanvasSize,
+        canvasId: 'table-qrcode',
+        ctx: wx.createCanvasContext('table-qrcode'),
+        text: qrContent,
+        foreground: '#450A0A',
+        background: '#FFFFFF',
+      });
+    });
+  },
+  closeTableQr() {
+    this.setData({ showTableQr: false });
+  },
+  stopQrTap() {},
   onHide() {
     if (this.rotateTimer) clearTimeout(this.rotateTimer);
     this.rotateTimer = null;

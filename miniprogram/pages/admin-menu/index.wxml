@@ -15,6 +15,16 @@
         <text class="stat-label">{{item.label}}</text>
       </view>
     </view>
+    <view class="sales-section">
+      <text class="sales-title">今日热销菜品</text>
+      <view wx:if="{{topDishes.length}}" class="sales-list">
+        <view wx:for="{{topDishes}}" wx:key="name" class="sales-item">
+          <text class="sales-name">{{index + 1}}. {{item.name}}</text>
+          <text class="sales-quantity">{{item.quantity}} 份</text>
+        </view>
+      </view>
+      <text wx:else class="sales-empty">今日暂无已提交订单</text>
+    </view>
     <view class="manage-actions">
       <button class="manage-button" bindtap="openDishesPage" loading="{{navigatingTarget === 'dishes'}}" disabled="{{!!navigatingTarget}}">管理菜品</button>
       <button class="manage-button" bindtap="openOrdersPage" loading="{{navigatingTarget === 'orders'}}" disabled="{{!!navigatingTarget}}">管理订单</button>

@@ -1,3 +1,5 @@
+const { callAdminMenu } = require('./shop-context');
+
 function getCartKey(item) {
   return item.cartKey || `${item.id}|${(item.options || []).join('|')}`;
 }
@@ -55,4 +57,3 @@ module.exports = {
   getCartSummary,
   submitCartOrder,
 };
-const { callAdminMenu } = require('./shop-context');

@@ -9,7 +9,7 @@
     <view wx:if="{{activeTab === 'active'}}">
       <view wx:if="{{orders.length}}" class="order-list">
         <view wx:for="{{orders}}" wx:key="id" class="order-card">
-          <view class="order-head"><text class="order-id">订单 {{item.id}}</text><text class="order-status">制作中</text></view>
+          <view class="order-head"><view class="order-head-copy"><text class="order-id">订单 {{item.id}}</text><text wx:if="{{item.tableName}}" class="order-location">堂食 · {{item.tableName}}</text></view><text class="order-status">制作中</text></view>
           <text class="order-summary">{{item.summary}}</text>
           <text wx:if="{{item.remark}}" class="order-remark">备注：{{item.remark}}</text>
           <view class="order-foot"><text>{{item.createdAt}}</text><text class="order-total">¥{{item.total}}</text></view>
@@ -21,7 +21,7 @@
     <view wx:else>
       <view wx:if="{{historyOrders.length}}" class="order-list">
         <view wx:for="{{historyOrders}}" wx:key="id" class="order-card history-card" hover-class="order-card-active" data-id="{{item.id}}" bindtap="openHistoryOrder">
-          <view class="order-head"><text class="order-id">订单 {{item.id}}</text><text class="order-arrow">></text></view>
+          <view class="order-head"><view class="order-head-copy"><text class="order-id">订单 {{item.id}}</text><text wx:if="{{item.tableName}}" class="order-location">堂食 · {{item.tableName}}</text></view><text class="order-arrow">></text></view>
           <text class="order-summary">{{item.summary}}</text>
           <view class="order-foot"><text>{{item.createdAt}}</text><text class="order-total">¥{{item.total}}</text></view>
         </view>
@@ -34,7 +34,7 @@
   <view wx:if="{{selectedHistoryOrder}}" class="history-modal-mask" bindtap="closeHistoryOrder">
     <scroll-view class="history-modal" scroll-y catchtap="stopModalPropagation">
       <button class="modal-close" bindtap="closeHistoryOrder" aria-label="关闭订单详情">×</button>
-      <view class="modal-head"><view><text class="modal-id">订单 {{selectedHistoryOrder.id}}</text><text class="modal-time">{{selectedHistoryOrder.createdAt}}</text></view><text class="modal-status">已完成</text></view>
+      <view class="modal-head"><view><text class="modal-id">订单 {{selectedHistoryOrder.id}}</text><text wx:if="{{selectedHistoryOrder.tableName}}" class="modal-location">堂食 · {{selectedHistoryOrder.tableName}}</text><text class="modal-time">{{selectedHistoryOrder.createdAt}}</text></view><text class="modal-status">已完成</text></view>
       <view class="modal-section"><text class="modal-title">菜品明细</text><view wx:for="{{selectedHistoryOrder.items}}" wx:for-item="dish" wx:key="id" class="modal-dish"><view><text class="modal-dish-name">{{dish.name}} × {{dish.quantity}}</text><text wx:if="{{dish.optionsText}}" class="modal-dish-options">{{dish.optionsText}}</text></view><text class="modal-dish-price">¥{{dish.price}}</text></view></view>
       <view wx:if="{{selectedHistoryOrder.remark}}" class="modal-section"><text class="modal-title">订单备注</text><text class="modal-remark">{{selectedHistoryOrder.remark}}</text></view>
       <view class="modal-total"><text>订单合计</text><text>¥{{selectedHistoryOrder.total}}</text></view>

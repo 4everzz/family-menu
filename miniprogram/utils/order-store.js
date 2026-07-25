@@ -1,3 +1,5 @@
+const { callAdminMenu } = require('./shop-context');
+
 function toDate(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   if (typeof value === 'number' || typeof value === 'string') {
@@ -66,4 +68,3 @@ async function loadMyOrder(id) {
 }
 
 module.exports = { loadMyOrders, loadMyOrder, formatChinaDateTime };
-const { callAdminMenu } = require('./shop-context');

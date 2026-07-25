@@ -1,10 +1,18 @@
 .page-shell { padding: 24rpx; box-sizing: border-box; overflow: hidden; }
-.welcome-card { min-height: 220rpx; padding: 32rpx; border-radius: 20rpx; background: #DC2626; color: #FFFFFF; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 12rpx 28rpx rgba(153, 27, 27, .18); box-sizing: border-box; }
-.welcome-copy { display: flex; flex-direction: column; gap: 10rpx; }
-.eyebrow { font-size: 24rpx; opacity: .82; }
+.welcome-card { min-height: 220rpx; padding: 32rpx; border-radius: 20rpx; background: #DC2626; color: #FFFFFF; display: flex; align-items: center; justify-content: space-between; gap: 20rpx; box-shadow: 0 12rpx 28rpx rgba(153, 27, 27, .18); box-sizing: border-box; }
+.welcome-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 10rpx; }
+.eyebrow { max-width: 100%; overflow: hidden; font-size: 24rpx; opacity: .82; text-overflow: ellipsis; white-space: nowrap; }
 .page-title { font-size: 48rpx; font-weight: 700; }
 .page-subtitle { font-size: 28rpx; opacity: .9; }
-.bowl-mark { width: 104rpx; height: 104rpx; border-radius: 52rpx; background: #FFFFFF; color: #B91C1C; display: flex; align-items: center; justify-content: center; font-size: 46rpx; font-weight: 700; }
+.scan-mark { width: 116rpx; min-width: 116rpx; height: 116rpx; margin: 0; padding: 14rpx 0 10rpx; border-radius: 58rpx; background: #FFFFFF; color: #B91C1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6rpx; font-size: 24rpx; font-weight: 700; line-height: 1; box-sizing: border-box; }
+.scan-mark::after { border: 0; }
+.scan-mark:active { opacity: .86; }
+.scan-icon { position: relative; width: 42rpx; height: 42rpx; }
+.scan-corner { position: absolute; width: 15rpx; height: 15rpx; border-color: #B91C1C; border-style: solid; box-sizing: border-box; }
+.scan-corner.top-left { left: 0; top: 0; border-width: 4rpx 0 0 4rpx; }
+.scan-corner.top-right { right: 0; top: 0; border-width: 4rpx 4rpx 0 0; }
+.scan-corner.bottom-left { left: 0; bottom: 0; border-width: 0 0 4rpx 4rpx; }
+.scan-corner.bottom-right { right: 0; bottom: 0; border-width: 0 4rpx 4rpx 0; }
 .menu-layout { width: 100%; min-height: 0; display: flex; align-items: stretch; margin-top: 24rpx; box-sizing: border-box; }
 .category-sidebar { width: 128rpx; height: 100%; flex: 0 0 128rpx; padding: 4rpx 0; box-sizing: border-box; }
 .category-button { width: 128rpx; max-width: 128rpx; min-width: 0; height: 88rpx; margin: 0; padding: 0 8rpx; border: 2rpx solid #FEE2E2; border-radius: 14rpx; background: #FFFFFF; color: #7C2D12; font-size: 25rpx; font-weight: 600; line-height: 84rpx; box-sizing: border-box; }
@@ -21,6 +29,8 @@
 .dish-list { display: flex; flex-direction: column; gap: 16rpx; }
 .menu-empty-state { margin-top: 120rpx; display: flex; flex-direction: column; align-items: center; gap: 8rpx; color: #64748B; font-size: 25rpx; }
 .menu-empty-state text:first-child { color: #7C2D12; font-size: 29rpx; font-weight: 700; }
+.menu-scan-button { min-width: 264rpx; min-height: 88rpx; margin: 20rpx 0 0; padding: 0 28rpx; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 28rpx; font-weight: 700; line-height: 88rpx; }
+.menu-scan-button::after { border: 0; }
 .dish-card { width: 100%; min-height: 192rpx; display: flex; align-items: center; gap: 14rpx; padding: 16rpx; border: 2rpx solid #FEE2E2; border-radius: 16rpx; background: #FFFFFF; box-sizing: border-box; overflow: hidden; box-shadow: 0 6rpx 18rpx rgba(69, 10, 10, .07); }
 .dish-visual { width: 192rpx; height: 144rpx; flex: 0 0 192rpx; border-radius: 14rpx; display: flex; align-items: center; justify-content: center; font-size: 52rpx; }
 .dish-photo { width: 100%; height: 100%; border-radius: 14rpx; }

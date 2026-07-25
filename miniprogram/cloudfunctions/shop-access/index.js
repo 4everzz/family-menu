@@ -31,6 +31,10 @@ function hashEntryCode(code) {
   return crypto.createHash('sha256').update(String(code)).digest('hex');
 }
 
+function createSessionToken() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
 function normalizeShopCode(value) {
   const code = String(value || '').trim().toUpperCase();
   return /^[A-Z0-9]{8}$/.test(code) ? code : '';
@@ -194,44 +198,116 @@ async function listMyShops(openId) {
   return { ok: true, shops };
 }
 
+
+
+async function rejoinShop(openId, event) {
+  const user = await findUserByOpenId(openId);
+  if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+  const shopId = String(event.shopId || '').trim();
+  if (!shopId) return { ok: false, code: 'SHOP_REQUIRED', message: '请指定店铺' };
+  const memberResult = await db.collection('shop_members').where({ shopId, userId: user._id, enabled: true }).limit(1).get();
+  if (!memberResult.data[0]) return { ok: false, code: 'NOT_MEMBER', message: '您尚未加入该店铺，请扫码后进入' };
+  const shopResult = await db.collection('shops').doc(shopId).get().catch(() => null);
+  const shop = shopResult && shopResult.data;
+  if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺无效或已停用' };
+  const session = await createEntrySession(user, shop, null);
+  return {
+    ok: true,
+    shop: {
+      id: shop._id,
+      name: shop.name,
+      role: ROLE.CUSTOMER,
+      orderEntryMode: shop.orderEntryMode,
+      tableId: '',
+      tableName: '',
+      entryToken: session.token,
+      accessMode: 'customer',
+    },
+    expiresAt: session.expiresAt,
+  };
+}
+
+
+async function createEntrySession(user, shop, table) {
+  const token = createSessionToken();
+  const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  await db.collection('shop_entry_sessions').where({ userId: user._id }).remove();
+  await db.collection('shop_entry_sessions').add({
+    data: {
+      userId: user._id,
+      shopId: shop._id,
+      tableId: table ? table._id : '',
+      tokenHash: hashEntryCode(token),
+      expiresAt,
+      createdAt: db.serverDate(),
+      updatedAt: db.serverDate(),
+    },
+  });
+  return { token, expiresAt };
+}
+
 async function joinWithShopCode(openId, event) {
   const user = await findUserByOpenId(openId);
   if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
   const shopCode = normalizeShopCode(event.shopCode);
   if (!shopCode) return { ok: false, code: 'INVALID_SHOP_CODE', message: '请输入 8 位店铺码' };
 
-  const result = await db.collection('shops').where({ shopCodeHash: hashEntryCode(shopCode) }).limit(1).get();
-  const shop = result.data[0];
+  const codeHash = hashEntryCode(shopCode);
+  const tableResult = await db.collection('shop_tables').where({ entryCodeHash: codeHash, enabled: true }).limit(1).get();
+  const table = tableResult.data[0] || null;
+  const shopResult = table
+    ? await db.collection('shops').doc(table.shopId).get().catch(() => null)
+    : await db.collection('shops').where({ shopCodeHash: codeHash }).limit(1).get();
+  const shop = table ? (shopResult && shopResult.data) : shopResult.data[0];
   if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺码无效或店铺已停用' };
-
-  const membershipResult = await db.collection('shop_members').where({
-    shopId: shop._id,
-    userId: user._id,
-  }).limit(1).get();
-  const member = membershipResult.data[0];
-  if (member) {
-    if (member.enabled === false) return { ok: false, code: 'MEMBERSHIP_DISABLED', message: '你暂时无法进入该店铺' };
-    return {
-      ok: true,
-      joined: false,
-      shop: { id: shop._id, name: shop.name, role: member.role, orderEntryMode: shop.orderEntryMode },
-    };
+  if (shop.orderEntryMode === 'table_required' && !table) {
+    return { ok: false, code: 'TABLE_REQUIRED', message: '请扫描本店桌码后进入点餐' };
   }
-
-  await db.collection('shop_members').add({
-    data: {
-      shopId: shop._id,
-      userId: user._id,
-      role: ROLE.CUSTOMER,
-      enabled: true,
-      createdAt: db.serverDate(),
-      updatedAt: db.serverDate(),
-    },
-  });
+  const session = await createEntrySession(user, shop, table);
   return {
     ok: true,
-    joined: true,
-    shop: { id: shop._id, name: shop.name, role: ROLE.CUSTOMER, orderEntryMode: shop.orderEntryMode },
+    shop: {
+      id: shop._id,
+      name: shop.name,
+      role: ROLE.CUSTOMER,
+      orderEntryMode: shop.orderEntryMode,
+      tableId: table ? table._id : '',
+      tableName: table ? table.name : '',
+      entryToken: session.token,
+      accessMode: 'customer',
+    },
+    expiresAt: session.expiresAt,
+  };
+}
+
+async function joinWithTableCode(openId, event) {
+  const user = await findUserByOpenId(openId);
+  if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+  const tableCode = normalizeShopCode(event.tableCode);
+  if (!tableCode) return { ok: false, code: 'INVALID_TABLE_CODE', message: '请输入 8 位桌位码' };
+
+  const codeHash = hashEntryCode(tableCode);
+  const tableResult = await db.collection('shop_tables').where({ entryCodeHash: codeHash, enabled: true }).limit(1).get();
+  const table = tableResult.data[0] || null;
+  if (!table) return { ok: false, code: 'TABLE_NOT_FOUND', message: '桌位码无效或该桌位已停用' };
+  const shopResult = await db.collection('shops').doc(table.shopId).get().catch(() => null);
+  const shop = shopResult && shopResult.data;
+  if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺已停用，暂时无法点餐' };
+
+  const session = await createEntrySession(user, shop, table);
+  return {
+    ok: true,
+    shop: {
+      id: shop._id,
+      name: shop.name,
+      role: ROLE.CUSTOMER,
+      orderEntryMode: shop.orderEntryMode,
+      tableId: table._id,
+      tableName: table.name,
+      entryToken: session.token,
+      accessMode: 'customer',
+    },
+    expiresAt: session.expiresAt,
   };
 }
 
@@ -248,6 +324,8 @@ exports.main = async (event) => {
     if (event.action === 'migrateDefaultShop') return await migrateDefaultShop(openId);
     if (event.action === 'listMyShops') return await listMyShops(openId);
     if (event.action === 'joinWithShopCode') return await joinWithShopCode(openId, event);
+    if (event.action === 'joinWithTableCode') return await joinWithTableCode(openId, event);
+    if (event.action === 'rejoinShop') return await rejoinShop(openId, event);
     if (event.action === 'getMigrationStatus') return await getMigrationStatus(openId);
     return { ok: false, code: 'UNKNOWN_ACTION', message: '未知操作' };
   } catch (error) {

@@ -1,11 +1,19 @@
 <view class="page-shell">
   <view class="welcome-card">
     <view class="welcome-copy">
-      <text class="eyebrow">家庭点餐</text>
+      <text class="eyebrow">{{shopName}}</text>
       <text class="page-title">今天吃点什么？</text>
-      <text class="page-subtitle">登录后即可开始点菜</text>
+      <text class="page-subtitle">当前桌号：{{tableName}}</text>
     </view>
-    <view class="bowl-mark">食</view>
+    <button class="scan-mark" bindtap="scanTableCodeFromMenu" aria-label="扫码确认桌码">
+      <view class="scan-icon" aria-hidden="true">
+        <view class="scan-corner top-left"></view>
+        <view class="scan-corner top-right"></view>
+        <view class="scan-corner bottom-left"></view>
+        <view class="scan-corner bottom-right"></view>
+      </view>
+      <text>扫码</text>
+    </button>
   </view>
 
   <view class="menu-layout" style="height: {{menuHeight}}rpx;">
@@ -49,7 +57,7 @@
           </view>
         </view>
       </view>
-      <view wx:else class="menu-empty-state"><text>{{menuError || '没有找到相关菜品'}}</text><text>{{menuError ? '请重新扫描商家二维码后再试' : '换个关键词试试'}}</text></view>
+      <view wx:else class="menu-empty-state"><text>{{menuError || '没有找到相关菜品'}}</text><text>{{menuError ? '请稍后重新进入点菜页' : '换个关键词试试'}}</text><button class="menu-shops-button" bindtap="goToMyShops">我的店铺</button></view>
     </scroll-view>
   </view>
 

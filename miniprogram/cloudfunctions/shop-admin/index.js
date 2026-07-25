@@ -33,11 +33,15 @@ async function requireSuperAdmin(openId) {
   throw error;
 }
 
-async function createUniqueShopCode() {
+async function createUniqueEntryCode() {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const code = createShopCode();
-    const result = await db.collection('shops').where({ shopCodeHash: hashShopCode(code) }).limit(1).get();
-    if (!result.data.length) return code;
+    const codeHash = hashShopCode(code);
+    const [shopResult, tableResult] = await Promise.all([
+      db.collection('shops').where({ shopCodeHash: codeHash }).limit(1).get(),
+      db.collection('shop_tables').where({ entryCodeHash: codeHash }).limit(1).get(),
+    ]);
+    if (!shopResult.data.length && !tableResult.data.length) return code;
   }
   const error = new Error('店铺码生成失败，请重试');
   error.code = 'CODE_GENERATION_FAILED';
@@ -62,14 +66,12 @@ async function listShops() {
 
 async function createShop(user, event) {
   const name = String(event.name || '').trim().slice(0, 20);
-  const orderEntryMode = String(event.orderEntryMode || 'store_entry');
-  if (!name || !VALID_ENTRY_MODES.includes(orderEntryMode)) {
-    return { ok: false, code: 'INVALID_SHOP', message: '店铺名称或下单入口方式无效' };
-  }
+  const orderEntryMode = 'store_entry';
+  if (!name) return { ok: false, code: 'INVALID_SHOP', message: '店铺名称无效' };
   const duplicate = await db.collection('shops').where({ name }).limit(1).get();
   if (duplicate.data.length) return { ok: false, code: 'SHOP_NAME_EXISTS', message: '已有同名店铺，请使用不同名称' };
 
-  const shopCode = await createUniqueShopCode();
+  const shopCode = await createUniqueEntryCode();
   const shop = {
     name,
     enabled: true,
@@ -146,7 +148,7 @@ function makeShopSettings(shop) {
     name: shop.name,
     acceptingOrders: shop.acceptingOrders !== false,
     closedDates: normalizeClosedDates(shop.closedDates),
-    orderEntryMode: shop.orderEntryMode,
+    orderEntryMode: VALID_ENTRY_MODES.includes(shop.orderEntryMode) ? shop.orderEntryMode : 'store_entry',
   };
 }
 
@@ -159,8 +161,32 @@ async function updateOperatingRules(context, event) {
   return { ok: true, settings: { ...makeShopSettings(context.shop), acceptingOrders, closedDates } };
 }
 
+async function updateOrderEntryMode(context, event) {
+  const orderEntryMode = String(event.orderEntryMode || '').trim();
+  if (!VALID_ENTRY_MODES.includes(orderEntryMode)) {
+    return { ok: false, code: 'INVALID_ENTRY_MODE', message: '下单入口方式无效' };
+  }
+  if (orderEntryMode === 'table_required') {
+    const activeTable = await db.collection('shop_tables')
+      .where({ shopId: context.shopId, enabled: true })
+      .limit(1)
+      .get();
+    if (!activeTable.data.length) {
+      return {
+        ok: false,
+        code: 'ACTIVE_TABLE_REQUIRED',
+        message: '请先新增并启用至少一张堂食桌位',
+      };
+    }
+  }
+  await db.collection('shops').doc(context.shopId).update({
+    data: { orderEntryMode, updatedAt: db.serverDate() },
+  });
+  return { ok: true, settings: { ...makeShopSettings(context.shop), orderEntryMode } };
+}
+
 async function rotateShopCode(context) {
-  const shopCode = await createUniqueShopCode();
+  const shopCode = await createUniqueEntryCode();
   await db.collection('shops').doc(context.shopId).update({
     data: {
       shopCodeHash: hashShopCode(shopCode),
@@ -169,6 +195,101 @@ async function rotateShopCode(context) {
     },
   });
   return { ok: true, shopCode };
+}
+
+function makePublicTable(table) {
+  return {
+    id: table._id,
+    name: table.name,
+    enabled: table.enabled !== false,
+    sort: Number.isInteger(table.sort) ? table.sort : 0,
+  };
+}
+
+async function listTables(context) {
+  const result = await db.collection('shop_tables').where({ shopId: context.shopId }).limit(100).get();
+  return result.data
+    .map(makePublicTable)
+    .sort((left, right) => left.sort - right.sort || left.name.localeCompare(right.name, 'zh-CN'));
+}
+
+async function getTableInShop(context, id) {
+  const tableId = String(id || '').trim();
+  if (!tableId) return null;
+  const result = await db.collection('shop_tables').doc(tableId).get().catch(() => null);
+  const table = result && result.data;
+  return table && table.shopId === context.shopId ? table : null;
+}
+
+async function addTable(context, event) {
+  const name = String(event.name || '').trim().slice(0, 16);
+  if (!name) return { ok: false, code: 'INVALID_TABLE', message: '请输入桌位名称' };
+  const duplicate = await db.collection('shop_tables').where({ shopId: context.shopId, name }).limit(1).get();
+  if (duplicate.data.length) return { ok: false, code: 'TABLE_EXISTS', message: '已有同名桌位' };
+  const tableCode = await createUniqueEntryCode();
+  const sort = Date.now();
+  const created = await db.collection('shop_tables').add({
+    data: {
+      shopId: context.shopId,
+      name,
+      enabled: true,
+      entryCodeHash: hashShopCode(tableCode),
+      entryCodeVersion: 1,
+      sort,
+      createdAt: db.serverDate(),
+      updatedAt: db.serverDate(),
+    },
+  });
+  return { ok: true, table: { id: created._id, name, enabled: true, sort }, tableCode };
+}
+
+async function updateTableEnabled(context, event) {
+  const tableId = String(event.id || '').trim();
+  if (!tableId) return { ok: false, code: 'NOT_FOUND', message: '桌位不存在' };
+  const enabled = event.enabled === true;
+  const result = await db.runTransaction(async (transaction) => {
+    const [shopResult, tableResult] = await Promise.all([
+      transaction.collection('shops').doc(context.shopId).get(),
+      transaction.collection('shop_tables').doc(tableId).get(),
+    ]);
+    const shop = shopResult.data;
+    const table = tableResult.data;
+    if (!shop || shop.enabled === false || !table || table.shopId !== context.shopId) {
+      return { ok: false, code: 'NOT_FOUND', message: '桌位不存在' };
+    }
+    if (shop.orderEntryMode === 'table_required' && table.enabled !== false && !enabled) {
+      const activeTables = await transaction.collection('shop_tables')
+        .where({ shopId: context.shopId, enabled: true })
+        .limit(2)
+        .get();
+      if (activeTables.data.length <= 1) {
+        return {
+          ok: false,
+          code: 'ACTIVE_TABLE_REQUIRED',
+          message: '桌码模式至少需要保留一张可使用桌位',
+        };
+      }
+    }
+    await transaction.collection('shop_tables').doc(table._id).update({
+      data: { enabled, updatedAt: db.serverDate() },
+    });
+    return { ok: true, table: { ...makePublicTable(table), enabled } };
+  });
+  return result;
+}
+
+async function rotateTableCode(context, event) {
+  const table = await getTableInShop(context, event.id);
+  if (!table) return { ok: false, code: 'NOT_FOUND', message: '桌位不存在' };
+  const tableCode = await createUniqueEntryCode();
+  await db.collection('shop_tables').doc(table._id).update({
+    data: {
+      entryCodeHash: hashShopCode(tableCode),
+      entryCodeVersion: Number(table.entryCodeVersion || 0) + 1,
+      updatedAt: db.serverDate(),
+    },
+  });
+  return { ok: true, table: makePublicTable(table), tableCode };
 }
 
 exports.main = async (event) => {
@@ -184,7 +305,12 @@ exports.main = async (event) => {
     const context = await requireShopAdmin(user, event);
     if (event.action === 'getShopSettings') return { ok: true, settings: makeShopSettings(context.shop) };
     if (event.action === 'updateOperatingRules') return updateOperatingRules(context, event);
+    if (event.action === 'updateOrderEntryMode') return updateOrderEntryMode(context, event);
     if (event.action === 'rotateShopCode') return rotateShopCode(context);
+    if (event.action === 'listTables') return { ok: true, tables: await listTables(context) };
+    if (event.action === 'addTable') return addTable(context, event);
+    if (event.action === 'updateTableEnabled') return updateTableEnabled(context, event);
+    if (event.action === 'rotateTableCode') return rotateTableCode(context, event);
     return { ok: false, code: 'UNKNOWN_ACTION', message: '未知操作' };
   } catch (error) {
     console.error('shop-admin 执行失败', { action: event.action, message: error.message, code: error.code });
