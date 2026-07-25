@@ -3,8 +3,10 @@
 .section-title { display: block; color: #450A0A; font-size: 34rpx; font-weight: 700; line-height: 1.3; }
 .section-note { display: block; margin-top: 8rpx; color: #7F1D1D; font-size: 25rpx; line-height: 1.5; }
 .field-label { display: block; margin-top: 24rpx; color: #7F1D1D; font-size: 26rpx; font-weight: 600; }
-.text-input, .mode-picker { width: 100%; height: 88rpx; margin-top: 10rpx; padding: 0 22rpx; border: 2rpx solid #FECACA; border-radius: 14rpx; background: #FFFDFD; color: #450A0A; font-size: 30rpx; line-height: 84rpx; box-sizing: border-box; }
-.picker-value { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.text-input { width: 100%; height: 88rpx; margin-top: 10rpx; padding: 0 22rpx; border: 2rpx solid #FECACA; border-radius: 14rpx; background: #FFFDFD; color: #450A0A; font-size: 30rpx; line-height: 84rpx; box-sizing: border-box; }
+.entry-default { margin-top: 20rpx; padding: 18rpx 20rpx; border: 2rpx solid #FECACA; border-radius: 14rpx; background: #FFF7F7; }
+.entry-default-title { display: block; color: #7F1D1D; font-size: 27rpx; font-weight: 700; line-height: 1.35; }
+.entry-default-note { display: block; margin-top: 6rpx; color: #9F1239; font-size: 23rpx; line-height: 1.5; }
 .create-button { width: 100%; min-height: 92rpx; margin: 24rpx 0 0; padding: 0 24rpx; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; line-height: 92rpx; box-sizing: border-box; }
 .create-button::after { border: 0; }
 .create-button[disabled] { background: #FDA4AF; }

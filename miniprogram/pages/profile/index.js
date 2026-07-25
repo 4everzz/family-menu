@@ -17,6 +17,8 @@ Page({
     migrationConfirming: false,
     migrationButtonText: '初始化多商家数据',
     migrationError: '',
+    myShops: [],
+    loadingShops: false,
   },
   async onShow() {
     const tabBar = this.getTabBar && this.getTabBar();
@@ -44,6 +46,7 @@ Page({
       isSuperAdmin: !!user && user.role === 'super_admin',
     });
     if (user && user.role === 'super_admin') await this.loadMigrationStatus();
+    this.loadMyShops();
   },
   async loadMigrationStatus() {
     try {
@@ -114,6 +117,38 @@ Page({
   },
   openManager() {
     wx.navigateTo({ url: '/pages/admin-menu/index' });
+  },
+  async loadMyShops() {
+    if (this.data.loadingShops) return;
+    this.setData({ loadingShops: true });
+    try {
+      var result = await wx.cloud.callFunction({ name: 'shop-access', data: { action: 'listMyShops' } });
+      if (result.result && result.result.ok) {
+        const shops = (result.result.shops || []).map((shop) => ({
+          ...shop,
+          roleText: shop.role === 'store_admin' || shop.role === 'super_admin' ? '管理员' : '顾客',
+        }));
+        this.setData({ myShops: shops });
+      }
+    } catch (e) {}
+    this.setData({ loadingShops: false });
+  },
+  rejoinShop(event) {
+    var shopId = event.currentTarget.dataset.id;
+    var shop = this.data.myShops.find((item) => item.id === shopId);
+    if (!shop) return;
+    wx.showLoading({ title: '进入店铺' });
+    wx.cloud.callFunction({ name: 'shop-access', data: { action: 'rejoinShop', shopId: shop.id } }).then(function(r) {
+      var result = r.result || {};
+      if (!result.ok || !result.shop) throw new Error(result.message || '进入店铺失败');
+      var ss = require('../../utils/shop-store');
+      if (!ss.setCurrentShop(result.shop)) throw new Error('设置店铺失败');
+      wx.hideLoading();
+      wx.switchTab({ url: '/pages/menu/index' });
+    }).catch(function(e) {
+      wx.hideLoading();
+      wx.showToast({ title: e.message || '进入店铺失败', icon: 'none' });
+    });
   },
   openShopManager() {
     wx.navigateTo({ url: '/pages/admin-shops/index' });

@@ -1,18 +1,11 @@
 const { setCurrentShop } = require('../../utils/shop-store');
 
-const ENTRY_MODES = [
-  { value: 'store_entry', label: '通用店铺入口' },
-  { value: 'table_required', label: '堂食桌码入口' },
-];
-
 Page({
   data: {
     loading: true,
     creating: false,
     shops: [],
     name: '',
-    modeIndex: 0,
-    entryModes: ENTRY_MODES,
   },
   onShow() {
     this.loadShops();
@@ -38,23 +31,19 @@ Page({
   updateName(event) {
     this.setData({ name: String(event.detail.value || '').slice(0, 20) });
   },
-  changeMode(event) {
-    this.setData({ modeIndex: Number(event.detail.value) });
-  },
   async createShop() {
     if (this.data.creating) return;
     const name = this.data.name.trim();
-    const entryMode = ENTRY_MODES[this.data.modeIndex];
-    if (!name || !entryMode) {
+    if (!name) {
       wx.showToast({ title: '请填写店铺名称', icon: 'none' });
       return;
     }
     this.setData({ creating: true });
     try {
-      const result = await this.callShopAdmin('createShop', { name, orderEntryMode: entryMode.value });
+      const result = await this.callShopAdmin('createShop', { name });
       if (!result.ok || !result.shop) throw new Error(result.message || '创建店铺失败');
       setCurrentShop(result.shop);
-      this.setData({ name: '', modeIndex: 0 });
+      this.setData({ name: '' });
       if (result.initialShopCode) {
         wx.setClipboardData({
           data: result.initialShopCode,

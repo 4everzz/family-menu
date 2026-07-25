@@ -1,23 +1,65 @@
 <view class="page-shell">
-  <view wx:if="{{loading}}" class="state-card"><text>正在读取账户信息</text></view>
+  <view wx:if="{{loading}}" class="state-card">
+    <text>正在读取账户信息</text>
+  </view>
+
   <view wx:elif="{{user}}">
     <view class="profile-card">
       <image wx:if="{{user.avatarUrl}}" class="avatar avatar-image" src="{{user.avatarUrl}}" mode="aspectFill" />
       <view wx:else class="avatar">{{user.avatarText}}</view>
-      <view class="profile-copy"><text class="profile-name">{{user.nickname}}</text><text class="profile-note">{{user.roleText}}</text></view>
+      <view class="profile-copy">
+        <text class="profile-name">{{user.nickname}}</text>
+        <text class="profile-note">{{user.roleText}}</text>
+      </view>
     </view>
+
+    <view wx:if="{{myShops.length}}" class="menu-group">
+      <view class="section-head">
+        <text class="section-title">我的店铺</text>
+      </view>
+      <view wx:for="{{myShops}}" wx:key="id" class="shop-row" hover-class="shop-row-active" data-id="{{item.id}}" bindtap="rejoinShop">
+        <view>
+          <text class="shop-row-name">{{item.name}}</text>
+          <text class="shop-row-role">{{item.roleText}}</text>
+        </view>
+        <text class="menu-arrow">></text>
+      </view>
+    </view>
+
     <view class="menu-group">
-      <view class="menu-row" hover-class="menu-row-active" bindtap="openProfileEdit"><view><text class="menu-title">资料设置</text></view><text class="menu-arrow">></text></view>
-      <view class="menu-row" hover-class="menu-row-active" bindtap="openHistory"><view><text class="menu-title">历史订单</text></view><text class="menu-arrow">></text></view>
-      <view wx:if="{{isManager}}" class="menu-row" hover-class="menu-row-active" bindtap="openManager"><view><text class="menu-title">管理入口</text></view><text class="menu-arrow">></text></view>
-      <view wx:if="{{isSuperAdmin}}" class="menu-row" hover-class="menu-row-active" bindtap="openShopManager"><view><text class="menu-title">店铺管理</text></view><text class="menu-arrow">></text></view>
-      <view wx:if="{{isSuperAdmin}}" class="menu-row" hover-class="menu-row-active" bindtap="openUserManager"><view><text class="menu-title">账户管理</text></view><text class="menu-arrow">></text></view>
+      <view class="menu-row" hover-class="menu-row-active" bindtap="openProfileEdit">
+        <view><text class="menu-title">资料设置</text></view>
+        <text class="menu-arrow">></text>
+      </view>
+      <view class="menu-row" hover-class="menu-row-active" bindtap="openHistory">
+        <view><text class="menu-title">历史订单</text></view>
+        <text class="menu-arrow">></text>
+      </view>
+      <view wx:if="{{isManager}}" class="menu-row" hover-class="menu-row-active" bindtap="openManager">
+        <view><text class="menu-title">管理入口</text></view>
+        <text class="menu-arrow">></text>
+      </view>
+      <view wx:if="{{isSuperAdmin}}" class="menu-row" hover-class="menu-row-active" bindtap="openShopManager">
+        <view><text class="menu-title">店铺管理</text></view>
+        <text class="menu-arrow">></text>
+      </view>
+      <view wx:if="{{isSuperAdmin}}" class="menu-row" hover-class="menu-row-active" bindtap="openUserManager">
+        <view><text class="menu-title">账户管理</text></view>
+        <text class="menu-arrow">></text>
+      </view>
       <button wx:if="{{isSuperAdmin && !migrationCompleted}}" class="migration-button" bindtap="initializeMultiShop" disabled="{{migrationLoading}}">{{migrationButtonText}}</button>
       <text wx:if="{{migrationError}}" class="migration-error">初始化诊断：{{migrationError}}</text>
     </view>
   </view>
+
   <view wx:else>
-    <view class="profile-card guest-card"><view class="avatar">未</view><view class="profile-copy"><text class="profile-name">需要登录</text><text class="profile-note">登录后才可点菜和查看订单</text></view></view>
+    <view class="profile-card guest-card">
+      <view class="avatar">未</view>
+      <view class="profile-copy">
+        <text class="profile-name">需要登录</text>
+        <text class="profile-note">登录后可加购、下单和查看订单</text>
+      </view>
+    </view>
     <button class="login-button" bindtap="openAuth">微信登录</button>
   </view>
 </view>

@@ -1,23 +1,35 @@
 const { getCurrentShop, setCurrentShop } = require('./shop-store');
 
 async function ensureCurrentShop() {
-  const currentShop = getCurrentShop();
-  if (currentShop && currentShop.id) return currentShop;
+  let currentShop = getCurrentShop();
+  if (currentShop && currentShop.id && currentShop.entryToken) return currentShop;
+  let shops = [];
+  if (currentShop && currentShop.id) {
+    shops = [currentShop];
+  }
+  if (!shops.length) {
+    const response = await wx.cloud.callFunction({
+      name: 'shop-access',
+      data: { action: 'listMyShops' },
+    });
+    const result = response.result || {};
+    shops = result.ok && Array.isArray(result.shops) ? result.shops : [];
+  }
+  if (shops.length !== 1) throw new Error('当前店铺信息不可用');
   const response = await wx.cloud.callFunction({
     name: 'shop-access',
-    data: { action: 'listMyShops' },
+    data: { action: 'rejoinShop', shopId: shops[0].id },
   });
   const result = response.result || {};
-  const shops = result.ok && Array.isArray(result.shops) ? result.shops : [];
-  if (shops.length === 1 && setCurrentShop(shops[0])) return shops[0];
-  throw new Error('请通过店铺二维码进入点餐');
+  if (result.ok && result.shop && setCurrentShop(result.shop)) return result.shop;
+  throw new Error(result.message || '暂时无法进入当前店铺');
 }
 
 async function callAdminMenu(action, payload = {}) {
   const shop = await ensureCurrentShop();
   const response = await wx.cloud.callFunction({
     name: 'admin-menu',
-    data: { action, ...payload, shopId: shop.id },
+    data: { action, ...payload, shopId: shop.id, entryToken: shop.entryToken || '' },
   });
   return response.result || {};
 }

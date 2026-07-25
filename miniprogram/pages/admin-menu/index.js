@@ -6,10 +6,12 @@ Page({
     hasAccess: false,
     navigatingTarget: '',
     shopName: '',
+    topDishes: [],
     stats: [
-      { label: '制作中订单', value: '—' },
-      { label: '可点菜品', value: '—' },
-      { label: '菜品分类', value: '—' },
+      { label: '今日订单', value: '—' },
+      { label: '今日营业额', value: '—' },
+      { label: '制作中', value: '—' },
+      { label: '售罄菜品', value: '—' },
     ],
   },
   onShow() {
@@ -23,30 +25,24 @@ Page({
     this.setData({ loading: true });
     try {
       const shop = await ensureCurrentShop();
-      const [categoryResult, dishResult, orderResult] = await Promise.all([
-        this.callAdmin('listCategories'),
-        this.callAdmin('listDishes'),
-        this.callAdmin('listAdminOrders'),
-      ]);
-      if (categoryResult.ok && dishResult.ok && orderResult.ok) {
-        const makingOrders = (orderResult.orders || []).filter((item) => item.status === '制作中').length;
-        const availableDishes = (dishResult.dishes || []).filter((item) => {
-          const stock = Number(item.stock);
-          return item.enabled !== false && item.manualSoldOut !== true && (!Number.isFinite(stock) || stock > 0);
-        }).length;
+      const dashboardResult = await this.callAdmin('getTodayDashboard');
+      if (dashboardResult.ok && dashboardResult.dashboard) {
+        const dashboard = dashboardResult.dashboard;
         this.setData({
           hasAccess: true,
           loading: false,
           shopName: shop.name || '当前店铺',
+          topDishes: dashboard.topDishes || [],
           stats: [
-            { label: '制作中订单', value: String(makingOrders) },
-            { label: '可点菜品', value: String(availableDishes) },
-            { label: '菜品分类', value: String((categoryResult.categories || []).length) },
+            { label: '今日订单', value: String(dashboard.orderCount || 0) },
+            { label: '今日营业额', value: `¥${Number(dashboard.revenue || 0).toFixed(2)}` },
+            { label: '制作中', value: String(dashboard.makingCount || 0) },
+            { label: '售罄菜品', value: String(dashboard.soldOutCount || 0) },
           ],
         });
         return;
       }
-      this.setData({ hasAccess: false, loading: false });
+      this.setData({ hasAccess: false, loading: false, topDishes: [] });
     } catch (error) {
       wx.showToast({ title: '读取管理数据失败', icon: 'none' });
       this.setData({ loading: false });

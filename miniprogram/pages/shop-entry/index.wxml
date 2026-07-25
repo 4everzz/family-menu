@@ -1,8 +1,0 @@
-<view class="page-shell">
-  <view class="entry-card">
-    <text class="entry-title">店铺入口</text>
-    <text class="entry-message">{{message}}</text>
-    <view wx:if="{{state === 'loading'}}" class="loading-line"><view class="loading-dot"></view><text>请稍候</text></view>
-    <button wx:if="{{state === 'error'}}" class="back-button" bindtap="backToMenu">返回点菜页</button>
-  </view>
-</view>
