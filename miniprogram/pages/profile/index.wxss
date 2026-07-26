@@ -5,6 +5,9 @@
 .profile-copy { display: flex; flex-direction: column; gap: 6rpx; }
 .profile-name { font-size: 36rpx; font-weight: 700; }
 .profile-note { font-size: 26rpx; opacity: .86; }
+.system-id-row { display: flex; align-items: center; gap: 10rpx; margin-top: 8rpx; padding: 10rpx 14rpx; border-radius: 12rpx; background: rgba(255, 255, 255, .14); }
+.system-id-label { flex-shrink: 0; font-size: 22rpx; opacity: .9; }
+.system-id-value { font-size: 25rpx; font-weight: 700; letter-spacing: 1rpx; }
 .menu-group { width: 100%; display: flex; flex-direction: column; gap: 16rpx; margin-top: 28rpx; box-sizing: border-box; }
 .menu-row { width: 100%; min-height: 112rpx; display: flex; align-items: center; padding: 24rpx 28rpx; border: 2rpx solid #FEE2E2; border-radius: 20rpx; background: #FFFFFF; color: #450A0A; box-sizing: border-box; box-shadow: 0 8rpx 20rpx rgba(69, 10, 10, .05); }
 .menu-row-active { opacity: .8; }

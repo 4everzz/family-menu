@@ -30,6 +30,8 @@
       <button class="manage-button" bindtap="openOrdersPage" loading="{{navigatingTarget === 'orders'}}" disabled="{{!!navigatingTarget}}">管理订单</button>
       <button class="manage-button" bindtap="openCategoriesPage" loading="{{navigatingTarget === 'categories'}}" disabled="{{!!navigatingTarget}}">管理分类</button>
       <button class="manage-button" bindtap="openShopSettings" loading="{{navigatingTarget === 'settings'}}" disabled="{{!!navigatingTarget}}">店铺设置</button>
+      <button class="manage-button" bindtap="openStatsPage" loading="{{navigatingTarget === 'stats'}}" disabled="{{!!navigatingTarget}}">经营报表</button>
+      <button wx:if="{{canManageMembers}}" class="manage-button" bindtap="openShopMembers" loading="{{navigatingTarget === 'members'}}" disabled="{{!!navigatingTarget}}">成员管理</button>
     </view>
   </view>
 

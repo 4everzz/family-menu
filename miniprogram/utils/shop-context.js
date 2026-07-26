@@ -2,7 +2,7 @@ const { getCurrentShop, setCurrentShop } = require('./shop-store');
 
 async function ensureCurrentShop() {
   let currentShop = getCurrentShop();
-  if (currentShop && currentShop.id && currentShop.entryToken) return currentShop;
+  if (currentShop && currentShop.id && (currentShop.accessMode === 'staff' || currentShop.entryToken)) return currentShop;
   let shops = [];
   if (currentShop && currentShop.id) {
     shops = [currentShop];

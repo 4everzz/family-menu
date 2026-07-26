@@ -1,4 +1,5 @@
 const { callAdminMenu } = require('./shop-context');
+const { getCurrentShop } = require('./shop-store');
 
 function getCartKey(item) {
   return item.cartKey || `${item.id}|${(item.options || []).join('|')}`;
@@ -38,9 +39,15 @@ function clearCart() {
 async function submitCartOrder(remark) {
   const app = getApp();
   if (!app.globalData.cart.length) return { ok: false, code: 'EMPTY_ORDER', message: '请先选择菜品' };
+  const shop = getCurrentShop();
+  if (!shop || !shop.tableId) {
+    return { ok: false, code: 'TABLE_REQUIRED', message: '请先在点餐页扫码确认桌位后下单' };
+  }
   const result = await callAdminMenu('createOrder', {
     items: app.globalData.cart.map((item) => ({ id: item.id, quantity: item.quantity, options: item.options || [] })),
     remark: String(remark || '').trim(),
+    requireTable: true,
+    tableId: shop.tableId,
   });
   if (!result.ok || !result.order) return result;
   app.globalData.orders.unshift(result.order);

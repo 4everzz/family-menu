@@ -8,7 +8,7 @@ function getCurrentShop() {
 function setCurrentShop(shop) {
   const role = String(shop && shop.role || 'customer');
   const accessMode = shop && shop.accessMode === 'customer' ? 'customer' : (
-    role === 'store_admin' || role === 'super_admin' ? 'staff' : 'customer'
+    ['store_admin', 'store_owner', 'store_staff', 'super_admin'].includes(role) ? 'staff' : 'customer'
   );
   const normalized = {
     id: String(shop && shop.id || ''),

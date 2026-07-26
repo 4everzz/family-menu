@@ -71,6 +71,10 @@ function isManager(user) {
   return user && (user.role === 'manager' || user.role === 'super_admin');
 }
 
+function canManageShopData(member) {
+  return member && ['store_admin', 'store_owner', 'store_staff'].includes(member.role);
+}
+
 async function getShopContext(user, event, requireStoreAdmin = false) {
   const shopId = String(event.shopId || '').trim();
   if (!shopId) {
@@ -93,7 +97,7 @@ async function getShopContext(user, event, requireStoreAdmin = false) {
     error.code = 'SHOP_ACCESS_DENIED';
     throw error;
   }
-  if (requireStoreAdmin && member.role !== 'store_admin') {
+  if (requireStoreAdmin && !canManageShopData(member)) {
     const error = new Error('没有该店铺的管理权限');
     error.code = 'SHOP_ADMIN_REQUIRED';
     throw error;
@@ -259,6 +263,12 @@ async function createOrder(openId, ownerUserId, shopContext, event) {
   if (shopContext.shop.orderEntryMode === 'table_required') {
     if (!table) return { ok: false, code: 'INVALID_TABLE', message: '桌码无效，请重新扫描' };
   }
+  if (event.requireTable === true) {
+    const requestedTableId = String(event.tableId || '').trim();
+    if (!table || !requestedTableId || table._id !== requestedTableId) {
+      return { ok: false, code: 'TABLE_REQUIRED', message: '请扫描本店桌码后下单' };
+    }
+  }
   const categories = await getAllCategories(shopContext.shopId);
   try {
     const order = await db.runTransaction(async (transaction) => {
@@ -334,7 +344,7 @@ async function createOrder(openId, ownerUserId, shopContext, event) {
         total: total.toFixed(2),
         createdAt,
         items: orderItems,
-        summary: orderItems.map((item) => `${item.name} × ${item.quantity}`).join('、'),
+        summary: orderItems.map((item) => `${item.name} × ${item.quantity}${item.optionsText ? `（${item.optionsText}）` : ''}`).join('、'),
         remark,
         updatedAt: db.serverDate(),
         createdAtServer: db.serverDate(),
@@ -409,6 +419,91 @@ async function getTodayDashboard(shopId) {
     makingCount,
     soldOutCount,
     revenue: Number(revenue.toFixed(2)),
+    topDishes,
+  };
+}
+
+function getChinaDateKeyOf(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = parts.reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+async function getOrdersInRange(shopId, start, end) {
+  const orders = [];
+  const pageSize = 100;
+  for (let skip = 0; skip < 10000; skip += pageSize) {
+    const result = await db.collection('orders').where({
+      shopId,
+      createdAtServer: _.gte(start).and(_.lt(end)),
+    }).skip(skip).limit(pageSize).get();
+    orders.push(...result.data);
+    if (result.data.length < pageSize) break;
+  }
+  return orders;
+}
+
+async function getShopStats(shopId, days) {
+  const rangeDays = [7, 30].includes(days) ? days : 7;
+  const { start: todayStart, end: todayEnd } = getChinaDayRange();
+  const start = new Date(todayStart.getTime() - (rangeDays - 1) * 24 * 60 * 60 * 1000);
+  const orders = await getOrdersInRange(shopId, start, todayEnd);
+
+  const dailyMap = new Map();
+  for (let index = 0; index < rangeDays; index += 1) {
+    const dateKey = getChinaDateKeyOf(new Date(start.getTime() + index * 24 * 60 * 60 * 1000));
+    dailyMap.set(dateKey, { dateKey, label: dateKey.slice(5), orderCount: 0, revenue: 0 });
+  }
+
+  const sales = new Map();
+  let revenue = 0;
+  let completedCount = 0;
+  let tableOrderCount = 0;
+  orders.forEach((order) => {
+    const orderTotal = Number(order.total) || 0;
+    revenue += orderTotal;
+    if (order.status === '已完成') completedCount += 1;
+    if (order.orderChannel === 'table') tableOrderCount += 1;
+    const dateKey = order.createdAtServer ? getChinaDateKeyOf(new Date(order.createdAtServer)) : '';
+    const bucket = dailyMap.get(dateKey);
+    if (bucket) {
+      bucket.orderCount += 1;
+      bucket.revenue += orderTotal;
+    }
+    (Array.isArray(order.items) ? order.items : []).forEach((item) => {
+      const quantity = Number(item.quantity) || 0;
+      if (quantity <= 0) return;
+      const key = item.id || item.name;
+      const current = sales.get(key) || { name: item.name || '未命名菜品', quantity: 0, revenue: 0 };
+      current.quantity += quantity;
+      current.revenue += (Number(item.price) || 0) * quantity;
+      sales.set(key, current);
+    });
+  });
+
+  const daily = [...dailyMap.values()].map((day) => ({ ...day, revenue: Number(day.revenue.toFixed(2)) }));
+  const topDishes = [...sales.values()]
+    .sort((left, right) => right.quantity - left.quantity || left.name.localeCompare(right.name, 'zh-CN'))
+    .slice(0, 10)
+    .map((dish) => ({ ...dish, revenue: Number(dish.revenue.toFixed(2)) }));
+  const orderCount = orders.length;
+  return {
+    days: rangeDays,
+    startKey: getChinaDateKeyOf(start),
+    endKey: getChinaDateKey(),
+    orderCount,
+    revenue: Number(revenue.toFixed(2)),
+    averageOrder: orderCount ? Number((revenue / orderCount).toFixed(2)) : 0,
+    completedCount,
+    completionRate: orderCount ? Math.round((completedCount / orderCount) * 100) : 0,
+    tableOrderCount,
+    tableOrderRate: orderCount ? Math.round((tableOrderCount / orderCount) * 100) : 0,
+    daily,
     topDishes,
   };
 }
@@ -499,6 +594,7 @@ exports.main = async (event) => {
     const shopId = shopContext.shopId;
     if (event.action === 'listAdminOrders') return { ok: true, orders: await listOrders(shopId) };
     if (event.action === 'getTodayDashboard') return { ok: true, dashboard: await getTodayDashboard(shopId) };
+    if (event.action === 'getShopStats') return { ok: true, stats: await getShopStats(shopId, Number(event.days)) };
   if (event.action === 'completeOrder') {
     const id = String(event.id || '');
     if (!id) return { ok: false, code: 'INVALID_ORDER', message: '订单无效' };
@@ -554,7 +650,7 @@ exports.main = async (event) => {
   if (event.action === 'updateDishPrice') {
     const id = String(event.id || '');
     const price = Number(event.price);
-    if (!id || !Number.isFinite(price) || price <= 0) return { ok: false, code: 'INVALID_PRICE', message: '价格无效' };
+    if (!id || !Number.isFinite(price) || price < 0) return { ok: false, code: 'INVALID_PRICE', message: '价格不能为负数' };
     const result = await db.collection('dishes').where({ id, shopId }).update({
       data: { price, updatedAt: db.serverDate() },
     });
@@ -603,8 +699,8 @@ exports.main = async (event) => {
     const imageFileId = normalizeImageFileId(event.imageFileId);
     const spiceOptions = normalizeSpiceOptions(event.spiceOptions);
     const defaultSpice = spiceOptions.includes(event.defaultSpice) ? event.defaultSpice : (spiceOptions[0] || '');
-    if (!id || !name || !category || !Number.isFinite(price) || price <= 0) {
-      return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效' };
+    if (!id || !name || !category || !Number.isFinite(price) || price < 0) {
+      return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效，价格不能为负数' };
     }
     const existingResult = await db.collection('dishes').where({ id, shopId }).limit(1).get();
     const existingDish = existingResult.data[0];
@@ -655,8 +751,8 @@ exports.main = async (event) => {
     const imageFileId = normalizeImageFileId(event.imageFileId);
     const spiceOptions = normalizeSpiceOptions(event.spiceOptions);
     const defaultSpice = spiceOptions.includes(event.defaultSpice) ? event.defaultSpice : (spiceOptions[0] || '');
-    if (!name || !category || !Number.isFinite(price) || price <= 0) {
-      return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效' };
+    if (!name || !category || !Number.isFinite(price) || price < 0) {
+      return { ok: false, code: 'INVALID_DISH', message: '菜品信息无效，价格不能为负数' };
     }
     const categoryResult = await db.collection('categories').where({ id: category, shopId }).limit(1).get();
     if (!categoryResult.data.length) return { ok: false, code: 'INVALID_CATEGORY', message: '分类不存在' };

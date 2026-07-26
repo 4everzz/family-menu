@@ -44,6 +44,15 @@ Page({
     try {
       const result = await submitCartOrder(this.data.remark);
       if (!result.ok || !result.order) {
+        if (['TABLE_REQUIRED', 'TABLE_NOT_AVAILABLE', 'INVALID_TABLE'].includes(result.code) || String(result.message || '').includes('桌码')) {
+          wx.showModal({
+            title: '请先扫码确认桌位',
+            content: '请回到点餐页，点击右上角“扫码”确认桌码后再提交订单。',
+            showCancel: false,
+            success: () => wx.switchTab({ url: '/pages/menu/index' }),
+          });
+          return;
+        }
         const dishNames = Array.isArray(result.dishNames) && result.dishNames.length
           ? result.dishNames.join('、')
           : '该菜品';

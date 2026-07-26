@@ -206,22 +206,25 @@ async function rejoinShop(openId, event) {
   const shopId = String(event.shopId || '').trim();
   if (!shopId) return { ok: false, code: 'SHOP_REQUIRED', message: '请指定店铺' };
   const memberResult = await db.collection('shop_members').where({ shopId, userId: user._id, enabled: true }).limit(1).get();
-  if (!memberResult.data[0]) return { ok: false, code: 'NOT_MEMBER', message: '您尚未加入该店铺，请扫码后进入' };
+  const member = memberResult.data[0];
+  if (!member && user.role !== ROLE.SUPER_ADMIN) return { ok: false, code: 'NOT_MEMBER', message: '您尚未加入该店铺，请扫码后进入' };
   const shopResult = await db.collection('shops').doc(shopId).get().catch(() => null);
   const shop = shopResult && shopResult.data;
   if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺无效或已停用' };
   const session = await createEntrySession(user, shop, null);
+  const role = user.role === ROLE.SUPER_ADMIN ? ROLE.SUPER_ADMIN : (member.role || ROLE.CUSTOMER);
+  const isStaff = ['store_admin', 'store_owner', 'store_staff'].includes(role) || user.role === ROLE.SUPER_ADMIN;
   return {
     ok: true,
     shop: {
       id: shop._id,
       name: shop.name,
-      role: ROLE.CUSTOMER,
+      role,
       orderEntryMode: shop.orderEntryMode,
       tableId: '',
       tableName: '',
-      entryToken: session.token,
-      accessMode: 'customer',
+      entryToken: isStaff ? '' : session.token,
+      accessMode: isStaff ? 'staff' : 'customer',
     },
     expiresAt: session.expiresAt,
   };

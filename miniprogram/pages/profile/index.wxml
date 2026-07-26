@@ -10,6 +10,10 @@
       <view class="profile-copy">
         <text class="profile-name">{{user.nickname}}</text>
         <text class="profile-note">{{user.roleText}}</text>
+        <view wx:if="{{user.systemId}}" class="system-id-row" bindtap="copySystemId">
+          <text class="system-id-label">系统ID</text>
+          <text class="system-id-value">{{user.systemId}}</text>
+        </view>
       </view>
     </view>
 

@@ -1,0 +1,218 @@
+/* ============================================================
+   小家菜单 · 平台后台 —— 设计令牌与全局样式
+   身份：平台级「控制台」。深墨绿侧栏 + 暖中性画布 + 松绿主色，
+   与小程序店铺端的红色主题区分开。系统字体，规避字体加载问题。
+   ============================================================ */
+:root {
+  color-scheme: light;
+
+  --canvas: #f4f6f4;
+  --surface: #ffffff;
+  --surface-2: #eef1ee;
+  --ink: #1a211e;
+  --ink-soft: #47514c;
+  --muted: #77827c;
+  --line: #e2e6e2;
+  --line-strong: #d2d8d2;
+
+  --sidebar: #1d2623;
+  --sidebar-2: #172019;
+  --sidebar-ink: #c6cfca;
+  --sidebar-ink-dim: #859389;
+
+  --accent: #2e6e5a;
+  --accent-strong: #275f4d;
+  --accent-soft: #e5efeb;
+  --accent-ink: #1f4c3e;
+
+  --danger: #c0473a;
+  --danger-soft: #f7e7e5;
+  --warn: #a9761c;
+  --warn-soft: #f6edda;
+
+  --radius: 10px;
+  --radius-sm: 7px;
+  --shadow: 0 1px 2px rgba(26, 33, 30, 0.06), 0 6px 18px rgba(26, 33, 30, 0.05);
+  --shadow-sm: 0 1px 2px rgba(26, 33, 30, 0.08);
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --font-num: "SF Mono", "Roboto Mono", "DejaVu Sans Mono", Consolas, "Segoe UI", var(--font);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+h1, h2, h3, h4, p { margin: 0; }
+
+a { color: inherit; text-decoration: none; }
+
+button { font-family: inherit; cursor: pointer; }
+
+/* ---- 按钮 ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn-danger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn-danger:hover { background: var(--danger-soft); }
+.btn-ghost { border-color: transparent; background: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+.btn-sm { height: 30px; padding: 0 11px; font-size: 13px; }
+
+/* ---- 表单 ---- */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > label { font-size: 13px; color: var(--ink-soft); font-weight: 500; }
+.input {
+  height: 40px;
+  padding: 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.input::placeholder { color: var(--muted); }
+
+/* ---- 卡片 ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---- 徽标 ---- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.badge-owner { background: var(--accent-soft); color: var(--accent-ink); }
+.badge-staff { background: var(--surface-2); color: var(--ink-soft); }
+.badge-on { background: var(--accent-soft); color: var(--accent-ink); }
+.badge-off { background: var(--surface-2); color: var(--muted); }
+
+/* ---- 表格 ---- */
+.table { width: 100%; border-collapse: collapse; }
+.table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.table tr:last-child td { border-bottom: none; }
+.table tbody tr:hover td { background: #fafbfa; }
+
+/* ---- 通用工具 ---- */
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.row { display: flex; align-items: center; gap: 10px; }
+.spread { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stack { display: flex; flex-direction: column; }
+
+.avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-2);
+  flex: none;
+}
+.avatar-fallback {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 13px; font-weight: 600;
+}
+
+/* ---- 提示条 ---- */
+.notice {
+  padding: 10px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+.notice-error { background: var(--danger-soft); color: var(--danger); border-color: #eecac5; }
+.notice-ok { background: var(--accent-soft); color: var(--accent-ink); border-color: #cfe3db; }
+.notice-warn { background: var(--warn-soft); color: var(--warn); border-color: #ecdcb8; }
+
+/* ---- 空态 / 加载 ---- */
+.state {
+  padding: 44px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---- 弹层 ---- */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(23, 32, 25, 0.42);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; z-index: 50;
+}
+.modal {
+  width: 100%; max-width: 460px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(20, 28, 24, 0.28);
+  overflow: hidden;
+}
+.modal-head { padding: 18px 20px 0; }
+.modal-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal-foot { padding: 14px 20px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--line); }
