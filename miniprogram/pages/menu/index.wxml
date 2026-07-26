@@ -58,6 +58,7 @@
         </view>
       </view>
       <view wx:else class="menu-empty-state"><text>{{menuError || '没有找到相关菜品'}}</text><text>{{menuError ? '请稍后重新进入点菜页' : '换个关键词试试'}}</text><button class="menu-shops-button" bindtap="goToMyShops">我的店铺</button></view>
+      <view class="menu-bottom-spacer {{cartCount > 0 ? 'has-cart' : ''}}"></view>
     </scroll-view>
   </view>
 

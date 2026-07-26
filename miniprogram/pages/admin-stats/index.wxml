@@ -1,0 +1,59 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card">
+    <text class="state-title">正在读取报表数据</text>
+    <text class="state-copy">请稍候</text>
+  </view>
+
+  <view wx:elif="{{hasAccess}}" class="stats-card">
+    <view class="page-head">
+      <text class="page-title">经营报表</text>
+      <text class="page-copy">{{shopName}} · {{rangeText}}</text>
+    </view>
+
+    <view class="range-tabs">
+      <view class="range-tab {{days === 7 ? 'range-tab-active' : ''}}" data-days="7" bindtap="switchRange">近7天</view>
+      <view class="range-tab {{days === 30 ? 'range-tab-active' : ''}}" data-days="30" bindtap="switchRange">近30天</view>
+    </view>
+
+    <view class="summary-grid">
+      <view wx:for="{{summary}}" wx:key="label" class="summary-item">
+        <text class="summary-value">{{item.value}}</text>
+        <text class="summary-label">{{item.label}}</text>
+      </view>
+    </view>
+
+    <view class="section">
+      <text class="section-title">每日营业额</text>
+      <view class="daily-list">
+        <view wx:for="{{daily}}" wx:key="dateKey" class="daily-row">
+          <text class="daily-date">{{item.label}}</text>
+          <view class="daily-bar-track">
+            <view class="daily-bar" style="width: {{item.percent}}%;"></view>
+          </view>
+          <view class="daily-meta">
+            <text class="daily-revenue">¥{{item.revenueText}}</text>
+            <text class="daily-count">{{item.orderCount}}单</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="section">
+      <text class="section-title">热销菜品排行</text>
+      <view wx:if="{{topDishes.length}}" class="rank-list">
+        <view wx:for="{{topDishes}}" wx:key="name" class="rank-row">
+          <text class="rank-index rank-index-{{index < 3 ? 'top' : 'normal'}}">{{index + 1}}</text>
+          <text class="rank-name">{{item.name}}</text>
+          <text class="rank-quantity">{{item.quantity}} 份</text>
+          <text class="rank-revenue">¥{{item.revenueText}}</text>
+        </view>
+      </view>
+      <text wx:else class="section-empty">该时段暂无已提交订单</text>
+    </view>
+  </view>
+
+  <view wx:else class="state-card access-card">
+    <text class="state-title">暂未获得管理员权限</text>
+    <text class="state-copy">请使用已被授权的微信账号登录后再操作。</text>
+  </view>
+</view>

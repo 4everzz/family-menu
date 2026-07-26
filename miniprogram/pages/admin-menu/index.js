@@ -6,6 +6,7 @@ Page({
     hasAccess: false,
     navigatingTarget: '',
     shopName: '',
+    canManageMembers: false,
     topDishes: [],
     stats: [
       { label: '今日订单', value: '—' },
@@ -21,17 +22,29 @@ Page({
   async callAdmin(action, payload = {}) {
     return callAdminMenu(action, payload);
   },
+  async callShopAdmin(action, payload = {}) {
+    const shop = await ensureCurrentShop();
+    const response = await wx.cloud.callFunction({
+      name: 'shop-admin',
+      data: { action, ...payload, shopId: shop.id },
+    });
+    return response.result || {};
+  },
   async loadAccess() {
     this.setData({ loading: true });
     try {
       const shop = await ensureCurrentShop();
-      const dashboardResult = await this.callAdmin('getTodayDashboard');
+      const [dashboardResult, memberResult] = await Promise.all([
+        this.callAdmin('getTodayDashboard'),
+        this.callShopAdmin('listShopMembers').catch(() => ({ ok: false })),
+      ]);
       if (dashboardResult.ok && dashboardResult.dashboard) {
         const dashboard = dashboardResult.dashboard;
         this.setData({
           hasAccess: true,
           loading: false,
           shopName: shop.name || '当前店铺',
+          canManageMembers: memberResult.ok === true,
           topDishes: dashboard.topDishes || [],
           stats: [
             { label: '今日订单', value: String(dashboard.orderCount || 0) },
@@ -42,7 +55,7 @@ Page({
         });
         return;
       }
-      this.setData({ hasAccess: false, loading: false, topDishes: [] });
+      this.setData({ hasAccess: false, loading: false, canManageMembers: false, topDishes: [] });
     } catch (error) {
       wx.showToast({ title: '读取管理数据失败', icon: 'none' });
       this.setData({ loading: false });
@@ -89,6 +102,28 @@ Page({
       fail: () => {
         this.setData({ navigatingTarget: '' });
         wx.showToast({ title: '打开店铺设置失败', icon: 'none' });
+      },
+    });
+  },
+  openStatsPage() {
+    if (this.data.navigatingTarget) return;
+    this.setData({ navigatingTarget: 'stats' });
+    wx.navigateTo({
+      url: '/pages/admin-stats/index',
+      fail: () => {
+        this.setData({ navigatingTarget: '' });
+        wx.showToast({ title: '打开经营报表失败', icon: 'none' });
+      },
+    });
+  },
+  openShopMembers() {
+    if (this.data.navigatingTarget) return;
+    this.setData({ navigatingTarget: 'members' });
+    wx.navigateTo({
+      url: '/pages/admin-shop-members/index',
+      fail: () => {
+        this.setData({ navigatingTarget: '' });
+        wx.showToast({ title: '打开成员管理失败', icon: 'none' });
       },
     });
   },

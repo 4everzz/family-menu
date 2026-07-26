@@ -7,7 +7,7 @@
       <view class="user-main">
         <image wx:if="{{item.avatarUrl}}" class="avatar avatar-image" src="{{item.avatarUrl}}" mode="aspectFill" />
         <view wx:else class="avatar">{{item.avatarText}}</view>
-        <view class="user-copy"><text class="user-name">{{item.nickname}}</text><text class="user-identity">微信家庭账户</text></view>
+        <view class="user-copy"><text class="user-name">{{item.nickname}}</text><text class="user-identity">系统ID：{{item.systemId || '未生成'}}</text></view>
         <text class="role-tag role-{{item.role}}">{{item.roleText}}</text>
       </view>
       <view class="user-meta"><text>{{item.profileStatus}} · {{item.statusText}}</text></view>

@@ -7,4 +7,5 @@ miniprogram/project.private.config.json
 chk*.js
 gen_docx.py
 *.docx
+cleanup.bat
 docs/.obsidian/

@@ -1,4 +1,5 @@
 const cloud = require('wx-server-sdk');
+const crypto = require('crypto');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -8,6 +9,8 @@ const ROLES = {
   MANAGER: 'manager',
   SUPER_ADMIN: 'super_admin',
 };
+const SYSTEM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const SYSTEM_ID_LENGTH = 8;
 
 function normalizeAvatarFileId(value) {
   const avatarFileId = String(value || '').trim();
@@ -22,12 +25,42 @@ function isProfileCompleted(user) {
 function makePublicUser(user) {
   return {
     id: user._id,
+    systemId: user.systemId || '',
     nickname: user.nickname || '微信用户',
     avatarFileId: normalizeAvatarFileId(user.avatarFileId),
     profileCompleted: isProfileCompleted(user),
     role: user.role,
     enabled: user.enabled !== false,
   };
+}
+
+function createSystemId() {
+  const bytes = crypto.randomBytes(SYSTEM_ID_LENGTH);
+  let value = '';
+  for (let index = 0; index < SYSTEM_ID_LENGTH; index += 1) {
+    value += SYSTEM_ID_CHARS[bytes[index] % SYSTEM_ID_CHARS.length];
+  }
+  return value;
+}
+
+async function createUniqueSystemId() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const systemId = createSystemId();
+    const result = await db.collection('users').where({ systemId }).limit(1).get();
+    if (!result.data.length) return systemId;
+  }
+  const error = new Error('用户ID生成失败，请重试');
+  error.code = 'SYSTEM_ID_GENERATION_FAILED';
+  throw error;
+}
+
+async function ensureSystemId(user) {
+  if (user && user.systemId) return user;
+  const systemId = await createUniqueSystemId();
+  await db.collection('users').doc(user._id).update({
+    data: { systemId, updatedAt: db.serverDate() },
+  });
+  return { ...user, systemId };
 }
 
 async function attachAvatarUrls(users) {
@@ -72,20 +105,23 @@ async function migrateLegacySuperAdmin(openId) {
   const result = await db.collection('users').where({ role: ROLES.SUPER_ADMIN }).limit(10).get();
   const legacyUser = result.data.find((item) => !item.openId);
   if (!legacyUser) return null;
+  const systemId = legacyUser.systemId || await createUniqueSystemId();
   await db.collection('users').doc(legacyUser._id).update({
     data: {
       openId,
+      systemId,
       nickname: legacyUser.nickname || '微信用户',
       updatedAt: db.serverDate(),
     },
   });
-  return { ...legacyUser, openId, nickname: legacyUser.nickname || '微信用户' };
+  return { ...legacyUser, openId, systemId, nickname: legacyUser.nickname || '微信用户' };
 }
 
 async function createUser(openId) {
   const canBootstrap = await isLegacyManager(openId) && !(await hasSuperAdmin());
   const user = {
     openId,
+    systemId: await createUniqueSystemId(),
     nickname: '',
     avatarFileId: '',
     role: canBootstrap ? ROLES.SUPER_ADMIN : ROLES.USER,
@@ -101,10 +137,10 @@ async function loginWithWechat(openId) {
   const existing = await findUserByOpenId(openId);
   if (existing) {
     if (existing.enabled === false) return { ok: false, code: 'ACCOUNT_DISABLED', message: '该账号已被停用' };
-    return { ok: true, user: await makePublicUserWithAvatar(existing) };
+    return { ok: true, user: await makePublicUserWithAvatar(await ensureSystemId(existing)) };
   }
   const migratedUser = await migrateLegacySuperAdmin(openId);
-  if (migratedUser) return { ok: true, user: await makePublicUserWithAvatar(migratedUser) };
+  if (migratedUser) return { ok: true, user: await makePublicUserWithAvatar(await ensureSystemId(migratedUser)) };
   const user = await createUser(openId);
   return { ok: true, user: await makePublicUserWithAvatar(user) };
 }
@@ -112,7 +148,7 @@ async function loginWithWechat(openId) {
 async function getCurrentUser(openId) {
   const user = await findUserByOpenId(openId);
   if (!user || user.enabled === false) return { ok: false, code: 'NOT_LOGGED_IN', message: '请先登录' };
-  return { ok: true, user: await makePublicUserWithAvatar(user) };
+  return { ok: true, user: await makePublicUserWithAvatar(await ensureSystemId(user)) };
 }
 
 async function updateProfile(openId, event) {
@@ -123,11 +159,8 @@ async function updateProfile(openId, event) {
   if (!nickname || nickname === '微信用户') {
     return { ok: false, code: 'INVALID_NICKNAME', message: '请填写 1 至 12 个字的昵称' };
   }
-  const duplicate = await db.collection('users').where({ nickname }).limit(1).get();
-  if (duplicate.data.some((item) => item._id !== user._id)) {
-    return { ok: false, code: 'NICKNAME_EXISTS', message: '这个昵称已被使用，请换一个' };
-  }
-  const updatedUser = { ...user, nickname, avatarFileId };
+  const userWithSystemId = await ensureSystemId(user);
+  const updatedUser = { ...userWithSystemId, nickname, avatarFileId };
   await db.collection('users').doc(user._id).update({
     data: { nickname, avatarFileId, updatedAt: db.serverDate() },
   });
@@ -137,6 +170,7 @@ async function updateProfile(openId, event) {
 function makeManagedUser(user) {
   return {
     id: user._id,
+    systemId: user.systemId || '',
     nickname: user.nickname || '微信用户',
     avatarFileId: normalizeAvatarFileId(user.avatarFileId),
     profileCompleted: isProfileCompleted(user),
@@ -153,7 +187,8 @@ async function requireSuperAdmin(openId) {
 async function listManagedUsers() {
   const result = await db.collection('users').limit(100).get();
   const roleOrder = { super_admin: 0, manager: 1, user: 2 };
-  const users = result.data
+  const usersWithSystemIds = await Promise.all(result.data.map((user) => ensureSystemId(user)));
+  const users = usersWithSystemIds
     .sort((left, right) => (roleOrder[left.role] || 9) - (roleOrder[right.role] || 9))
     .map(makeManagedUser);
   return attachAvatarUrls(users);

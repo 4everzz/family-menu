@@ -6,6 +6,17 @@ function getRoleText(role) {
   return '普通用户';
 }
 
+function isShopManagerRole(role) {
+  return ['store_admin', 'store_owner', 'store_staff'].includes(role);
+}
+
+function getShopRoleText(role) {
+  if (role === 'store_admin' || role === 'store_owner') return '一级管理员';
+  if (role === 'store_staff') return '二级管理员';
+  if (role === 'super_admin') return '超级管理员';
+  return '顾客';
+}
+
 Page({
   data: {
     loading: true,
@@ -126,9 +137,10 @@ Page({
       if (result.result && result.result.ok) {
         const shops = (result.result.shops || []).map((shop) => ({
           ...shop,
-          roleText: shop.role === 'store_admin' || shop.role === 'super_admin' ? '管理员' : '顾客',
+          roleText: getShopRoleText(shop.role),
         }));
-        this.setData({ myShops: shops });
+        const hasShopManagerRole = shops.some((shop) => isShopManagerRole(shop.role));
+        this.setData({ myShops: shops, isManager: this.data.isManager || hasShopManagerRole });
       }
     } catch (e) {}
     this.setData({ loadingShops: false });
@@ -155,5 +167,12 @@ Page({
   },
   openUserManager() {
     wx.navigateTo({ url: '/pages/admin-users/index' });
+  },
+  copySystemId() {
+    if (!this.data.user || !this.data.user.systemId) return;
+    wx.setClipboardData({
+      data: this.data.user.systemId,
+      success: () => wx.showToast({ title: '系统ID已复制', icon: 'success' }),
+    });
   },
 });

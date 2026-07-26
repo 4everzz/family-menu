@@ -1,43 +1,108 @@
 <view class="page-shell">
-  <view wx:if="{{loading}}" class="state-card"><text class="state-title">正在读取订单</text><text class="state-copy">请稍候</text></view>
+  <view wx:if="{{loading}}" class="state-card">
+    <text class="state-title">正在读取订单</text>
+    <text class="state-copy">请稍候</text>
+  </view>
+
   <view wx:elif="{{hasAccess}}">
-    <view class="page-head"><text class="page-title">订单管理</text></view>
+    <view class="page-head">
+      <text class="page-title">订单管理</text>
+    </view>
+
     <view class="order-tabs">
       <button class="tab-button {{activeTab === 'active' ? 'active' : ''}}" data-tab="active" bindtap="switchTab">制作中 {{orders.length}}</button>
       <button class="tab-button {{activeTab === 'history' ? 'active' : ''}}" data-tab="history" bindtap="switchTab">历史订单 {{historyOrders.length}}</button>
     </view>
+
     <view wx:if="{{activeTab === 'active'}}">
       <view wx:if="{{orders.length}}" class="order-list">
         <view wx:for="{{orders}}" wx:key="id" class="order-card">
-          <view class="order-head"><view class="order-head-copy"><text class="order-id">订单 {{item.id}}</text><text wx:if="{{item.tableName}}" class="order-location">堂食 · {{item.tableName}}</text></view><text class="order-status">制作中</text></view>
+          <view class="order-head">
+            <view class="order-head-copy">
+              <text class="order-id">订单 {{item.id}}</text>
+              <text wx:if="{{item.tableName}}" class="order-location">堂食 · {{item.tableName}}</text>
+            </view>
+            <text class="order-status">制作中</text>
+          </view>
           <text class="order-summary">{{item.summary}}</text>
           <text wx:if="{{item.remark}}" class="order-remark">备注：{{item.remark}}</text>
-          <view class="order-foot"><text>{{item.createdAt}}</text><text class="order-total">¥{{item.total}}</text></view>
-          <button class="complete-button" data-id="{{item.id}}" bindtap="completeOrder" loading="{{item.isCompleting}}" disabled="{{item.isCompleting}}">确认已完成</button>
+          <view class="order-foot">
+            <text>{{item.createdAt}}</text>
+            <text class="order-total">¥{{item.total}}</text>
+          </view>
+          <view class="order-actions">
+            <button class="detail-button" data-id="{{item.id}}" catchtap="openOrder">查看详情</button>
+            <button class="complete-button" data-id="{{item.id}}" catchtap="completeOrder" loading="{{item.isCompleting}}" disabled="{{item.isCompleting}}">确认已完成</button>
+          </view>
         </view>
       </view>
-      <view wx:else class="empty-state"><text class="empty-title">暂无制作中的订单</text><text class="empty-copy">新订单提交后会显示在这里</text></view>
+      <view wx:else class="empty-state">
+        <text class="empty-title">暂无制作中的订单</text>
+        <text class="empty-copy">新订单提交后会显示在这里</text>
+      </view>
     </view>
+
     <view wx:else>
       <view wx:if="{{historyOrders.length}}" class="order-list">
-        <view wx:for="{{historyOrders}}" wx:key="id" class="order-card history-card" hover-class="order-card-active" data-id="{{item.id}}" bindtap="openHistoryOrder">
-          <view class="order-head"><view class="order-head-copy"><text class="order-id">订单 {{item.id}}</text><text wx:if="{{item.tableName}}" class="order-location">堂食 · {{item.tableName}}</text></view><text class="order-arrow">></text></view>
+        <view wx:for="{{historyOrders}}" wx:key="id" class="order-card history-card" hover-class="order-card-active" data-id="{{item.id}}" bindtap="openOrder">
+          <view class="order-head">
+            <view class="order-head-copy">
+              <text class="order-id">订单 {{item.id}}</text>
+              <text wx:if="{{item.tableName}}" class="order-location">堂食 · {{item.tableName}}</text>
+            </view>
+            <text class="order-arrow">></text>
+          </view>
           <text class="order-summary">{{item.summary}}</text>
-          <view class="order-foot"><text>{{item.createdAt}}</text><text class="order-total">¥{{item.total}}</text></view>
+          <view class="order-foot">
+            <text>{{item.createdAt}}</text>
+            <text class="order-total">¥{{item.total}}</text>
+          </view>
         </view>
       </view>
-      <view wx:else class="empty-state"><text class="empty-title">暂无历史订单</text><text class="empty-copy">完成的订单会保留在这里</text></view>
+      <view wx:else class="empty-state">
+        <text class="empty-title">暂无历史订单</text>
+        <text class="empty-copy">完成的订单会保留在这里</text>
+      </view>
     </view>
   </view>
-  <view wx:else class="state-card access-card"><text class="state-title">暂无管理员权限</text><text class="state-copy">请返回“我的”页面确认管理员身份后再操作。</text></view>
 
-  <view wx:if="{{selectedHistoryOrder}}" class="history-modal-mask" bindtap="closeHistoryOrder">
+  <view wx:else class="state-card access-card">
+    <text class="state-title">暂无管理员权限</text>
+    <text class="state-copy">请返回“我的”页面确认管理员身份后再操作。</text>
+  </view>
+
+  <view wx:if="{{selectedOrder}}" class="history-modal-mask" bindtap="closeHistoryOrder">
     <scroll-view class="history-modal" scroll-y catchtap="stopModalPropagation">
       <button class="modal-close" bindtap="closeHistoryOrder" aria-label="关闭订单详情">×</button>
-      <view class="modal-head"><view><text class="modal-id">订单 {{selectedHistoryOrder.id}}</text><text wx:if="{{selectedHistoryOrder.tableName}}" class="modal-location">堂食 · {{selectedHistoryOrder.tableName}}</text><text class="modal-time">{{selectedHistoryOrder.createdAt}}</text></view><text class="modal-status">已完成</text></view>
-      <view class="modal-section"><text class="modal-title">菜品明细</text><view wx:for="{{selectedHistoryOrder.items}}" wx:for-item="dish" wx:key="id" class="modal-dish"><view><text class="modal-dish-name">{{dish.name}} × {{dish.quantity}}</text><text wx:if="{{dish.optionsText}}" class="modal-dish-options">{{dish.optionsText}}</text></view><text class="modal-dish-price">¥{{dish.price}}</text></view></view>
-      <view wx:if="{{selectedHistoryOrder.remark}}" class="modal-section"><text class="modal-title">订单备注</text><text class="modal-remark">{{selectedHistoryOrder.remark}}</text></view>
-      <view class="modal-total"><text>订单合计</text><text>¥{{selectedHistoryOrder.total}}</text></view>
+      <view class="modal-head">
+        <view>
+          <text class="modal-id">订单 {{selectedOrder.id}}</text>
+          <text wx:if="{{selectedOrder.tableName}}" class="modal-location">堂食 · {{selectedOrder.tableName}}</text>
+          <text class="modal-time">{{selectedOrder.createdAt}}</text>
+        </view>
+        <text class="modal-status {{selectedOrder.status === '已完成' ? 'done' : ''}}">{{selectedOrder.status}}</text>
+      </view>
+
+      <view class="modal-section">
+        <text class="modal-title">菜品明细</text>
+        <view wx:for="{{selectedOrder.items}}" wx:for-item="dish" wx:key="id" class="modal-dish">
+          <view>
+            <text class="modal-dish-name">{{dish.name}} × {{dish.quantity}}</text>
+            <text wx:if="{{dish.optionsText}}" class="modal-dish-options">{{dish.optionsText}}</text>
+          </view>
+          <text class="modal-dish-price">¥{{dish.price}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{selectedOrder.remark}}" class="modal-section">
+        <text class="modal-title">订单备注</text>
+        <text class="modal-remark">{{selectedOrder.remark}}</text>
+      </view>
+
+      <view class="modal-total">
+        <text>订单合计</text>
+        <text>¥{{selectedOrder.total}}</text>
+      </view>
     </scroll-view>
   </view>
 </view>

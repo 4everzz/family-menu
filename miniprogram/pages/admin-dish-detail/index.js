@@ -227,8 +227,8 @@ Page({
     const name = newDish.name.trim();
     const description = newDish.description.trim();
     const price = Number(newDish.price);
-    if (!name || !newDish.category || !Number.isFinite(price) || price <= 0) {
-      wx.showToast({ title: '请填写菜名、分类和有效价格', icon: 'none' });
+    if (!name || !newDish.category || !Number.isFinite(price) || price < 0) {
+      wx.showToast({ title: '请填写菜名、分类，价格不能为负数', icon: 'none' });
       return;
     }
     this.setData({ isSubmitting: true });
@@ -267,8 +267,8 @@ Page({
     const price = Number(editDraft.price);
     const dailyStock = Number(editDraft.dailyStock);
     const stock = Number(editDraft.stock);
-    if (!name || !editDraft.category || !Number.isFinite(price) || price <= 0) {
-      wx.showToast({ title: '请填写菜名、分类和有效价格', icon: 'none' });
+    if (!name || !editDraft.category || !Number.isFinite(price) || price < 0) {
+      wx.showToast({ title: '请填写菜名、分类，价格不能为负数', icon: 'none' });
       return;
     }
     if (!Number.isInteger(dailyStock) || !Number.isInteger(stock) || dailyStock < 0 || stock < 0 || stock > dailyStock) {

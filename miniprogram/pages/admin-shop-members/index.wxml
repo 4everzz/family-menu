@@ -1,0 +1,70 @@
+<view class="page-shell">
+  <view wx:if="{{loading}}" class="state-card">
+    <text class="state-title">正在读取成员</text>
+    <text class="state-copy">请稍候</text>
+  </view>
+
+  <view wx:elif="{{hasAccess}}" class="content">
+    <view class="page-head">
+      <text class="page-title">成员管理</text>
+      <text class="page-copy">当前店铺：{{shopName}}</text>
+      <text class="page-note">一级管理员可授权二级管理员；二级管理员不能继续授权。系统ID可用于搜索和识别。</text>
+      <button wx:if="{{canGrantOwner}}" class="self-owner-button" bindtap="grantSelfOwner" loading="{{operatingUserId === 'self'}}" disabled="{{!!operatingUserId}}">设我为一级管理员</button>
+    </view>
+
+    <view class="section-card">
+      <view class="section-head">
+        <text class="section-title">已有管理员</text>
+        <text class="section-count">{{members.length}} 人</text>
+      </view>
+      <view wx:if="{{members.length}}" class="member-list">
+        <view wx:for="{{members}}" wx:key="userId" class="member-row">
+          <view class="member-main">
+            <image wx:if="{{item.avatarUrl}}" class="member-avatar" src="{{item.avatarUrl}}" mode="aspectFill"></image>
+            <view wx:else class="member-avatar member-avatar-fallback">{{item.avatarText}}</view>
+            <view class="member-copy">
+              <text class="member-name">{{item.nickname}}</text>
+              <text class="member-meta">系统ID：{{item.systemId || '未生成'}}</text>
+              <text class="member-status">{{item.roleText}} · {{item.userEnabled ? '账号正常' : '账号已停用'}}</text>
+            </view>
+          </view>
+          <button class="danger-button" data-id="{{item.userId}}" data-role="{{item.role}}" bindtap="revokeMember" loading="{{operatingUserId === item.userId}}" disabled="{{!!operatingUserId}}">撤销</button>
+        </view>
+      </view>
+      <text wx:else class="empty-copy">暂无店铺管理员</text>
+    </view>
+
+    <view class="section-card">
+      <text class="section-title">搜索用户并授权</text>
+      <text class="section-copy">请输入系统ID或昵称；ID唯一，昵称可以重复。</text>
+      <view class="search-row">
+        <input class="search-input" value="{{keyword}}" placeholder="输入系统ID或昵称" confirm-type="search" bindinput="updateKeyword" bindconfirm="searchUsers" />
+        <button wx:if="{{keyword}}" class="clear-button" bindtap="clearSearch">×</button>
+        <button class="search-button" bindtap="searchUsers" loading="{{searching}}" disabled="{{searching}}">搜索</button>
+      </view>
+      <view wx:if="{{searchResults.length}}" class="search-list">
+        <view wx:for="{{searchResults}}" wx:key="id" class="search-row-card">
+          <view class="member-main search-main">
+            <image wx:if="{{item.avatarUrl}}" class="member-avatar" src="{{item.avatarUrl}}" mode="aspectFill"></image>
+            <view wx:else class="member-avatar member-avatar-fallback">{{item.avatarText}}</view>
+            <view class="member-copy">
+              <text class="member-name">{{item.nickname}}</text>
+              <text class="member-meta">系统ID：{{item.systemId || '未生成'}}</text>
+              <text class="member-status">{{item.memberRoleText}}</text>
+            </view>
+          </view>
+          <view class="grant-actions {{canGrantOwner ? '' : 'single'}}">
+            <button wx:if="{{canGrantOwner}}" class="secondary-button" data-id="{{item.id}}" bindtap="grantOwner" loading="{{operatingUserId === item.id}}" disabled="{{!!operatingUserId}}">设一级</button>
+            <button class="primary-button" data-id="{{item.id}}" bindtap="grantStaff" loading="{{operatingUserId === item.id}}" disabled="{{!!operatingUserId}}">设二级</button>
+          </view>
+        </view>
+      </view>
+      <text wx:elif="{{keyword && !searching}}" class="empty-copy">暂无搜索结果</text>
+    </view>
+  </view>
+
+  <view wx:else class="state-card access-card">
+    <text class="state-title">暂无成员管理权限</text>
+    <text class="state-copy">只有超级管理员或本店一级管理员可以管理成员。</text>
+  </view>
+</view>

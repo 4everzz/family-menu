@@ -1,5 +1,27 @@
 const { callAdminMenu } = require('../../utils/shop-context');
 
+function getDishOptionsText(dish) {
+  return dish.optionsText || (Array.isArray(dish.options) ? dish.options.join('、') : '');
+}
+
+function getDishSummary(dish) {
+  const optionsText = getDishOptionsText(dish);
+  return `${dish.name} × ${dish.quantity}${optionsText ? `（${optionsText}）` : ''}`;
+}
+
+function normalizeAdminOrder(order, previousOrders = []) {
+  const items = (order.items || []).map((dish) => ({
+    ...dish,
+    optionsText: getDishOptionsText(dish),
+  }));
+  return {
+    ...order,
+    items,
+    summary: order.summaryWithOptions || items.map(getDishSummary).join('、') || order.summary || '',
+    isCompleting: previousOrders.some((previous) => previous.id === order.id && previous.isCompleting),
+  };
+}
+
 Page({
   data: {
     loading: true,
@@ -7,7 +29,7 @@ Page({
     orders: [],
     historyOrders: [],
     activeTab: 'active',
-    selectedHistoryOrder: null,
+    selectedOrder: null,
   },
   onShow() {
     this.loadOrders();
@@ -25,15 +47,8 @@ Page({
       }
       const allOrders = result.orders || [];
       const previousOrders = this.data.orders;
-      const orders = allOrders.filter((item) => item.status === '制作中').map((item) => ({
-        ...item,
-        summary: item.summary || (item.items || []).map((dish) => `${dish.name} x ${dish.quantity}`).join('、'),
-        isCompleting: previousOrders.some((previous) => previous.id === item.id && previous.isCompleting),
-      }));
-      const historyOrders = allOrders.filter((item) => item.status === '已完成').map((item) => ({
-        ...item,
-        summary: item.summary || (item.items || []).map((dish) => `${dish.name} x ${dish.quantity}`).join('、'),
-      }));
+      const orders = allOrders.filter((item) => item.status === '制作中').map((item) => normalizeAdminOrder(item, previousOrders));
+      const historyOrders = allOrders.filter((item) => item.status === '已完成').map((item) => normalizeAdminOrder(item));
       this.setData({ hasAccess: true, orders, historyOrders, loading: false });
     } catch (error) {
       this.setData({ loading: false });
@@ -75,12 +90,13 @@ Page({
   switchTab(event) {
     this.setData({ activeTab: event.currentTarget.dataset.tab });
   },
-  openHistoryOrder(event) {
-    const order = this.data.historyOrders.find((item) => item.id === event.currentTarget.dataset.id);
-    if (order) this.setData({ selectedHistoryOrder: order });
+  openOrder(event) {
+    const id = event.currentTarget.dataset.id;
+    const order = [...this.data.orders, ...this.data.historyOrders].find((item) => item.id === id);
+    if (order) this.setData({ selectedOrder: order });
   },
   closeHistoryOrder() {
-    this.setData({ selectedHistoryOrder: null });
+    this.setData({ selectedOrder: null });
   },
   stopModalPropagation() {
   },

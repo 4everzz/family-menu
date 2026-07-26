@@ -27,6 +27,8 @@
 .section-title { font-size: 36rpx; font-weight: 700; }
 .section-note { color: #64748B; font-size: 26rpx; }
 .dish-list { display: flex; flex-direction: column; gap: 16rpx; }
+.menu-bottom-spacer { height: 172rpx; flex: 0 0 172rpx; }
+.menu-bottom-spacer.has-cart { height: 296rpx; flex-basis: 296rpx; }
 .menu-empty-state { margin-top: 120rpx; display: flex; flex-direction: column; align-items: center; gap: 8rpx; color: #64748B; font-size: 25rpx; }
 .menu-empty-state text:first-child { color: #7C2D12; font-size: 29rpx; font-weight: 700; }
 .menu-scan-button { min-width: 264rpx; min-height: 88rpx; margin: 20rpx 0 0; padding: 0 28rpx; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 28rpx; font-weight: 700; line-height: 88rpx; }
