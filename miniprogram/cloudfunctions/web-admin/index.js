@@ -8,9 +8,12 @@ const db = cloud.database();
 // ==== 配置 ====
 // 会话有效期（毫秒）
 const SESSION_TTL = 2 * 60 * 60 * 1000;
-// 允许跨域访问的来源。部署静态托管后，把默认域名填进来（可多个）。
-// 例如：'https://your-env-xxxx.tcloudbaseapp.com'。'*' 仅用于本地联调，正式环境请收紧。
-const ALLOWED_ORIGINS = ['*'];
+// 允许跨域访问的来源。正式环境只放行静态托管域名 + 本地开发端口，不再用 '*'。
+// 浏览器发来的 Origin 只有「协议+域名」，不带路径和结尾斜杠，这里也照此填写。
+const ALLOWED_ORIGINS = [
+  'https://cloud1-d2gua37h7753f3812-1454825551.tcloudbaseapp.com', // 线上后台（静态托管）
+  'http://localhost:5173', // 本地开发（npm run dev）
+];
 // 密码哈希参数
 const PBKDF2_ITERATIONS = 100000;
 const PBKDF2_KEYLEN = 32;
