@@ -17,19 +17,6 @@
       </view>
     </view>
 
-    <view wx:if="{{myShops.length}}" class="menu-group">
-      <view class="section-head">
-        <text class="section-title">我的店铺</text>
-      </view>
-      <view wx:for="{{myShops}}" wx:key="id" class="shop-row" hover-class="shop-row-active" data-id="{{item.id}}" bindtap="rejoinShop">
-        <view>
-          <text class="shop-row-name">{{item.name}}</text>
-          <text class="shop-row-role">{{item.roleText}}</text>
-        </view>
-        <text class="menu-arrow">></text>
-      </view>
-    </view>
-
     <view class="menu-group">
       <view class="menu-row" hover-class="menu-row-active" bindtap="openProfileEdit">
         <view><text class="menu-title">资料设置</text></view>
@@ -43,16 +30,6 @@
         <view><text class="menu-title">管理入口</text></view>
         <text class="menu-arrow">></text>
       </view>
-      <view wx:if="{{isSuperAdmin}}" class="menu-row" hover-class="menu-row-active" bindtap="openShopManager">
-        <view><text class="menu-title">店铺管理</text></view>
-        <text class="menu-arrow">></text>
-      </view>
-      <view wx:if="{{isSuperAdmin}}" class="menu-row" hover-class="menu-row-active" bindtap="openUserManager">
-        <view><text class="menu-title">账户管理</text></view>
-        <text class="menu-arrow">></text>
-      </view>
-      <button wx:if="{{isSuperAdmin && !migrationCompleted}}" class="migration-button" bindtap="initializeMultiShop" disabled="{{migrationLoading}}">{{migrationButtonText}}</button>
-      <text wx:if="{{migrationError}}" class="migration-error">初始化诊断：{{migrationError}}</text>
     </view>
   </view>
 

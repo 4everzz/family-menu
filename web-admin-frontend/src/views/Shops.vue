@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { callApi } from '../api.js';
 
 const loading = ref(true);
@@ -10,15 +10,46 @@ const showCreate = ref(false);
 const newName = ref('');
 const creating = ref(false);
 const createError = ref('');
-const newCode = ref(null); // 建店成功后一次性展示的店铺码
+const newCode = ref(null);
 const busyId = ref('');
+const rotatingId = ref('');
+const toast = ref('');
+const qrShop = ref(null);
+
+async function copyText(text, successText = '已复制') {
+  const value = String(text || '').trim();
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    flash(successText);
+  } catch (error) {
+    flash('复制失败，请手动选中复制');
+  }
+}
+
+function flash(message) {
+  toast.value = message;
+  setTimeout(() => {
+    if (toast.value === message) toast.value = '';
+  }, 2600);
+}
+
+function qrImageUrl(code) {
+  const content = `SHOP:${String(code || '').trim().toUpperCase()}`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=16&data=${encodeURIComponent(content)}`;
+}
+
+function openQr(shop) {
+  if (!shop || !shop.displayShopCode) return;
+  qrShop.value = shop;
+}
 
 async function load() {
   loading.value = true;
   error.value = '';
   const result = await callApi('listShops');
   loading.value = false;
-  if (result.ok) shops.value = result.shops;
+  if (result.ok) shops.value = result.shops || [];
   else error.value = result.message || '加载失败';
 }
 
@@ -31,7 +62,10 @@ function openCreate() {
 
 async function createShop() {
   createError.value = '';
-  if (!newName.value.trim()) { createError.value = '请输入店铺名称'; return; }
+  if (!newName.value.trim()) {
+    createError.value = '请输入店铺名称';
+    return;
+  }
   creating.value = true;
   const result = await callApi('createShop', { name: newName.value.trim() });
   creating.value = false;
@@ -47,11 +81,29 @@ async function toggleEnabled(shop) {
   busyId.value = shop.id;
   const result = await callApi('setShopEnabled', { shopId: shop.id, enabled: !shop.enabled });
   busyId.value = '';
-  if (result.ok) shop.enabled = !shop.enabled;
-  else error.value = result.message || '操作失败';
+  if (result.ok) {
+    shop.enabled = !shop.enabled;
+    flash(shop.enabled ? '店铺已启用' : '店铺已停用');
+  } else {
+    error.value = result.message || '操作失败';
+  }
 }
 
-// 进入页面时自动加载店铺列表（之前漏了这行，导致一直卡在“正在加载”）
+async function rotateCode(shop) {
+  if (!shop || rotatingId.value) return;
+  const ok = window.confirm(`确定重置「${shop.name}」的店铺码吗？旧店铺码会立即失效。`);
+  if (!ok) return;
+  rotatingId.value = shop.id;
+  const result = await callApi('rotateShopCode', { shopId: shop.id });
+  rotatingId.value = '';
+  if (result.ok) {
+    shop.displayShopCode = result.shopCode;
+    flash('店铺码已重置');
+  } else {
+    flash(result.message || '重置失败');
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -71,11 +123,12 @@ onMounted(load);
   <div v-if="loading && !shops.length" class="state">正在加载店铺…</div>
   <div v-else-if="!shops.length" class="state">还没有店铺，点击右上角「新建店铺」创建第一家。</div>
 
-  <div v-else class="card">
+  <div v-else class="card shop-table-card">
     <table class="table">
       <thead>
         <tr>
           <th>店铺</th>
+          <th>店铺码</th>
           <th>管理员</th>
           <th>状态</th>
           <th style="text-align:right">操作</th>
@@ -90,6 +143,13 @@ onMounted(load);
             </div>
           </td>
           <td>
+            <div v-if="shop.displayShopCode" class="shop-code">
+              <button class="code-pill num" @click="copyText(shop.displayShopCode, '已复制店铺码')">{{ shop.displayShopCode }}</button>
+              <span class="muted shop-mode">点击可复制</span>
+            </div>
+            <span v-else class="muted shop-mode">旧码不可查看，请重置后显示</span>
+          </td>
+          <td>
             <span class="badge badge-owner">一级 {{ shop.ownerCount }}</span>
             <span class="badge badge-staff" style="margin-left:6px">二级 {{ shop.staffCount }}</span>
           </td>
@@ -98,22 +158,37 @@ onMounted(load);
               {{ shop.enabled ? '营业中' : '已停用' }}
             </span>
           </td>
-          <td style="text-align:right">
-            <button
-              class="btn btn-sm"
-              :class="shop.enabled ? 'btn-danger' : 'btn-primary'"
-              :disabled="busyId === shop.id"
-              @click="toggleEnabled(shop)"
-            >
-              {{ busyId === shop.id ? '处理中…' : (shop.enabled ? '停用' : '启用') }}
-            </button>
+          <td>
+            <div class="table-actions">
+              <button
+                class="btn btn-sm"
+                :disabled="!shop.displayShopCode"
+                @click="openQr(shop)"
+              >
+                二维码
+              </button>
+              <button
+                class="btn btn-sm"
+                :disabled="rotatingId === shop.id"
+                @click="rotateCode(shop)"
+              >
+                {{ rotatingId === shop.id ? '重置中…' : '重置码' }}
+              </button>
+              <button
+                class="btn btn-sm"
+                :class="shop.enabled ? 'btn-danger' : 'btn-primary'"
+                :disabled="busyId === shop.id"
+                @click="toggleEnabled(shop)"
+              >
+                {{ busyId === shop.id ? '处理中…' : (shop.enabled ? '停用' : '启用') }}
+              </button>
+            </div>
           </td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <!-- 新建店铺弹窗 -->
   <div v-if="showCreate" class="overlay" @click.self="!creating && (showCreate = false)">
     <div class="modal">
       <div class="modal-head">
@@ -125,17 +200,17 @@ onMounted(load);
           <label for="sn">店铺名称</label>
           <input id="sn" class="input" v-model="newName" maxlength="20" placeholder="例如：小家饭堂（前门店）" @keyup.enter="createShop" />
         </div>
-        <p class="muted" style="font-size:12.5px">建店后请到「管理员授权」把一位微信用户指派为该店的一级管理员，店铺才有人管理。</p>
+        <p class="muted" style="font-size:12.5px">建店后请到「管理员授权」把一位微信用户指定为该店的一级管理员。</p>
         <p v-if="createError" class="notice notice-error">{{ createError }}</p>
       </div>
 
       <div v-else class="modal-body">
         <p class="notice notice-ok">店铺「{{ newName }}」创建成功</p>
         <div class="field">
-          <label>初始店铺码（仅此一次显示，请立即保存）</label>
-          <div class="code-box num">{{ newCode }}</div>
+          <label>初始店铺码</label>
+          <button class="code-box num" @click="copyText(newCode, '已复制初始店铺码')">{{ newCode }}</button>
         </div>
-        <p class="muted" style="font-size:12.5px">店铺码用于顾客到店进入点餐。忘记可在小程序店铺设置里重新生成。</p>
+        <p class="muted" style="font-size:12.5px">店铺码用于顾客到店进入点餐。现在也可以在店铺列表中查看和重置。</p>
       </div>
 
       <div class="modal-foot">
@@ -147,18 +222,79 @@ onMounted(load);
       </div>
     </div>
   </div>
+
+  <div v-if="qrShop" class="overlay" @click.self="qrShop = null">
+    <div class="modal qr-modal">
+      <div class="modal-head">
+        <h3 style="font-size:16px;font-weight:650">店铺码二维码</h3>
+      </div>
+      <div class="modal-body qr-body">
+        <p class="muted" style="font-size:13px">{{ qrShop.name }}</p>
+        <img class="qr-image" :src="qrImageUrl(qrShop.displayShopCode)" alt="店铺码二维码" />
+        <div class="code-box num">{{ qrShop.displayShopCode }}</div>
+        <p class="muted" style="font-size:12.5px">二维码内容：SHOP:{{ qrShop.displayShopCode }}。顾客用小程序首页扫码即可进入店铺。</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" @click="copyText(`SHOP:${qrShop.displayShopCode}`, '已复制二维码内容')">复制二维码内容</button>
+        <button class="btn btn-primary" @click="qrShop = null">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <transition name="toast">
+    <div v-if="toast" class="toast">{{ toast }}</div>
+  </transition>
 </template>
 
 <style scoped>
 .page-head { margin-bottom: 20px; }
 .page-eyebrow { font-size: 12.5px; color: var(--muted); }
 .page-title { font-size: 20px; font-weight: 680; margin-top: 3px; }
+.shop-table-card { overflow: hidden; }
 .shop-name { font-weight: 550; font-size: 14px; }
 .shop-mode { font-size: 12px; }
+.shop-code { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.code-pill {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.table-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .code-box {
+  width: 100%;
+  border: 0;
   font-size: 22px; font-weight: 700; letter-spacing: 0.14em;
   padding: 12px 16px; text-align: center;
   background: var(--accent-soft); color: var(--accent-ink);
   border-radius: var(--radius-sm);
+}
+.qr-modal { max-width: 420px; }
+.qr-body { align-items: center; text-align: center; }
+.qr-image {
+  width: 260px;
+  height: 260px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.toast {
+  position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%);
+  background: var(--ink); color: #fff;
+  padding: 11px 18px; border-radius: 100px;
+  font-size: 13.5px; box-shadow: 0 8px 24px rgba(20,28,24,0.25);
+  z-index: 60;
+}
+.toast-enter-active, .toast-leave-active { transition: opacity 0.25s, transform 0.25s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, 8px); }
+
+@media (max-width: 860px) {
+  .shop-table-card { overflow-x: auto; }
+  .table { min-width: 760px; }
 }
 </style>

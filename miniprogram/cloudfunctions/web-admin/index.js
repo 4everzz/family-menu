@@ -237,6 +237,7 @@ async function listShops() {
       enabled: shop.enabled !== false,
       acceptingOrders: shop.acceptingOrders !== false,
       orderEntryMode: shop.orderEntryMode || 'store_entry',
+      displayShopCode: String(shop.displayShopCode || ''),
       ownerCount: bucket.owner,
       staffCount: bucket.staff,
       createdAt: shop.createdAt || null,
@@ -259,6 +260,7 @@ async function createShop(payload, session) {
       closedDates: [],
       orderEntryMode: 'store_entry',
       shopCodeHash: hashShopCode(shopCode),
+      displayShopCode: shopCode,
       shopCodeVersion: 1,
       createdBy: `web-admin:${session.username}`,
       createdAt: db.serverDate(),
@@ -279,6 +281,21 @@ async function setShopEnabled(payload) {
   const enabled = payload.enabled === true;
   await db.collection('shops').doc(shop._id).update({ data: { enabled, updatedAt: db.serverDate() } });
   return { ok: true, shop: { id: shop._id, enabled } };
+}
+
+async function rotateShopCode(payload) {
+  const shop = await getShopById(payload.shopId);
+  if (!shop) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺不存在' };
+  const shopCode = await createUniqueEntryCode();
+  await db.collection('shops').doc(shop._id).update({
+    data: {
+      shopCodeHash: hashShopCode(shopCode),
+      displayShopCode: shopCode,
+      shopCodeVersion: Number(shop.shopCodeVersion || 0) + 1,
+      updatedAt: db.serverDate(),
+    },
+  });
+  return { ok: true, shopCode };
 }
 
 // ==== 业务：成员授权与用户搜索（#11）====
@@ -414,6 +431,95 @@ async function revokeRole(payload) {
     data: { enabled: false, updatedAt: db.serverDate(), updatedBy: 'web-admin' },
   });
   return { ok: true };
+}
+
+// ==== 业务：平台用户管理 ====
+async function getUserMemberSummary(userIds) {
+  if (!userIds.length) return new Map();
+  const result = await db.collection('shop_members')
+    .where({ userId: _.in(userIds), enabled: true, role: _.in(SHOP_MANAGER_ROLES) })
+    .limit(1000)
+    .get();
+  const summary = new Map();
+  result.data.forEach((member) => {
+    const bucket = summary.get(member.userId) || { ownerCount: 0, staffCount: 0, shopCount: 0, shopIds: new Set() };
+    if (normalizeMemberRole(member.role) === STORE_OWNER) bucket.ownerCount += 1;
+    else bucket.staffCount += 1;
+    if (member.shopId && !bucket.shopIds.has(member.shopId)) {
+      bucket.shopIds.add(member.shopId);
+      bucket.shopCount += 1;
+    }
+    summary.set(member.userId, bucket);
+  });
+  return summary;
+}
+
+async function listUsers(payload) {
+  const keyword = String(payload.keyword || '').trim();
+  const pageSize = Math.min(Math.max(Number(payload.pageSize) || 30, 10), 50);
+  const page = Math.max(Number(payload.page) || 1, 1);
+  let users = [];
+
+  if (keyword) {
+    const nickResult = await db.collection('users').where({
+      nickname: db.RegExp({ regexp: escapeRegExp(keyword), options: 'i' }),
+    }).limit(pageSize).get();
+    const upper = keyword.toUpperCase();
+    const systemIdResult = /^[A-Z0-9]{6,8}$/.test(upper)
+      ? await db.collection('users').where({
+        systemId: db.RegExp({ regexp: `^${escapeRegExp(upper)}$`, options: 'i' }),
+      }).limit(pageSize).get()
+      : { data: [] };
+    const docResult = /^[a-zA-Z0-9_-]{8,}$/.test(keyword) ? await getUserById(keyword) : null;
+    const merged = [...nickResult.data, ...systemIdResult.data];
+    if (docResult) merged.unshift(docResult);
+    const seen = new Set();
+    for (const user of merged) {
+      if (!user || seen.has(user._id)) continue;
+      seen.add(user._id);
+      users.push(await ensureUserSystemId(user));
+      if (users.length >= pageSize) break;
+    }
+  } else {
+    const result = await db.collection('users')
+      .orderBy('createdAt', 'desc')
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .get();
+    users = await Promise.all(result.data.map((user) => ensureUserSystemId(user)));
+  }
+
+  const summary = await getUserMemberSummary(users.map((user) => user._id));
+  const publicUsers = users.map((user) => {
+    const member = summary.get(user._id) || { ownerCount: 0, staffCount: 0, shopCount: 0 };
+    return {
+      ...makePublicUser(user),
+      profileCompleted: user.profileCompleted === true,
+      phoneNumber: user.phoneNumber ? String(user.phoneNumber).replace(/^(\d{3})\d{4}(\d+)/, '$1****$2') : '',
+      shopCount: member.shopCount || 0,
+      ownerCount: member.ownerCount || 0,
+      staffCount: member.staffCount || 0,
+      createdAt: user.createdAt || null,
+    };
+  });
+  return {
+    ok: true,
+    users: await attachAvatarUrls(publicUsers),
+    page,
+    pageSize,
+    hasMore: !keyword && users.length === pageSize,
+  };
+}
+
+async function setUserEnabled(payload) {
+  const user = await getUserById(payload.userId);
+  if (!user) return { ok: false, code: 'USER_NOT_FOUND', message: '用户不存在' };
+  if (user.role === 'super_admin') {
+    return { ok: false, code: 'CANNOT_DISABLE_SUPER_ADMIN', message: '不能在这里停用小程序超级管理员' };
+  }
+  const enabled = payload.enabled === true;
+  await db.collection('users').doc(user._id).update({ data: { enabled, updatedAt: db.serverDate() } });
+  return { ok: true, user: { id: user._id, enabled } };
 }
 
 // ==== 业务：跨店数据总览（#12）====
@@ -573,6 +679,8 @@ async function handleAuthedAction(action, payload, session) {
       return createShop(payload, session);
     case 'setShopEnabled':
       return setShopEnabled(payload);
+    case 'rotateShopCode':
+      return rotateShopCode(payload);
     // #11 成员授权与用户搜索
     case 'searchUsers':
       return searchUsers(payload);
@@ -582,6 +690,11 @@ async function handleAuthedAction(action, payload, session) {
       return grantRole(payload);
     case 'revokeRole':
       return revokeRole(payload);
+    // 平台用户管理
+    case 'listUsers':
+      return listUsers(payload);
+    case 'setUserEnabled':
+      return setUserEnabled(payload);
     // #12 跨店总览
     case 'getPlatformOverview':
       return getPlatformOverview();

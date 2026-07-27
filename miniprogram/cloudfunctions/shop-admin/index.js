@@ -178,6 +178,7 @@ async function createShop(user, event) {
     closedDates: [],
     orderEntryMode,
     shopCodeHash: hashShopCode(shopCode),
+    displayShopCode: shopCode,
     shopCodeVersion: 1,
     createdBy: user._id,
     createdAt: db.serverDate(),
@@ -246,6 +247,7 @@ function makeShopSettings(shop) {
   return {
     id: shop._id,
     name: shop.name,
+    displayShopCode: String(shop.displayShopCode || ''),
     acceptingOrders: shop.acceptingOrders !== false,
     closedDates: normalizeClosedDates(shop.closedDates),
     orderEntryMode: VALID_ENTRY_MODES.includes(shop.orderEntryMode) ? shop.orderEntryMode : 'store_entry',
@@ -290,6 +292,7 @@ async function rotateShopCode(context) {
   await db.collection('shops').doc(context.shopId).update({
     data: {
       shopCodeHash: hashShopCode(shopCode),
+      displayShopCode: shopCode,
       shopCodeVersion: Number(context.shop.shopCodeVersion || 0) + 1,
       updatedAt: db.serverDate(),
     },
@@ -302,6 +305,7 @@ function makePublicTable(table) {
     id: table._id,
     name: table.name,
     enabled: table.enabled !== false,
+    displayCode: String(table.displayCode || ''),
     sort: Number.isInteger(table.sort) ? table.sort : 0,
   };
 }
@@ -334,13 +338,14 @@ async function addTable(context, event) {
       name,
       enabled: true,
       entryCodeHash: hashShopCode(tableCode),
+      displayCode: tableCode,
       entryCodeVersion: 1,
       sort,
       createdAt: db.serverDate(),
       updatedAt: db.serverDate(),
     },
   });
-  return { ok: true, table: { id: created._id, name, enabled: true, sort }, tableCode };
+  return { ok: true, table: { id: created._id, name, enabled: true, displayCode: tableCode, sort }, tableCode };
 }
 
 async function updateTableEnabled(context, event) {
@@ -385,6 +390,7 @@ async function rotateTableCode(context, event) {
   await db.collection('shop_tables').doc(table._id).update({
     data: {
       entryCodeHash: hashShopCode(tableCode),
+      displayCode: tableCode,
       entryCodeVersion: Number(table.entryCodeVersion || 0) + 1,
       updatedAt: db.serverDate(),
     },

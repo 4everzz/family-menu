@@ -12,6 +12,7 @@ const routes = [
       { path: 'overview', name: 'overview', component: () => import('./views/Overview.vue'), meta: { title: '跨店总览' } },
       { path: 'shops', name: 'shops', component: () => import('./views/Shops.vue'), meta: { title: '店铺管理' } },
       { path: 'members', name: 'members', component: () => import('./views/Members.vue'), meta: { title: '管理员授权' } },
+      { path: 'users', name: 'users', component: () => import('./views/Users.vue'), meta: { title: '用户管理' } },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/overview' },

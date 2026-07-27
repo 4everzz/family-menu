@@ -121,6 +121,9 @@ async function getCustomerShopContext(user, event) {
     throw error;
   }
   const isViewAction = ['getCustomerMenu', 'listMyOrders', 'getMyOrder'].includes(event.action);
+  const memberResult = await db.collection('shop_members').where({ shopId, userId: user._id, enabled: true }).limit(1).get();
+  const member = memberResult.data[0] || null;
+  const canViewWithoutEntryToken = user.role === 'super_admin' || canManageShopData(member);
   if (entryToken) {
     const sessionResult = await db.collection('shop_entry_sessions').where({
       userId: user._id,
@@ -129,9 +132,8 @@ async function getCustomerShopContext(user, event) {
     }).limit(1).get();
     const session = sessionResult.data[0];
     if (!session || new Date(session.expiresAt || 0).getTime() <= Date.now()) {
-      if (isViewAction) {
-        // 浏览操作：会话过期后降级为成员身份浏览，不强制扫码
-        return { shopId, shop, table: null, session: null };
+      if (isViewAction && canViewWithoutEntryToken) {
+        return { shopId, shop, table: null, session: null, member };
       }
       const error = new Error('本次点餐已失效，请重新扫描店铺二维码');
       error.code = 'ENTRY_SESSION_EXPIRED';
@@ -142,8 +144,8 @@ async function getCustomerShopContext(user, event) {
       const tableResult = await db.collection('shop_tables').doc(session.tableId).get().catch(() => null);
       table = tableResult && tableResult.data;
       if (!table || table.shopId !== shopId || table.enabled === false) {
-        if (isViewAction) {
-          return { shopId, shop, table: null, session: null };
+        if (isViewAction && canViewWithoutEntryToken) {
+          return { shopId, shop, table: null, session: null, member };
         }
         const error = new Error('当前桌位已失效，请重新扫描桌码');
         error.code = 'TABLE_NOT_AVAILABLE';
@@ -151,18 +153,18 @@ async function getCustomerShopContext(user, event) {
       }
     }
     if (shop.orderEntryMode === 'table_required' && !table) {
-      if (isViewAction) {
-        return { shopId, shop, table: null, session: null };
+      if (isViewAction && canViewWithoutEntryToken) {
+        return { shopId, shop, table: null, session: null, member };
       }
       const error = new Error('请扫描本店桌码后下单');
       error.code = 'TABLE_REQUIRED';
       throw error;
     }
-    return { shopId, shop, table, session };
+    return { shopId, shop, table, session, member };
   }
-  // 没有会话令牌：仅浏览操作可通过店铺成员身份访问
-  if (isViewAction) {
-    return { shopId, shop, table: null, session: null };
+  // 没有会话令牌：仅店铺工作人员和超管可预览，普通顾客必须扫码进入
+  if (isViewAction && canViewWithoutEntryToken) {
+    return { shopId, shop, table: null, session: null, member };
   }
   const error = new Error('请先扫描店铺二维码后下单');
   error.code = 'ENTRY_SESSION_REQUIRED';

@@ -1,5 +1,9 @@
 const { getCurrentShop, setCurrentShop } = require('./shop-store');
 
+function isStaffShop(shop) {
+  return ['store_admin', 'store_owner', 'store_staff', 'super_admin'].includes(String(shop && shop.role || ''));
+}
+
 async function ensureCurrentShop() {
   let currentShop = getCurrentShop();
   if (currentShop && currentShop.id && (currentShop.accessMode === 'staff' || currentShop.entryToken)) return currentShop;
@@ -15,6 +19,7 @@ async function ensureCurrentShop() {
     const result = response.result || {};
     shops = result.ok && Array.isArray(result.shops) ? result.shops : [];
   }
+  shops = shops.filter(isStaffShop);
   if (shops.length !== 1) throw new Error('当前店铺信息不可用');
   const response = await wx.cloud.callFunction({
     name: 'shop-access',

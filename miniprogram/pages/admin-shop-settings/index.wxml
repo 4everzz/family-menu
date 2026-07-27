@@ -27,8 +27,20 @@
     <view class="security-card">
       <text class="section-title">店铺码</text>
       <text class="setting-note">重置后，原店铺码和二维码将立即失效</text>
-      <view wx:if="{{latestShopCode}}" class="new-code-row"><text class="new-code">新店铺码：{{latestShopCode}}</text><button class="copy-code-button" bindtap="copyLatestShopCode">复制</button></view>
-      <button wx:if="{{latestShopCode}}" class="copy-qr-button" bindtap="copyLatestShopQrContent">复制二维码内容</button>
+      <view wx:if="{{currentShopCode}}" class="code-panel">
+        <view class="code-copy" bindtap="copyLatestShopCode">
+          <text class="code-label">当前店铺码</text>
+          <text class="code-value">{{currentShopCode}}</text>
+        </view>
+        <view class="code-actions">
+          <button class="code-action-button secondary" bindtap="copyLatestShopCode">复制数字码</button>
+          <button class="code-action-button" bindtap="openShopQr">查看二维码</button>
+        </view>
+      </view>
+      <view wx:else class="code-unavailable">
+        <text>当前码不可查看，请重置后显示</text>
+      </view>
+      <button wx:if="{{currentShopCode}}" class="copy-qr-button" bindtap="copyLatestShopQrContent">复制二维码内容</button>
       <button class="rotate-button" loading="{{rotating}}" disabled="{{rotating}}" bindtap="rotateShopCode">{{rotateConfirming ? '再次点击确认重置' : '重置店铺码'}}</button>
     </view>
 
@@ -43,8 +55,14 @@
             <text class="table-name">{{item.name}}</text>
             <text class="table-status {{item.enabled ? 'active' : 'disabled'}}">{{item.enabled ? '可使用' : '已停用'}}</text>
           </view>
+          <view wx:if="{{item.displayCode}}" class="table-code-row" data-code="{{item.displayCode}}" bindtap="copyTableCode">
+            <text class="table-code-label">当前桌码</text>
+            <text class="table-code-value">{{item.displayCode}}</text>
+          </view>
+          <view wx:else class="table-code-missing"><text>当前码不可查看，请重置后显示</text></view>
           <view class="table-actions">
             <button class="table-action-button secondary" data-id="{{item.id}}" data-enabled="{{!item.enabled}}" loading="{{tableActionId === item.id}}" disabled="{{!!tableActionId}}" bindtap="toggleTableEnabled">{{item.enabled ? '停用' : '恢复'}}</button>
+            <button wx:if="{{item.displayCode}}" class="table-action-button secondary" data-code="{{item.displayCode}}" data-name="{{item.name}}" disabled="{{!!tableActionId}}" bindtap="openExistingTableQr">二维码</button>
             <button class="table-action-button" data-id="{{item.id}}" data-name="{{item.name}}" disabled="{{!!tableActionId}}" bindtap="rotateTableCode">重置码</button>
           </view>
         </view>
@@ -53,7 +71,7 @@
     </view>
     <view wx:if="{{showTableQr}}" class="qr-mask" bindtap="closeTableQr">
       <view class="qr-dialog" catchtap="stopQrTap">
-        <text class="qr-title">{{qrTableName}}桌码</text>
+        <text class="qr-title">{{qrTitle}}</text>
         <canvas class="table-qrcode" canvas-id="table-qrcode" style="width: {{qrCanvasSize}}px; height: {{qrCanvasSize}}px;"></canvas>
         <text class="qr-content">{{qrContent}}</text>
         <button class="qr-close-button" bindtap="closeTableQr">关闭</button>
