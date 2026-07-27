@@ -1,17 +1,36 @@
 const { dishes: defaultDishes, categories: defaultCategories } = require('../../data/menu');
 const { requireLogin } = require('../../utils/auth-guard');
 const { changeCartQuantity, clearCart, getCartItems, getCartSummary } = require('../../utils/cart-store');
-const { setCurrentShop, getCurrentShop } = require('../../utils/shop-store');
+const { setCurrentShop, getCurrentShop, clearCurrentShop } = require('../../utils/shop-store');
 const { callAdminMenu } = require('../../utils/shop-context');
 
 const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
 
-function readTableCode(value) {
+function readEntryCode(value) {
   const candidate = String(value || '').trim().toUpperCase();
-  const directCode = candidate.replace(/^TABLE:/, '');
+  const directCode = candidate.replace(/^(TABLE|SHOP):/, '');
   if (/^[A-Z0-9]{8}$/.test(directCode)) return directCode;
-  const match = candidate.match(/(?:^|[?&])TABLECODE=([A-Z0-9]{8})(?:&|$)/);
-  return match ? match[1] : '';
+  const match = candidate.match(/(?:^|[?&])(TABLECODE|SHOPCODE|CODE)=([A-Z0-9]{8})(?:&|$)/);
+  if (match) return match[2];
+  const sceneMatch = candidate.match(/(?:^|[?&])SCENE=(?:TABLE%3A|SHOP%3A)?([A-Z0-9]{8})(?:&|$)/);
+  if (sceneMatch) return sceneMatch[1];
+  return '';
+}
+
+function hasValidShopContext(shop) {
+  if (!shop || !shop.id) return false;
+  if (shop.accessMode === 'staff') return true;
+  return !!shop.entryToken;
+}
+
+function isStaffRole(role) {
+  return ['manager', 'super_admin', 'store_admin', 'store_owner', 'store_staff'].includes(String(role || ''));
+}
+
+function getEntryPromptHeight() {
+  const { windowHeight, windowWidth } = wx.getSystemInfoSync();
+  const rpxPerPixel = 750 / windowWidth;
+  return Math.max(560, Math.floor(windowHeight * rpxPerPixel - 360));
 }
 
 function normalizeDishSpiceConfig(dish, categories = defaultCategories) {
@@ -48,36 +67,102 @@ Page({
     selectedDish: null,
     selectedSpicy: '',
     customRemark: '',
-    shopName: '当前店铺',
+    shopName: '暂未进入店铺',
     tableName: '暂未扫码',
+    hasShopContext: false,
+    canSelectShop: false,
+    staffShops: [],
+    entryLoading: false,
+    manualEntryCode: '',
   },
   onLoad() {
     this.updateMenuHeight();
   },
   async onShow() {
-    if (!(await requireLogin())) return;
+    console.log('[menu] onShow start');
+    const user = await requireLogin();
+    if (!user) {
+      this.resetEntryState();
+      return;
+    }
     this.syncTabBar();
     var shop = getCurrentShop();
-    if (!shop || !shop.id) {
-      try {
-        var shopsRes = await wx.cloud.callFunction({ name: 'shop-access', data: { action: 'listMyShops' } });
-        var shops = (shopsRes.result && shopsRes.result.ok && shopsRes.result.shops) || [];
-        if (shops.length > 0) {
-          var joinRes = await wx.cloud.callFunction({ name: 'shop-access', data: { action: 'rejoinShop', shopId: shops[0].id } });
-          var joinData = joinRes.result || {};
-          if (joinData.ok && joinData.shop) {
-            setCurrentShop(joinData.shop);
-          }
-        }
-      } catch (e) {}
-    }
-    shop = getCurrentShop();
+    const hasShop = hasValidShopContext(shop) && (shop.accessMode !== 'staff' || isStaffRole(shop.role));
     this.setData({
-      shopName: shop && shop.name ? shop.name : '当前店铺',
+      hasShopContext: hasShop,
+      shopName: hasShop && shop.name ? shop.name : '暂未进入店铺',
       tableName: shop && shop.tableName ? shop.tableName : '暂未扫码',
     });
-    await this.loadCloudMenu();
+    if (!hasShop) {
+      await this.prepareEntryHome(user);
+      return;
+    }
+    const loaded = await this.loadCloudMenu();
+    if (!loaded) {
+      clearCurrentShop();
+      await this.prepareEntryHome(user);
+      return;
+    }
     this.renderDishes();
+  },
+  resetEntryState() {
+    menuDishes = [];
+    this.setData({
+      hasShopContext: false,
+      canSelectShop: false,
+      staffShops: [],
+      shopName: '暂未进入店铺',
+      tableName: '暂未扫码',
+      categories: [{ id: 'all', name: '全部' }],
+      activeCategory: 'all',
+      dishes: [],
+      keyword: '',
+      menuError: '',
+      manualEntryCode: '',
+      menuHeight: getEntryPromptHeight(),
+      cartDrawerOpen: false,
+      selectedDish: null,
+    });
+    this.renderCartOnly();
+  },
+  async prepareEntryHome(user) {
+    this.resetEntryState();
+    this.setData({ entryLoading: true });
+    try {
+      let shops = [];
+      if (user.role === 'super_admin') {
+        const response = await wx.cloud.callFunction({ name: 'shop-admin', data: { action: 'listShops' } });
+        const result = response.result || {};
+        shops = result.ok ? (result.shops || []) : [];
+      } else {
+        const response = await wx.cloud.callFunction({ name: 'shop-access', data: { action: 'listMyShops' } });
+        const result = response.result || {};
+        shops = result.ok ? (result.shops || []).filter((item) => isStaffRole(item.role)) : [];
+      }
+      this.setData({
+        canSelectShop: shops.length > 0,
+        staffShops: shops.map((item) => ({
+          ...item,
+          roleText: item.role === 'store_staff' ? '二级管理员' : (item.role === 'super_admin' ? '超级管理员' : '一级管理员'),
+        })),
+      });
+    } catch (error) {
+      this.setData({ canSelectShop: false, staffShops: [] });
+    } finally {
+      this.setData({ entryLoading: false });
+    }
+  },
+  updateManualEntryCode(event) {
+    this.setData({ manualEntryCode: String(event.detail.value || '').trim().toUpperCase() });
+  },
+  async submitManualEntryCode() {
+    console.log('[menu] submitManualEntryCode called, code:', this.data.manualEntryCode);
+    const entryCode = readEntryCode(this.data.manualEntryCode);
+    if (!entryCode) {
+      wx.showToast({ title: '请输入8位店铺码或桌码', icon: 'none' });
+      return;
+    }
+    await this.enterByEntryCode(entryCode);
   },
   syncTabBar() {
     const tabBar = this.getTabBar && this.getTabBar();
@@ -100,11 +185,15 @@ Page({
     if (!wx.cloud) {
       menuDishes = [];
       this.setData({ categories: [{ id: 'all', name: '全部' }], menuError: '店铺服务未初始化' }, () => this.renderDishes());
-      return;
+      return false;
     }
     try {
       const result = await callAdminMenu('getCustomerMenu');
-      if (!result.ok) throw new Error(result.message || '菜单读取失败');
+      if (!result.ok) {
+        const error = new Error(result.message || '菜单读取失败');
+        error.code = result.code || '';
+        throw error;
+      }
       const cloudDishes = Array.isArray(result.dishes) ? result.dishes : [];
       const cloudCategories = Array.isArray(result.categories) ? result.categories : [];
       const spiceCategories = cloudCategories.length ? cloudCategories : defaultCategories;
@@ -122,10 +211,16 @@ Page({
         ? [{ id: 'all', name: '全部' }, ...validCategories]
         : defaultCategories;
       this.setData({ categories, activeCategory: 'all', menuScrollTop: 0, menuError: '' }, () => this.renderDishes());
+      return true;
     } catch (error) {
       menuDishes = [];
-      var msg = error.message || '暂时无法读取店铺菜单';
-      this.setData({ categories: [{ id: 'all', name: '全部' }], activeCategory: 'all', menuError: msg }, () => this.renderDishes());
+      if (['ENTRY_SESSION_REQUIRED', 'ENTRY_SESSION_EXPIRED', 'SHOP_CONTEXT_REQUIRED'].includes(error.code)) {
+        this.resetEntryState();
+        return false;
+      }
+      this.resetEntryState();
+      wx.showToast({ title: error.message || '暂时无法读取店铺菜单', icon: 'none' });
+      return false;
     }
   },
   selectCategory(event) {
@@ -234,38 +329,85 @@ Page({
       },
     });
   },
-  goToMyShops() {
-    wx.switchTab({ url: '/pages/profile/index' });
-  },
   scanTableCodeFromMenu() {
     wx.scanCode({
       success: async (result) => {
-        const tableCode = readTableCode(result.result || result.path || '');
-        if (!tableCode) {
-          wx.showToast({ title: '未识别到桌码', icon: 'none' });
+        const entryCode = readEntryCode(result.result || result.path || '');
+        if (!entryCode) {
+          wx.showToast({ title: '未识别到店铺码或桌码', icon: 'none' });
           return;
         }
-        wx.showLoading({ title: '确认桌位' });
-        try {
-          const response = await wx.cloud.callFunction({
-            name: 'shop-access',
-            data: { action: 'joinWithTableCode', tableCode },
-          });
-          const data = response.result || {};
-          if (!data.ok || !data.shop || !setCurrentShop(data.shop)) throw new Error(data.message || '桌位确认失败');
-          this.setData({
-            shopName: data.shop.name || this.data.shopName,
-            tableName: data.shop.tableName || '暂未扫码',
-          });
-          await this.loadCloudMenu();
-          wx.showToast({ title: `已确认${data.shop.tableName || '桌位'}`, icon: 'success' });
-        } catch (error) {
-          wx.showToast({ title: error.message || '桌位确认失败', icon: 'none' });
-        } finally {
-          wx.hideLoading();
-        }
+        await this.enterByEntryCode(entryCode);
       },
       fail: () => wx.showToast({ title: '未完成扫码', icon: 'none' }),
+    });
+  },
+  async enterByEntryCode(entryCode) {
+    wx.showLoading({ title: '进入店铺' });
+    try {
+      console.log('[menu] enterByEntryCode called with:', entryCode);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('云函数请求超时，请检查网络或云函数部署')), 15000)
+      );
+      const response = await Promise.race([
+        wx.cloud.callFunction({
+          name: 'shop-access',
+          data: { action: 'joinWithShopCode', shopCode: entryCode },
+        }),
+        timeoutPromise,
+      ]);
+      console.log('[menu] cloud fn returned:', (response.result || {}).ok);
+      const data = response.result || {};
+      if (!data.ok || !data.shop || !setCurrentShop(data.shop)) throw new Error(data.message || '进入店铺失败');
+      this.setData({
+        hasShopContext: true,
+        manualEntryCode: '',
+        shopName: data.shop.name || this.data.shopName,
+        tableName: data.shop.tableName || '暂未扫码',
+      });
+      const loaded = await this.loadCloudMenu();
+      if (!loaded) {
+        clearCurrentShop();
+        return;
+      }
+      this.renderDishes();
+      wx.showToast({ title: `已确认${data.shop.tableName || '店铺'}`, icon: 'success' });
+    } catch (error) {
+      console.log('[menu] enterByEntryCode error:', error.message);
+      wx.showToast({ title: error.message || '进入店铺失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
+  },
+  enterStaffShop(event) {
+    const shopId = event.currentTarget.dataset.id;
+    if (!shopId || this.data.entryLoading) return;
+    this.setData({ entryLoading: true });
+    wx.cloud.callFunction({
+      name: 'shop-access',
+      data: { action: 'rejoinShop', shopId },
+    }).then(async (response) => {
+      const result = response.result || {};
+      if (!result.ok || !result.shop || !setCurrentShop(result.shop)) throw new Error(result.message || '进入店铺失败');
+      this.setData({
+        hasShopContext: true,
+        canSelectShop: false,
+        staffShops: [],
+        shopName: result.shop.name || '当前店铺',
+        tableName: result.shop.tableName || '暂未扫码',
+      });
+      const loaded = await this.loadCloudMenu();
+      if (!loaded) {
+        clearCurrentShop();
+        const user = await requireLogin();
+        if (user) await this.prepareEntryHome(user);
+        return;
+      }
+      this.renderDishes();
+    }).catch((error) => {
+      wx.showToast({ title: error.message || '进入店铺失败', icon: 'none' });
+    }).finally(() => {
+      this.setData({ entryLoading: false });
     });
   },
   goCheckout() {
@@ -281,6 +423,10 @@ Page({
     });
     const summary = getCartSummary();
     this.setData({ cartItems, cartCount: summary.count, cartTotal: summary.total });
+  },
+  renderCartOnly() {
+    const summary = getCartSummary();
+    this.setData({ cartItems: [], cartCount: summary.count, cartTotal: summary.total });
   },
   renderDishes() {
     const app = getApp();

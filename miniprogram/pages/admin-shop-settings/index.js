@@ -21,6 +21,7 @@ Page({
     changingEntryMode: false,
     closedDates: [],
     selectedDate: getChinaDateKey(),
+    currentShopCode: '',
     latestShopCode: '',
     tables: [],
     tableName: '',
@@ -29,7 +30,7 @@ Page({
     latestTableCode: '',
     latestTableName: '',
     showTableQr: false,
-    qrTableName: '',
+    qrTitle: '',
     qrContent: '',
     qrCanvasSize: 260,
   },
@@ -55,6 +56,7 @@ Page({
       this.setData({
         loading: false,
         shopName: result.settings.name,
+        currentShopCode: result.settings.displayShopCode || '',
         acceptingOrders: result.settings.acceptingOrders !== false,
         orderEntryMode: result.settings.orderEntryMode === 'table_required' ? 'table_required' : 'store_entry',
         closedDates: result.settings.closedDates || [],
@@ -143,7 +145,7 @@ Page({
     this.setData({ rotating: true, rotateConfirming: false });
     this.callShopAdmin('rotateShopCode').then((result) => {
       if (!result.ok || !result.shopCode) throw new Error(result.message || '重置店铺码失败');
-      this.setData({ rotating: false, latestShopCode: result.shopCode });
+      this.setData({ rotating: false, currentShopCode: result.shopCode, latestShopCode: result.shopCode });
       wx.setClipboardData({
         data: result.shopCode,
         success: () => wx.showToast({ title: '新店铺码已复制', icon: 'success' }),
@@ -155,7 +157,7 @@ Page({
     });
   },
   copyLatestShopCode() {
-    const shopCode = this.data.latestShopCode;
+    const shopCode = this.data.latestShopCode || this.data.currentShopCode;
     if (!shopCode) return;
     wx.setClipboardData({
       data: shopCode,
@@ -164,13 +166,18 @@ Page({
     });
   },
   copyLatestShopQrContent() {
-    const shopCode = this.data.latestShopCode;
+    const shopCode = this.data.latestShopCode || this.data.currentShopCode;
     if (!shopCode) return;
     wx.setClipboardData({
       data: `SHOP:${shopCode}`,
       success: () => wx.showToast({ title: '二维码内容已复制', icon: 'success' }),
       fail: () => wx.showToast({ title: '复制失败，请重试', icon: 'none' }),
     });
+  },
+  openShopQr() {
+    const shopCode = this.data.latestShopCode || this.data.currentShopCode;
+    if (!shopCode) return;
+    this.openCodeQr('店铺码二维码', `SHOP:${shopCode}`);
   },
   updateTableName(event) {
     this.setData({ tableName: event.detail.value });
@@ -225,7 +232,11 @@ Page({
         try {
           const result = await this.callShopAdmin('rotateTableCode', { id });
           if (!result.ok || !result.tableCode) throw new Error(result.message || '重置桌位码失败');
-          this.setData({ latestTableName: name, latestTableCode: result.tableCode });
+          this.setData({
+            latestTableName: name,
+            latestTableCode: result.tableCode,
+            tables: this.data.tables.map((table) => (table.id === id ? { ...table, displayCode: result.tableCode } : table)),
+          });
           wx.setClipboardData({ data: result.tableCode, success: () => wx.showToast({ title: '新桌位码已复制', icon: 'success' }) });
         } catch (error) {
           wx.showToast({ title: error.message || '重置桌位码失败', icon: 'none' });
@@ -243,15 +254,32 @@ Page({
       fail: () => wx.showToast({ title: '复制失败，请重试', icon: 'none' }),
     });
   },
+  copyTableCode(event) {
+    const code = event.currentTarget.dataset.code;
+    if (!code) return;
+    wx.setClipboardData({
+      data: code,
+      success: () => wx.showToast({ title: '桌位码已复制', icon: 'success' }),
+      fail: () => wx.showToast({ title: '复制失败，请重试', icon: 'none' }),
+    });
+  },
+  openExistingTableQr(event) {
+    const code = event.currentTarget.dataset.code;
+    const name = event.currentTarget.dataset.name || '桌位';
+    if (!code) return;
+    this.openCodeQr(`${name}桌码`, `TABLE:${code}`);
+  },
   openTableQr() {
     const tableCode = this.data.latestTableCode;
     if (!tableCode) return;
-    const qrContent = `TABLE:${tableCode}`;
+    this.openCodeQr(`${this.data.latestTableName}桌码`, `TABLE:${tableCode}`);
+  },
+  openCodeQr(title, qrContent) {
     const systemInfo = wx.getSystemInfoSync ? wx.getSystemInfoSync() : { windowWidth: 375 };
     const qrCanvasSize = Math.floor(Math.min(systemInfo.windowWidth - 88, systemInfo.windowWidth * 0.7));
     this.setData({
       showTableQr: true,
-      qrTableName: this.data.latestTableName,
+      qrTitle: title,
       qrContent,
       qrCanvasSize,
     }, () => {
