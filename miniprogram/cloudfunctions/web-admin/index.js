@@ -626,6 +626,18 @@ async function getShopNameMap() {
   return new Map(result.data.map((shop) => [shop._id, shop.name]));
 }
 
+async function fetchPlatformOrders(range, fields) {
+  const orders = [];
+  for (let skip = 0; skip < PLATFORM_ORDER_FETCH_LIMIT; skip += 100) {
+    const result = await db.collection('orders').where({
+      createdAtServer: _.gte(range.start).and(_.lt(range.end)),
+    }).field(fields).skip(skip).limit(100).get();
+    orders.push(...result.data);
+    if (result.data.length < 100) break;
+  }
+  return { orders, truncated: orders.length >= PLATFORM_ORDER_FETCH_LIMIT };
+}
+
 async function listPlatformOrders(payload) {
   const range = getChinaDateRange(payload);
   if (range.error) return { ok: false, code: 'INVALID_DATE_RANGE', message: range.error };
@@ -636,21 +648,12 @@ async function listPlatformOrders(payload) {
   }
   const pageSize = Math.min(Math.max(Number(payload.pageSize) || 20, 10), 50);
   const page = Math.max(Number(payload.page) || 1, 1);
-  const allOrders = [];
-
   // 先按日期读取并在云函数内筛选，避免组合筛选依赖额外的数据库复合索引。
-  for (let skip = 0; skip < PLATFORM_ORDER_FETCH_LIMIT; skip += 100) {
-    const result = await db.collection('orders').where({
-      createdAtServer: _.gte(range.start).and(_.lt(range.end)),
-    }).field({
-      id: true, shopId: true, tableName: true, orderChannel: true, status: true,
-      total: true, createdAt: true, createdAtServer: true, updatedAt: true,
-    }).skip(skip).limit(100).get();
-    allOrders.push(...result.data);
-    if (result.data.length < 100) break;
-  }
-  const truncated = allOrders.length >= PLATFORM_ORDER_FETCH_LIMIT;
-  const filtered = allOrders
+  const source = await fetchPlatformOrders(range, {
+    id: true, shopId: true, tableName: true, orderChannel: true, status: true,
+    total: true, createdAt: true, createdAtServer: true, updatedAt: true,
+  });
+  const filtered = source.orders
     .filter((order) => (!shopId || order.shopId === shopId) && (!status || order.status === status))
     .sort((left, right) => getOrderTimestamp(right) - getOrderTimestamp(left));
   const shopNames = await getShopNameMap();
@@ -663,7 +666,7 @@ async function listPlatformOrders(payload) {
     pageSize,
     total: filtered.length,
     hasMore: startIndex + orders.length < filtered.length,
-    truncated,
+    truncated: source.truncated,
     dateStart: range.dateStart,
     dateEnd: range.dateEnd,
   };
@@ -676,6 +679,109 @@ async function getPlatformOrderDetail(payload) {
   if (!result || !result.data) return { ok: false, code: 'ORDER_NOT_FOUND', message: '订单不存在或已删除' };
   const shopNames = await getShopNameMap();
   return { ok: true, order: makePlatformOrderDetail(result.data, shopNames) };
+}
+
+function createDateBuckets(range) {
+  const buckets = new Map();
+  for (let time = range.start.getTime(); time < range.end.getTime(); time += 24 * 60 * 60 * 1000) {
+    const dateKey = getChinaDateKeyOf(new Date(time));
+    buckets.set(dateKey, { dateKey, revenue: 0, orderCount: 0 });
+  }
+  return buckets;
+}
+
+async function getPlatformReport(payload) {
+  const range = getChinaDateRange(payload);
+  if (range.error) return { ok: false, code: 'INVALID_DATE_RANGE', message: range.error };
+  const shopId = String(payload.shopId || '').trim();
+  const source = await fetchPlatformOrders(range, {
+    shopId: true, status: true, total: true, items: true, createdAtServer: true,
+  });
+  const orders = source.orders.filter((order) => !shopId || order.shopId === shopId);
+  const shopNames = await getShopNameMap();
+  const daily = createDateBuckets(range);
+  const shops = new Map();
+  const dishes = new Map();
+  let revenue = 0;
+  let completedCount = 0;
+  let makingCount = 0;
+
+  orders.forEach((order) => {
+    const total = Number(order.total) || 0;
+    revenue += total;
+    if (order.status === '已完成') completedCount += 1;
+    if (order.status === '制作中') makingCount += 1;
+    const dateKey = getChinaDateKeyOf(new Date(order.createdAtServer));
+    const day = daily.get(dateKey);
+    if (day) { day.revenue += total; day.orderCount += 1; }
+    const shop = shops.get(order.shopId) || { shopId: order.shopId, orderCount: 0, revenue: 0 };
+    shop.orderCount += 1;
+    shop.revenue += total;
+    shops.set(order.shopId, shop);
+    (Array.isArray(order.items) ? order.items : []).forEach((item) => {
+      const name = String(item.name || '菜品');
+      const dish = dishes.get(name) || { name, quantity: 0, revenue: 0 };
+      const quantity = Number(item.quantity) || 0;
+      dish.quantity += quantity;
+      dish.revenue += (Number(item.price) || 0) * quantity;
+      dishes.set(name, dish);
+    });
+  });
+  return {
+    ok: true,
+    report: {
+      dateStart: range.dateStart,
+      dateEnd: range.dateEnd,
+      orderCount: orders.length,
+      revenue: Number(revenue.toFixed(2)),
+      completedCount,
+      makingCount,
+      averageOrderValue: orders.length ? Number((revenue / orders.length).toFixed(2)) : 0,
+      daily: [...daily.values()].map((item) => ({ ...item, revenue: Number(item.revenue.toFixed(2)) })),
+      topShops: [...shops.values()]
+        .map((item) => ({ ...item, name: shopNames.get(item.shopId) || '（未知店铺）', revenue: Number(item.revenue.toFixed(2)) }))
+        .sort((left, right) => right.revenue - left.revenue || right.orderCount - left.orderCount).slice(0, 10),
+      topDishes: [...dishes.values()]
+        .map((item) => ({ ...item, revenue: Number(item.revenue.toFixed(2)) }))
+        .sort((left, right) => right.quantity - left.quantity || right.revenue - left.revenue).slice(0, 10),
+      truncated: source.truncated,
+    },
+  };
+}
+
+async function exportPlatformOrders(payload) {
+  const range = getChinaDateRange(payload);
+  if (range.error) return { ok: false, code: 'INVALID_DATE_RANGE', message: range.error };
+  const shopId = String(payload.shopId || '').trim();
+  const status = String(payload.status || '').trim();
+  if (status && !PLATFORM_ORDER_STATUSES.includes(status)) return { ok: false, code: 'INVALID_ORDER_STATUS', message: '订单状态无效' };
+  const source = await fetchPlatformOrders(range, {
+    id: true, shopId: true, tableName: true, orderChannel: true, status: true, total: true,
+    createdAt: true, createdAtServer: true, remark: true, items: true,
+  });
+  const shopNames = await getShopNameMap();
+  const rows = [];
+  source.orders
+    .filter((order) => (!shopId || order.shopId === shopId) && (!status || order.status === status))
+    .sort((left, right) => getOrderTimestamp(right) - getOrderTimestamp(left))
+    .forEach((order) => {
+      const items = Array.isArray(order.items) && order.items.length ? order.items : [{}];
+      items.forEach((item) => rows.push({
+        orderId: order.id || order._id,
+        createdAt: formatChinaDateTime(order.createdAtServer, order.createdAt),
+        shopName: shopNames.get(order.shopId) || '（未知店铺）',
+        tableName: order.tableName || '未扫码桌位',
+        channel: order.orderChannel === 'table' ? '桌码下单' : '店铺入口下单',
+        status: order.status || '',
+        dishName: item.name || '',
+        options: item.optionsText || (Array.isArray(item.options) ? item.options.join('、') : ''),
+        price: Number(item.price || 0).toFixed(2),
+        quantity: Number(item.quantity || 0),
+        total: Number(order.total || 0).toFixed(2),
+        remark: order.remark || '',
+      }));
+    });
+  return { ok: true, rows, truncated: source.truncated, dateStart: range.dateStart, dateEnd: range.dateEnd };
 }
 
 // ==== 业务：跨店数据总览（#12）====
@@ -856,6 +962,10 @@ async function handleAuthedAction(action, payload, session) {
       return listPlatformOrders(payload);
     case 'getPlatformOrderDetail':
       return getPlatformOrderDetail(payload);
+    case 'getPlatformReport':
+      return getPlatformReport(payload);
+    case 'exportPlatformOrders':
+      return exportPlatformOrders(payload);
     // #12 跨店总览
     case 'getPlatformOverview':
       return getPlatformOverview();
