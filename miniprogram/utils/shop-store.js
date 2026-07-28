@@ -23,9 +23,11 @@ function setCurrentShop(shop) {
   if (!normalized.id || !normalized.name) return false;
   const app = getApp();
   const previous = getCurrentShop();
-  if (previous && previous.id && (
-    previous.id !== normalized.id || previous.tableId !== normalized.tableId
-  )) {
+  const switchedShop = previous && previous.id && previous.id !== normalized.id;
+  const changedTable = previous && previous.id === normalized.id && previous.tableId !== normalized.tableId;
+  // 同店从未确认桌位变为首次确认桌位时，保留顾客已选菜品。
+  const isConfirmingFirstTable = changedTable && !previous.tableId && !!normalized.tableId;
+  if (switchedShop || (changedTable && !isConfirmingFirstTable)) {
     app.globalData.cart = [];
     app.saveCart();
   }

@@ -61,7 +61,9 @@
 .dish-price { color: #DC2626; font-size: 30rpx; font-weight: 700; line-height: 1.2; }
 .dish-action { width: 164rpx; flex: 0 0 164rpx; display: flex; align-items: center; justify-content: flex-end; }
 .soldout-label { padding: 10rpx 14rpx; border-radius: 12rpx; background: #FFFBEB; color: #B45309; font-size: 24rpx; font-weight: 700; white-space: nowrap; }
-.add-button { width: 64rpx !important; min-width: 64rpx; height: 64rpx; margin: 0; padding: 0; border-radius: 32rpx; background: #DC2626; color: #FFFFFF; font-family: sans-serif; font-size: 38rpx; font-weight: 700; line-height: 60rpx; box-shadow: 0 5rpx 10rpx rgba(220, 38, 38, .18); }
+.add-button { width: 64rpx !important; max-width: 64rpx; min-width: 64rpx; height: 64rpx; margin: 0; padding: 0; border-radius: 32rpx; background: #DC2626; color: #FFFFFF; font-family: sans-serif; font-size: 38rpx; font-weight: 700; line-height: 60rpx; box-shadow: 0 5rpx 10rpx rgba(220, 38, 38, .18); box-sizing: border-box; }
+.add-button::after { border: 0; }
+.add-button.secondary { background: #FEE2E2; color: #B91C1C; box-shadow: none; }
 .dish-quick-add { min-width: 92rpx; display: flex; align-items: center; justify-content: flex-end; gap: 12rpx; }
 .quantity-label { min-width: 36rpx; color: #B91C1C; font-size: 28rpx; font-weight: 700; text-align: center; white-space: nowrap; }
 .cart-bar { position: fixed; left: 24rpx; right: 24rpx; bottom: calc(148rpx + env(safe-area-inset-bottom)); z-index: 20; width: auto; height: 96rpx; display: flex; align-items: stretch; margin: 0; padding: 0; overflow: hidden; border-radius: 48rpx; background: #171717; color: #FFFFFF; box-shadow: 0 12rpx 28rpx rgba(69, 10, 10, .2); box-sizing: border-box; }

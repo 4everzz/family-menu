@@ -2,7 +2,7 @@ const { requireLogin } = require('../../utils/auth-guard');
 const { getCartItems, getCartSummary, submitCartOrder } = require('../../utils/cart-store');
 const { callAdminMenu } = require('../../utils/shop-context');
 const { getCurrentShop } = require('../../utils/shop-store');
-const { readShopCache } = require('../../utils/shop-cache');
+const { readShopCache, refreshDishImageUrls, hasMissingDishImageUrls } = require('../../utils/shop-cache');
 Page({
   data: {
     loading: true,
@@ -42,8 +42,16 @@ Page({
         }
         dishes = result.dishes || [];
       }
-      const imageUrls = new Map(dishes.map((dish) => [dish.id, dish.imageUrl || '']));
-      const items = rawItems.map((item) => ({ ...item, imageUrl: imageUrls.get(item.id) || item.imageUrl || '' }));
+      let freshDishes = await refreshDishImageUrls(dishes);
+      if (hasMissingDishImageUrls(dishes, freshDishes)) {
+        const result = await callAdminMenu('getCustomerMenu');
+        if (result.ok) freshDishes = result.dishes || freshDishes;
+      }
+      const imageUrls = new Map(freshDishes.map((dish) => [dish.id, dish.imageUrl || '']));
+      const items = rawItems.map((item) => ({
+        ...item,
+        imageUrl: imageUrls.get(item.id) || (item.imageFileId ? '' : (item.imageUrl || '')),
+      }));
       const summary = getCartSummary();
       this.setData({ items, total: summary.total, remark: getApp().globalData.checkoutRemark || '' });
     } catch (error) {

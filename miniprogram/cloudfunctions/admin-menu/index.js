@@ -233,10 +233,17 @@ async function syncDailyInventory(shopId) {
 async function attachTemporaryImageUrls(dishes) {
   const fileIds = [...new Set(dishes.map((dish) => normalizeImageFileId(dish.imageFileId)).filter(Boolean))];
   if (!fileIds.length) return dishes.map((dish) => ({ ...dish, imageUrl: '' }));
-  const result = await cloud.getTempFileURL({ fileList: fileIds });
-  const imageUrls = new Map((result.fileList || [])
-    .filter((item) => item.status === 0 && item.tempFileURL)
-    .map((item) => [item.fileID, item.tempFileURL]));
+  const imageUrls = new Map();
+  // 单次换取临时链接数量有限，菜品较多时分批处理，避免后续图片缺失。
+  for (let index = 0; index < fileIds.length; index += 50) {
+    try {
+      const result = await cloud.getTempFileURL({ fileList: fileIds.slice(index, index + 50) });
+      (result.fileList || []).filter((item) => item.status === 0 && item.tempFileURL)
+        .forEach((item) => imageUrls.set(item.fileID, item.tempFileURL));
+    } catch (error) {
+      // 单批失败不影响其他菜品图片，缺失图片会回退到菜品默认图标。
+    }
+  }
   return dishes.map((dish) => ({
     ...dish,
     imageUrl: imageUrls.get(normalizeImageFileId(dish.imageFileId)) || '',
