@@ -1,10 +1,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { callApi } from '../api.js';
 
 const loading = ref(true);
 const error = ref('');
 const data = ref(null);
+const router = useRouter();
 
 const money = (n) => '¥' + Number(n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const int = (n) => Number(n || 0).toLocaleString('zh-CN');
@@ -32,7 +34,10 @@ onMounted(load);
       <p class="page-eyebrow">今日 · {{ data?.dateKey || '——' }}（北京时间）</p>
       <h2 class="page-title">平台经营概览</h2>
     </div>
-    <button class="btn btn-sm" @click="load" :disabled="loading">{{ loading ? '刷新中…' : '刷新' }}</button>
+    <div class="row">
+      <button class="btn btn-sm" @click="router.push({ name: 'orders' })">查看订单</button>
+      <button class="btn btn-sm" @click="load" :disabled="loading">{{ loading ? '刷新中…' : '刷新' }}</button>
+    </div>
   </div>
 
   <p v-if="error" class="notice notice-error">{{ error }}</p>

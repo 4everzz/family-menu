@@ -75,6 +75,10 @@ async function ensureDefaultShop() {
     shopCodeHash: hashEntryCode(shopCode),
     displayShopCode: shopCode,
     shopCodeVersion: 1,
+    menuVersion: 0,
+    orderVersion: 0,
+    memberVersion: 0,
+    settingsVersion: 0,
     createdAt: db.serverDate(),
     updatedAt: db.serverDate(),
   };
@@ -198,6 +202,64 @@ async function listMyShops(openId) {
     }
   }
   return { ok: true, shops };
+}
+
+function isShopManagerRole(role) {
+  return ['store_admin', 'store_owner', 'store_staff'].includes(String(role || ''));
+}
+
+async function getCurrentShopSnapshot(openId, event) {
+  const user = await findUserByOpenId(openId);
+  if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+  const shopId = String(event.shopId || '').trim();
+  if (!shopId) return { ok: false, code: 'SHOP_REQUIRED', message: '请先进入店铺' };
+
+  const shopResult = await db.collection('shops').doc(shopId).get().catch(() => null);
+  const shop = shopResult && shopResult.data;
+  if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺不存在或已停用' };
+
+  const memberResult = await db.collection('shop_members')
+    .where({ shopId, userId: user._id, enabled: true }).limit(1).get();
+  const member = memberResult.data[0] || null;
+  const role = user.role === ROLE.SUPER_ADMIN ? ROLE.SUPER_ADMIN : (member ? member.role : ROLE.CUSTOMER);
+  const isManager = user.role === ROLE.SUPER_ADMIN || isShopManagerRole(role);
+  const entryToken = String(event.entryToken || '').trim();
+
+  if (!isManager) {
+    if (!entryToken) return { ok: false, code: 'ENTRY_SESSION_REQUIRED', message: '请扫描店铺码或桌码后进入' };
+    const sessionResult = await db.collection('shop_entry_sessions').where({
+      userId: user._id,
+      shopId,
+      tokenHash: hashEntryCode(entryToken),
+    }).limit(1).get();
+    const session = sessionResult.data[0];
+    if (!session || new Date(session.expiresAt || 0).getTime() <= Date.now()) {
+      return { ok: false, code: 'ENTRY_SESSION_EXPIRED', message: '本次点餐已失效，请重新扫描店铺二维码' };
+    }
+    if (session.tableId) {
+      const tableResult = await db.collection('shop_tables').doc(session.tableId).get().catch(() => null);
+      const table = tableResult && tableResult.data;
+      if (!table || table.shopId !== shopId || table.enabled === false) {
+        return { ok: false, code: 'TABLE_NOT_AVAILABLE', message: '当前桌位已失效，请重新扫描桌码' };
+      }
+    } else if (shop.orderEntryMode === 'table_required') {
+      return { ok: false, code: 'TABLE_REQUIRED', message: '请扫描本店桌码后进入点餐' };
+    }
+  }
+
+  return {
+    ok: true,
+    access: {
+      role,
+      isManager,
+      versions: {
+        menu: Number(shop.menuVersion) || 0,
+        orders: Number(shop.orderVersion) || 0,
+        members: Number(shop.memberVersion) || 0,
+        settings: Number(shop.settingsVersion) || 0,
+      },
+    },
+  };
 }
 
 
@@ -331,6 +393,7 @@ exports.main = async (event) => {
     if (event.action === 'joinWithShopCode') return await joinWithShopCode(openId, event);
     if (event.action === 'joinWithTableCode') return await joinWithTableCode(openId, event);
     if (event.action === 'rejoinShop') return await rejoinShop(openId, event);
+    if (event.action === 'getCurrentShopSnapshot') return await getCurrentShopSnapshot(openId, event);
     if (event.action === 'getMigrationStatus') return await getMigrationStatus(openId);
     return { ok: false, code: 'UNKNOWN_ACTION', message: '未知操作' };
   } catch (error) {

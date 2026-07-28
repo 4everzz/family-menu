@@ -75,6 +75,15 @@ function canManageShopData(member) {
   return member && ['store_admin', 'store_owner', 'store_staff'].includes(member.role);
 }
 
+async function bumpShopVersions(shopId, components) {
+  const version = Date.now();
+  const data = { updatedAt: db.serverDate() };
+  components.forEach((component) => {
+    data[`${component}Version`] = version;
+  });
+  await db.collection('shops').doc(shopId).update({ data });
+}
+
 async function getShopContext(user, event, requireStoreAdmin = false) {
   const shopId = String(event.shopId || '').trim();
   if (!shopId) {
@@ -235,7 +244,8 @@ async function attachTemporaryImageUrls(dishes) {
 }
 
 async function getCustomerMenu(shopId) {
-  await syncDailyInventory(shopId);
+  const inventoryResult = await syncDailyInventory(shopId);
+  if (inventoryResult.reset > 0) await bumpShopVersions(shopId, ['menu']);
   const [dishes, categories] = await Promise.all([getAllDishes(shopId), getAllCategories(shopId)]);
   const visibleDishes = applyDishSpiceConfig(dishes.filter((dish) => dish && dish.id && dish.name && dish.enabled !== false), categories);
   return { dishes: await attachTemporaryImageUrls(visibleDishes), categories };
@@ -354,6 +364,7 @@ async function createOrder(openId, ownerUserId, shopContext, event) {
       await transaction.collection('orders').add({ data: order });
       return order;
     });
+    await bumpShopVersions(shopContext.shopId, ['menu', 'order']);
     return { ok: true, order };
   } catch (error) {
     return {
@@ -584,7 +595,7 @@ exports.main = async (event) => {
     const customerActions = ['createOrder', 'syncDailyInventory', 'getCustomerMenu', 'listMyOrders', 'getMyOrder'];
     if (customerActions.includes(event.action)) {
       const shopContext = await getCustomerShopContext(user, event);
-      if (event.action === 'createOrder') return createOrder(openId, user._id, shopContext, event);
+    if (event.action === 'createOrder') return createOrder(openId, user._id, shopContext, event);
       if (event.action === 'syncDailyInventory') return { ok: true, ...(await syncDailyInventory(shopContext.shopId)) };
       if (event.action === 'getCustomerMenu') return { ok: true, ...(await getCustomerMenu(shopContext.shopId)) };
       if (event.action === 'listMyOrders') return { ok: true, orders: await listMyOrders(user._id, openId, shopContext.shopId) };
@@ -601,6 +612,7 @@ exports.main = async (event) => {
     const id = String(event.id || '');
     if (!id) return { ok: false, code: 'INVALID_ORDER', message: '订单无效' };
     const completed = await completeOrder(id, shopId);
+    if (completed) await bumpShopVersions(shopId, ['order']);
     return completed ? { ok: true } : { ok: false, code: 'ORDER_NOT_ACTIVE', message: '订单已完成或不存在' };
   }
   if (event.action === 'initializeDishInventory') return { ok: true, initialized: await initializeDishInventory(shopId) };
@@ -626,6 +638,7 @@ exports.main = async (event) => {
       updatedAt: db.serverDate(),
     };
     await db.collection('categories').add({ data: category });
+    await bumpShopVersions(shopId, ['menu']);
     return { ok: true, category };
   }
   if (event.action === 'updateCategory') {
@@ -642,12 +655,15 @@ exports.main = async (event) => {
       data: { ...category, updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '分类不存在' };
+    await bumpShopVersions(shopId, ['menu']);
     return { ok: true, category: { id, ...category } };
   }
   if (event.action === 'deleteCategory') {
     const id = String(event.id || '');
     if (!id) return { ok: false, code: 'INVALID_CATEGORY', message: '分类无效' };
-    return deleteCategory(id, shopId);
+    const result = await deleteCategory(id, shopId);
+    if (result.ok) await bumpShopVersions(shopId, ['menu']);
+    return result;
   }
   if (event.action === 'updateDishPrice') {
     const id = String(event.id || '');
@@ -657,6 +673,7 @@ exports.main = async (event) => {
       data: { price, updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
+    await bumpShopVersions(shopId, ['menu']);
     return { ok: true, price };
   }
   if (event.action === 'updateDishEnabled') {
@@ -667,6 +684,7 @@ exports.main = async (event) => {
       data: { enabled, updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
+    await bumpShopVersions(shopId, ['menu']);
     return { ok: true, enabled };
   }
   if (event.action === 'updateDishManualSoldOut') {
@@ -677,6 +695,7 @@ exports.main = async (event) => {
       data: { manualSoldOut, updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
+    await bumpShopVersions(shopId, ['menu']);
     return { ok: true, manualSoldOut };
   }
   if (event.action === 'updateDishInventory') {
@@ -690,6 +709,7 @@ exports.main = async (event) => {
       data: { dailyStock, stock, stockResetDate: getChinaDateKey(), updatedAt: db.serverDate() },
     });
     if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
+    await bumpShopVersions(shopId, ['menu']);
     return { ok: true, dailyStock, stock };
   }
   if (event.action === 'updateDish') {
@@ -738,12 +758,16 @@ exports.main = async (event) => {
     const result = await db.collection('dishes').where({ id, shopId }).update({
       data: { ...dish, updatedAt: db.serverDate() },
     });
+    if (!result.stats.updated) return { ok: false, code: 'NOT_FOUND', message: '菜品不存在' };
+    await bumpShopVersions(shopId, ['menu']);
     return { ok: true, dish: { id, ...dish } };
   }
   if (event.action === 'deleteDish') {
     const id = String(event.id || '');
     if (!id) return { ok: false, code: 'INVALID_DISH', message: '菜品无效' };
-    return deleteDish(id, shopId);
+    const result = await deleteDish(id, shopId);
+    if (result.ok) await bumpShopVersions(shopId, ['menu']);
+    return result;
   }
   if (event.action === 'addDish') {
     const name = String(event.name || '').trim();
@@ -780,6 +804,7 @@ exports.main = async (event) => {
       updatedAt: db.serverDate(),
     };
     await db.collection('dishes').add({ data: dish });
+    await bumpShopVersions(shopId, ['menu']);
     return { ok: true, dish };
   }
     return { ok: false, code: 'UNKNOWN_ACTION', message: '未知操作' };

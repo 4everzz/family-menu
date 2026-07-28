@@ -23,7 +23,9 @@ function setCurrentShop(shop) {
   if (!normalized.id || !normalized.name) return false;
   const app = getApp();
   const previous = getCurrentShop();
-  if (previous && previous.id && previous.id !== normalized.id) {
+  if (previous && previous.id && (
+    previous.id !== normalized.id || previous.tableId !== normalized.tableId
+  )) {
     app.globalData.cart = [];
     app.saveCart();
   }

@@ -2,7 +2,8 @@ const { dishes: defaultDishes, categories: defaultCategories } = require('../../
 const { requireLogin } = require('../../utils/auth-guard');
 const { changeCartQuantity, clearCart, getCartItems, getCartSummary } = require('../../utils/cart-store');
 const { setCurrentShop, getCurrentShop, clearCurrentShop } = require('../../utils/shop-store');
-const { callAdminMenu } = require('../../utils/shop-context');
+const { callAdminMenu, getCurrentShopSnapshot } = require('../../utils/shop-context');
+const { readShopCache, writeShopCache, isCacheCurrent } = require('../../utils/shop-cache');
 
 const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
 
@@ -73,13 +74,14 @@ Page({
     canSelectShop: false,
     staffShops: [],
     entryLoading: false,
+    entrySwitching: false,
     manualEntryCode: '',
   },
   onLoad() {
     this.updateMenuHeight();
   },
   async onShow() {
-    console.log('[menu] onShow start');
+    if (this.data.entrySwitching) return;
     const user = await requireLogin();
     if (!user) {
       this.resetEntryState();
@@ -99,8 +101,10 @@ Page({
     }
     const loaded = await this.loadCloudMenu();
     if (!loaded) {
-      clearCurrentShop();
-      await this.prepareEntryHome(user);
+      if (this.shouldClearShopContext()) {
+        clearCurrentShop();
+        await this.prepareEntryHome(user);
+      }
       return;
     }
     this.renderDishes();
@@ -156,7 +160,7 @@ Page({
     this.setData({ manualEntryCode: String(event.detail.value || '').trim().toUpperCase() });
   },
   async submitManualEntryCode() {
-    console.log('[menu] submitManualEntryCode called, code:', this.data.manualEntryCode);
+    if (this.data.entrySwitching) return;
     const entryCode = readEntryCode(this.data.manualEntryCode);
     if (!entryCode) {
       wx.showToast({ title: '请输入8位店铺码或桌码', icon: 'none' });
@@ -182,46 +186,76 @@ Page({
     this.setData({ menuHeight });
   },
   async loadCloudMenu() {
+    const requestId = (this.menuRequestId || 0) + 1;
+    this.menuRequestId = requestId;
+    const isLatestRequest = () => this.menuRequestId === requestId;
+    const shop = getCurrentShop();
+    if (!shop || !shop.id) return false;
     if (!wx.cloud) {
       menuDishes = [];
-      this.setData({ categories: [{ id: 'all', name: '全部' }], menuError: '店铺服务未初始化' }, () => this.renderDishes());
+      this.lastMenuErrorCode = 'CLOUD_NOT_INITIALIZED';
+      if (isLatestRequest()) this.setData({ menuError: '店铺服务未初始化' });
       return false;
     }
     try {
+      const snapshot = await getCurrentShopSnapshot();
+      if (!snapshot.ok || !snapshot.access) {
+        const error = new Error(snapshot.message || '店铺状态读取失败');
+        error.code = snapshot.code || '';
+        throw error;
+      }
+      const cached = readShopCache(shop.id, 'menu');
+      if (isCacheCurrent(cached, snapshot.access.versions.menu)) {
+        if (isLatestRequest()) this.applyMenuPayload(cached.data);
+        this.lastMenuErrorCode = '';
+        return true;
+      }
       const result = await callAdminMenu('getCustomerMenu');
       if (!result.ok) {
         const error = new Error(result.message || '菜单读取失败');
         error.code = result.code || '';
         throw error;
       }
-      const cloudDishes = Array.isArray(result.dishes) ? result.dishes : [];
-      const cloudCategories = Array.isArray(result.categories) ? result.categories : [];
-      const spiceCategories = cloudCategories.length ? cloudCategories : defaultCategories;
-      const validDishes = cloudDishes.filter((item) => item && item.id && item.name && item.enabled !== false).map((item) => ({
-        ...normalizeDishSpiceConfig(item, spiceCategories),
-        isSoldOut: item.manualSoldOut === true || (Number.isFinite(Number(item.stock)) && Number(item.stock) <= 0),
-      }));
-      menuDishes = validDishes;
-      const validCategories = cloudCategories.filter((item) => item && item.id && item.name && item.id !== 'all').sort((left, right) => {
-        const leftSort = Number.isInteger(left.sort) ? left.sort : Number.MAX_SAFE_INTEGER;
-        const rightSort = Number.isInteger(right.sort) ? right.sort : Number.MAX_SAFE_INTEGER;
-        return leftSort - rightSort || left.name.localeCompare(right.name, 'zh-CN');
-      });
-      const categories = validCategories.length
-        ? [{ id: 'all', name: '全部' }, ...validCategories]
-        : defaultCategories;
-      this.setData({ categories, activeCategory: 'all', menuScrollTop: 0, menuError: '' }, () => this.renderDishes());
+      const payload = {
+        dishes: Array.isArray(result.dishes) ? result.dishes : [],
+        categories: Array.isArray(result.categories) ? result.categories : [],
+      };
+      writeShopCache(shop.id, 'menu', snapshot.access.versions.menu, payload);
+      if (isLatestRequest()) this.applyMenuPayload(payload);
+      this.lastMenuErrorCode = '';
       return true;
     } catch (error) {
-      menuDishes = [];
-      if (['ENTRY_SESSION_REQUIRED', 'ENTRY_SESSION_EXPIRED', 'SHOP_CONTEXT_REQUIRED'].includes(error.code)) {
-        this.resetEntryState();
-        return false;
+      if (!isLatestRequest()) return true;
+      this.lastMenuErrorCode = error.code || '';
+      const cached = readShopCache(shop.id, 'menu');
+      if (cached) {
+        this.applyMenuPayload(cached.data);
+        wx.showToast({ title: '网络异常，暂显示最近菜单', icon: 'none' });
+        return true;
       }
-      this.resetEntryState();
+      this.setData({ menuError: error.message || '暂时无法读取店铺菜单' });
       wx.showToast({ title: error.message || '暂时无法读取店铺菜单', icon: 'none' });
       return false;
     }
+  },
+  applyMenuPayload(payload) {
+    const cloudDishes = Array.isArray(payload && payload.dishes) ? payload.dishes : [];
+    const cloudCategories = Array.isArray(payload && payload.categories) ? payload.categories : [];
+    const spiceCategories = cloudCategories.length ? cloudCategories : defaultCategories;
+    menuDishes = cloudDishes.filter((item) => item && item.id && item.name && item.enabled !== false).map((item) => ({
+      ...normalizeDishSpiceConfig(item, spiceCategories),
+      isSoldOut: item.manualSoldOut === true || (Number.isFinite(Number(item.stock)) && Number(item.stock) <= 0),
+    }));
+    const validCategories = cloudCategories.filter((item) => item && item.id && item.name && item.id !== 'all').sort((left, right) => {
+      const leftSort = Number.isInteger(left.sort) ? left.sort : Number.MAX_SAFE_INTEGER;
+      const rightSort = Number.isInteger(right.sort) ? right.sort : Number.MAX_SAFE_INTEGER;
+      return leftSort - rightSort || left.name.localeCompare(right.name, 'zh-CN');
+    });
+    const categories = validCategories.length ? [{ id: 'all', name: '全部' }, ...validCategories] : defaultCategories;
+    this.setData({ categories, activeCategory: 'all', menuScrollTop: 0, menuError: '' }, () => this.renderDishes());
+  },
+  shouldClearShopContext() {
+    return ['ENTRY_SESSION_REQUIRED', 'ENTRY_SESSION_EXPIRED', 'SHOP_CONTEXT_REQUIRED', 'SHOP_NOT_AVAILABLE', 'SHOP_NOT_FOUND', 'TABLE_NOT_AVAILABLE', 'TABLE_REQUIRED'].includes(this.lastMenuErrorCode);
   },
   selectCategory(event) {
     const menuScrollTop = this.data.menuScrollTop === 0 ? 1 : 0;
@@ -330,22 +364,29 @@ Page({
     });
   },
   scanTableCodeFromMenu() {
+    if (this.data.entrySwitching) return;
+    this.setData({ entrySwitching: true });
     wx.scanCode({
       success: async (result) => {
         const entryCode = readEntryCode(result.result || result.path || '');
         if (!entryCode) {
           wx.showToast({ title: '未识别到店铺码或桌码', icon: 'none' });
+          this.setData({ entrySwitching: false });
           return;
         }
-        await this.enterByEntryCode(entryCode);
+        await this.enterByEntryCode(entryCode, true);
       },
-      fail: () => wx.showToast({ title: '未完成扫码', icon: 'none' }),
+      fail: () => {
+        this.setData({ entrySwitching: false });
+        wx.showToast({ title: '未完成扫码', icon: 'none' });
+      },
     });
   },
-  async enterByEntryCode(entryCode) {
+  async enterByEntryCode(entryCode, fromScan = false) {
+    if (this.data.entrySwitching && !fromScan) return;
+    this.setData({ entrySwitching: true });
     wx.showLoading({ title: '进入店铺' });
     try {
-      console.log('[menu] enterByEntryCode called with:', entryCode);
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('云函数请求超时，请检查网络或云函数部署')), 15000)
       );
@@ -356,9 +397,9 @@ Page({
         }),
         timeoutPromise,
       ]);
-      console.log('[menu] cloud fn returned:', (response.result || {}).ok);
       const data = response.result || {};
       if (!data.ok || !data.shop || !setCurrentShop(data.shop)) throw new Error(data.message || '进入店铺失败');
+      menuDishes = [];
       this.setData({
         hasShopContext: true,
         manualEntryCode: '',
@@ -367,28 +408,29 @@ Page({
       });
       const loaded = await this.loadCloudMenu();
       if (!loaded) {
-        clearCurrentShop();
+        if (this.shouldClearShopContext()) clearCurrentShop();
         return;
       }
       this.renderDishes();
       wx.showToast({ title: `已确认${data.shop.tableName || '店铺'}`, icon: 'success' });
     } catch (error) {
-      console.log('[menu] enterByEntryCode error:', error.message);
       wx.showToast({ title: error.message || '进入店铺失败', icon: 'none' });
     } finally {
       wx.hideLoading();
+      this.setData({ entrySwitching: false });
     }
   },
   enterStaffShop(event) {
     const shopId = event.currentTarget.dataset.id;
-    if (!shopId || this.data.entryLoading) return;
-    this.setData({ entryLoading: true });
+    if (!shopId || this.data.entryLoading || this.data.entrySwitching) return;
+    this.setData({ entryLoading: true, entrySwitching: true });
     wx.cloud.callFunction({
       name: 'shop-access',
       data: { action: 'rejoinShop', shopId },
     }).then(async (response) => {
       const result = response.result || {};
       if (!result.ok || !result.shop || !setCurrentShop(result.shop)) throw new Error(result.message || '进入店铺失败');
+      menuDishes = [];
       this.setData({
         hasShopContext: true,
         canSelectShop: false,
@@ -398,16 +440,18 @@ Page({
       });
       const loaded = await this.loadCloudMenu();
       if (!loaded) {
-        clearCurrentShop();
-        const user = await requireLogin();
-        if (user) await this.prepareEntryHome(user);
+        if (this.shouldClearShopContext()) {
+          clearCurrentShop();
+          const user = await requireLogin();
+          if (user) await this.prepareEntryHome(user);
+        }
         return;
       }
       this.renderDishes();
     }).catch((error) => {
       wx.showToast({ title: error.message || '进入店铺失败', icon: 'none' });
     }).finally(() => {
-      this.setData({ entryLoading: false });
+      this.setData({ entryLoading: false, entrySwitching: false });
     });
   },
   goCheckout() {
