@@ -3,7 +3,7 @@ const { requireLogin } = require('../../utils/auth-guard');
 const { changeCartQuantity, clearCart, getCartItems, getCartSummary } = require('../../utils/cart-store');
 const { setCurrentShop, getCurrentShop, clearCurrentShop } = require('../../utils/shop-store');
 const { callAdminMenu, getCurrentShopSnapshot } = require('../../utils/shop-context');
-const { readShopCache, writeShopCache, isCacheCurrent } = require('../../utils/shop-cache');
+const { readShopCache, writeShopCache, isCacheCurrent, removeTemporaryImageUrls, refreshDishImageUrls, hasMissingDishImageUrls } = require('../../utils/shop-cache');
 
 const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
 
@@ -206,7 +206,16 @@ Page({
       }
       const cached = readShopCache(shop.id, 'menu');
       if (isCacheCurrent(cached, snapshot.access.versions.menu)) {
-        if (isLatestRequest()) this.applyMenuPayload(cached.data);
+        let payload = { ...cached.data, dishes: await refreshDishImageUrls(cached.data.dishes) };
+        // 客户端临时链接换取失败时，由云函数兜底，避免缓存菜单退回默认图标。
+        if (hasMissingDishImageUrls(cached.data.dishes, payload.dishes)) {
+          const result = await callAdminMenu('getCustomerMenu');
+          if (result.ok) {
+            payload = { dishes: result.dishes || [], categories: result.categories || [] };
+            writeShopCache(shop.id, 'menu', snapshot.access.versions.menu, removeTemporaryImageUrls(payload));
+          }
+        }
+        if (isLatestRequest()) this.applyMenuPayload(payload);
         this.lastMenuErrorCode = '';
         return true;
       }
@@ -220,7 +229,7 @@ Page({
         dishes: Array.isArray(result.dishes) ? result.dishes : [],
         categories: Array.isArray(result.categories) ? result.categories : [],
       };
-      writeShopCache(shop.id, 'menu', snapshot.access.versions.menu, payload);
+      writeShopCache(shop.id, 'menu', snapshot.access.versions.menu, removeTemporaryImageUrls(payload));
       if (isLatestRequest()) this.applyMenuPayload(payload);
       this.lastMenuErrorCode = '';
       return true;
@@ -229,7 +238,7 @@ Page({
       this.lastMenuErrorCode = error.code || '';
       const cached = readShopCache(shop.id, 'menu');
       if (cached) {
-        this.applyMenuPayload(cached.data);
+        this.applyMenuPayload({ ...cached.data, dishes: await refreshDishImageUrls(cached.data.dishes) });
         wx.showToast({ title: '网络异常，暂显示最近菜单', icon: 'none' });
         return true;
       }
@@ -343,6 +352,11 @@ Page({
     if (!changeCartQuantity(event.currentTarget.dataset.key, -1)) return;
     if (!getCartSummary().count) this.setData({ cartDrawerOpen: false, cartRemark: '' });
     this.renderDishes();
+  },
+  decreaseDishFromCard(event) {
+    if (!changeCartQuantity(event.currentTarget.dataset.key, -1)) return;
+    this.renderDishes();
+    if (this.data.cartDrawerOpen) this.renderCartDrawer();
   },
   updateCartRemark(event) {
     this.setData({ cartRemark: event.detail.value });
@@ -482,10 +496,17 @@ Page({
       ? categoryDishes.filter((item) => item.name.includes(keyword) || String(item.description || '').includes(keyword))
       : categoryDishes;
     const rendered = filtered.map((dish) => {
-      const quantity = app.globalData.cart
-        .filter((item) => item.id === dish.id)
-        .reduce((total, item) => total + item.quantity, 0);
-      return { ...dish, quantity, canAdd: !dish.isSoldOut };
+      const dishCartItems = app.globalData.cart.filter((item) => item.id === dish.id);
+      const quantity = dishCartItems.reduce((total, item) => total + item.quantity, 0);
+      // 卡片减号始终减少最后加入的同菜规格，购物车内仍可按规格精确调整。
+      const latestCartItem = dishCartItems.length ? dishCartItems[dishCartItems.length - 1] : null;
+      return {
+        ...dish,
+        quantity,
+        canAdd: !dish.isSoldOut,
+        canQuickDecrease: !!latestCartItem,
+        quickCartKey: latestCartItem ? (latestCartItem.cartKey || `${latestCartItem.id}|${(latestCartItem.options || []).join('|')}`) : '',
+      };
     });
     const summary = getCartSummary();
     const cartCount = summary.count;

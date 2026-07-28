@@ -83,6 +83,7 @@
           <view class="dish-action">
             <text wx:if="{{item.isSoldOut}}" class="soldout-label">已售罄</text>
             <view wx:else class="dish-quick-add">
+              <button wx:if="{{item.canQuickDecrease}}" class="add-button secondary" data-key="{{item.quickCartKey}}" catchtap="decreaseDishFromCard">−</button>
               <text wx:if="{{item.quantity}}" class="quantity-label">{{item.quantity}}</text>
               <button class="add-button" data-id="{{item.id}}" catchtap="addDish">+</button>
             </view>
