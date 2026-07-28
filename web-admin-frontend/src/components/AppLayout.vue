@@ -10,6 +10,7 @@ const route = useRoute();
 const nav = [
   { name: 'overview', label: '跨店总览', hint: '平台今日经营' },
   { name: 'orders', label: '跨店订单', hint: '筛选与订单详情' },
+  { name: 'reports', label: '经营报表', hint: '跨店经营分析' },
   { name: 'shops', label: '店铺管理', hint: '建店与启停' },
   { name: 'members', label: '管理员授权', hint: '指派一级 / 二级' },
   { name: 'users', label: '用户管理', hint: '搜索与停用账号' },

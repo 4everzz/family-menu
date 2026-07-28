@@ -6,6 +6,7 @@ const PAGE_SIZE = 20;
 const loading = ref(true);
 const loadingShops = ref(true);
 const loadingDetail = ref(false);
+const exporting = ref(false);
 const error = ref('');
 const warning = ref('');
 const shops = ref([]);
@@ -115,6 +116,28 @@ function closeDetail() {
   if (!loadingDetail.value) detail.value = null;
 }
 
+function csvCell(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+async function exportOrders() {
+  exporting.value = true;
+  error.value = '';
+  const result = await callApi('exportPlatformOrders', filters.value);
+  exporting.value = false;
+  if (!result.ok) { error.value = result.message || '订单导出失败'; return; }
+  const header = ['订单号', '下单时间', '店铺', '桌位', '下单渠道', '状态', '菜品', '规格', '单价', '数量', '订单总额', '备注'];
+  const body = (result.rows || []).map((row) => [row.orderId, row.createdAt, row.shopName, row.tableName, row.channel, row.status, row.dishName, row.options, row.price, row.quantity, row.total, row.remark].map(csvCell).join(','));
+  const blob = new Blob([`\uFEFF${header.map(csvCell).join(',')}\n${body.join('\n')}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `平台订单_${result.dateStart}_${result.dateEnd}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+  if (result.truncated) warning.value = '导出数据达到 5000 笔订单上限，请缩小日期范围后重新导出。';
+}
+
 onMounted(async () => {
   await Promise.all([loadShops(), load({ reset: true })]);
 });
@@ -126,7 +149,10 @@ onMounted(async () => {
       <p class="page-eyebrow">平台订单只读监管</p>
       <h2 class="page-title">跨店订单</h2>
     </div>
-    <button class="btn btn-sm" :disabled="loading" @click="load({ reset: true })">{{ loading ? '刷新中…' : '刷新' }}</button>
+    <div class="row">
+      <button class="btn btn-sm" :disabled="exporting" @click="exportOrders">{{ exporting ? '导出中…' : '导出 CSV' }}</button>
+      <button class="btn btn-sm" :disabled="loading" @click="load({ reset: true })">{{ loading ? '刷新中…' : '刷新' }}</button>
+    </div>
   </div>
 
   <section class="card filters-card">
