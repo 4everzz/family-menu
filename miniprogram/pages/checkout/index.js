@@ -1,6 +1,8 @@
 const { requireLogin } = require('../../utils/auth-guard');
 const { getCartItems, getCartSummary, submitCartOrder } = require('../../utils/cart-store');
 const { callAdminMenu } = require('../../utils/shop-context');
+const { getCurrentShop } = require('../../utils/shop-store');
+const { readShopCache } = require('../../utils/shop-cache');
 Page({
   data: {
     loading: true,
@@ -28,13 +30,19 @@ Page({
     }
     this.setData({ loading: true });
     try {
-      const result = await callAdminMenu('getCustomerMenu');
-      if (!result.ok) {
-        const error = new Error(result.message || '读取菜单失败');
-        error.code = result.code;
-        throw error;
+      const shop = getCurrentShop();
+      const cached = shop ? readShopCache(shop.id, 'menu') : null;
+      let dishes = cached && cached.data ? cached.data.dishes : null;
+      if (!Array.isArray(dishes)) {
+        const result = await callAdminMenu('getCustomerMenu');
+        if (!result.ok) {
+          const error = new Error(result.message || '读取菜单失败');
+          error.code = result.code;
+          throw error;
+        }
+        dishes = result.dishes || [];
       }
-      const imageUrls = new Map((result.dishes || []).map((dish) => [dish.id, dish.imageUrl || '']));
+      const imageUrls = new Map(dishes.map((dish) => [dish.id, dish.imageUrl || '']));
       const items = rawItems.map((item) => ({ ...item, imageUrl: imageUrls.get(item.id) || item.imageUrl || '' }));
       const summary = getCartSummary();
       this.setData({ items, total: summary.total, remark: getApp().globalData.checkoutRemark || '' });

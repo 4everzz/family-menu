@@ -95,6 +95,15 @@ const STORE_OWNER = 'store_owner';
 const STORE_STAFF = 'store_staff';
 const SHOP_MANAGER_ROLES = [STORE_OWNER, STORE_STAFF, 'store_admin'];
 const GRANTABLE_ROLES = [STORE_OWNER, STORE_STAFF];
+
+async function bumpShopVersions(shopId, components) {
+  const version = Date.now();
+  const data = { updatedAt: db.serverDate() };
+  components.forEach((component) => {
+    data[`${component}Version`] = version;
+  });
+  await db.collection('shops').doc(shopId).update({ data });
+}
 const SYSTEM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SYSTEM_ID_LENGTH = 8;
 
@@ -203,6 +212,54 @@ function getChinaTodayRange() {
   return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
 }
 
+function parseChinaDate(value) {
+  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  if (utc.getUTCFullYear() !== year || utc.getUTCMonth() !== month - 1 || utc.getUTCDate() !== day) return null;
+  return { key: `${match[1]}-${match[2]}-${match[3]}`, start: new Date(Date.UTC(year, month - 1, day, -8, 0, 0, 0)) };
+}
+
+function getChinaDateRange(payload) {
+  const today = getChinaDateKeyOf(new Date());
+  const endInput = String(payload.dateEnd || today).trim();
+  const endDate = parseChinaDate(endInput);
+  if (!endDate) return { error: '结束日期格式无效' };
+
+  const startInput = String(payload.dateStart || '').trim();
+  const defaultStart = new Date(endDate.start.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const startDate = startInput
+    ? parseChinaDate(startInput)
+    : { key: getChinaDateKeyOf(defaultStart), start: defaultStart };
+  if (!startDate) return { error: '开始日期格式无效' };
+  if (startDate.start.getTime() > endDate.start.getTime()) return { error: '开始日期不能晚于结束日期' };
+  const days = Math.floor((endDate.start.getTime() - startDate.start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  if (days > 31) return { error: '单次最多查询 31 天订单，请缩小日期范围' };
+  return {
+    start: startDate.start,
+    end: new Date(endDate.start.getTime() + 24 * 60 * 60 * 1000),
+    dateStart: startDate.key,
+    dateEnd: endDate.key,
+  };
+}
+
+function formatChinaDateTime(value, fallback = '') {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return String(fallback || '—');
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(date);
+}
+
+function getOrderTimestamp(order) {
+  const createdAt = new Date(order.createdAtServer || order.updatedAt || 0).getTime();
+  return Number.isNaN(createdAt) ? 0 : createdAt;
+}
+
 async function getShopById(shopId) {
   const id = String(shopId || '').trim();
   if (!id) return null;
@@ -262,6 +319,10 @@ async function createShop(payload, session) {
       shopCodeHash: hashShopCode(shopCode),
       displayShopCode: shopCode,
       shopCodeVersion: 1,
+      menuVersion: 0,
+      orderVersion: 0,
+      memberVersion: 0,
+      settingsVersion: 0,
       createdBy: `web-admin:${session.username}`,
       createdAt: db.serverDate(),
       updatedAt: db.serverDate(),
@@ -280,6 +341,7 @@ async function setShopEnabled(payload) {
   if (!shop) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺不存在' };
   const enabled = payload.enabled === true;
   await db.collection('shops').doc(shop._id).update({ data: { enabled, updatedAt: db.serverDate() } });
+  await bumpShopVersions(shop._id, ['settings']);
   return { ok: true, shop: { id: shop._id, enabled } };
 }
 
@@ -295,6 +357,7 @@ async function rotateShopCode(payload) {
       updatedAt: db.serverDate(),
     },
   });
+  await bumpShopVersions(shop._id, ['settings']);
   return { ok: true, shopCode };
 }
 
@@ -405,6 +468,7 @@ async function grantRole(payload) {
       },
     });
   }
+  await bumpShopVersions(shop._id, ['member']);
   return {
     ok: true,
     member: {
@@ -430,6 +494,7 @@ async function revokeRole(payload) {
   await db.collection('shop_members').doc(member._id).update({
     data: { enabled: false, updatedAt: db.serverDate(), updatedBy: 'web-admin' },
   });
+  await bumpShopVersions(shop._id, ['member']);
   return { ok: true };
 }
 
@@ -520,6 +585,97 @@ async function setUserEnabled(payload) {
   const enabled = payload.enabled === true;
   await db.collection('users').doc(user._id).update({ data: { enabled, updatedAt: db.serverDate() } });
   return { ok: true, user: { id: user._id, enabled } };
+}
+
+// ==== 业务：跨店订单只读监管 ====
+const PLATFORM_ORDER_STATUSES = ['制作中', '已完成'];
+const PLATFORM_ORDER_FETCH_LIMIT = 5000;
+
+function makePlatformOrderSummary(order, shopNames) {
+  return {
+    recordId: order._id,
+    orderId: order.id || order._id,
+    shopId: order.shopId || '',
+    shopName: shopNames.get(order.shopId) || '（未知店铺）',
+    tableName: order.tableName || '未扫码桌位',
+    orderChannel: order.orderChannel || 'store_entry',
+    status: order.status || '制作中',
+    total: Number(order.total || 0).toFixed(2),
+    createdAt: formatChinaDateTime(order.createdAtServer, order.createdAt),
+  };
+}
+
+function makePlatformOrderDetail(order, shopNames) {
+  return {
+    ...makePlatformOrderSummary(order, shopNames),
+    statusNote: order.statusNote || '',
+    remark: order.remark || '',
+    items: (Array.isArray(order.items) ? order.items : []).map((item) => ({
+      id: item.id || '',
+      name: item.name || '菜品',
+      price: Number(item.price || 0).toFixed(2),
+      quantity: Number(item.quantity || 0),
+      options: Array.isArray(item.options) ? item.options : [],
+      optionsText: item.optionsText || '',
+    })),
+  };
+}
+
+async function getShopNameMap() {
+  const result = await db.collection('shops').field({ name: true }).limit(200).get();
+  return new Map(result.data.map((shop) => [shop._id, shop.name]));
+}
+
+async function listPlatformOrders(payload) {
+  const range = getChinaDateRange(payload);
+  if (range.error) return { ok: false, code: 'INVALID_DATE_RANGE', message: range.error };
+  const shopId = String(payload.shopId || '').trim();
+  const status = String(payload.status || '').trim();
+  if (status && !PLATFORM_ORDER_STATUSES.includes(status)) {
+    return { ok: false, code: 'INVALID_ORDER_STATUS', message: '订单状态无效' };
+  }
+  const pageSize = Math.min(Math.max(Number(payload.pageSize) || 20, 10), 50);
+  const page = Math.max(Number(payload.page) || 1, 1);
+  const allOrders = [];
+
+  // 先按日期读取并在云函数内筛选，避免组合筛选依赖额外的数据库复合索引。
+  for (let skip = 0; skip < PLATFORM_ORDER_FETCH_LIMIT; skip += 100) {
+    const result = await db.collection('orders').where({
+      createdAtServer: _.gte(range.start).and(_.lt(range.end)),
+    }).field({
+      id: true, shopId: true, tableName: true, orderChannel: true, status: true,
+      total: true, createdAt: true, createdAtServer: true, updatedAt: true,
+    }).skip(skip).limit(100).get();
+    allOrders.push(...result.data);
+    if (result.data.length < 100) break;
+  }
+  const truncated = allOrders.length >= PLATFORM_ORDER_FETCH_LIMIT;
+  const filtered = allOrders
+    .filter((order) => (!shopId || order.shopId === shopId) && (!status || order.status === status))
+    .sort((left, right) => getOrderTimestamp(right) - getOrderTimestamp(left));
+  const shopNames = await getShopNameMap();
+  const startIndex = (page - 1) * pageSize;
+  const orders = filtered.slice(startIndex, startIndex + pageSize).map((order) => makePlatformOrderSummary(order, shopNames));
+  return {
+    ok: true,
+    orders,
+    page,
+    pageSize,
+    total: filtered.length,
+    hasMore: startIndex + orders.length < filtered.length,
+    truncated,
+    dateStart: range.dateStart,
+    dateEnd: range.dateEnd,
+  };
+}
+
+async function getPlatformOrderDetail(payload) {
+  const recordId = String(payload.recordId || '').trim();
+  if (!recordId) return { ok: false, code: 'INVALID_ORDER', message: '订单参数无效' };
+  const result = await db.collection('orders').doc(recordId).get().catch(() => null);
+  if (!result || !result.data) return { ok: false, code: 'ORDER_NOT_FOUND', message: '订单不存在或已删除' };
+  const shopNames = await getShopNameMap();
+  return { ok: true, order: makePlatformOrderDetail(result.data, shopNames) };
 }
 
 // ==== 业务：跨店数据总览（#12）====
@@ -695,6 +851,11 @@ async function handleAuthedAction(action, payload, session) {
       return listUsers(payload);
     case 'setUserEnabled':
       return setUserEnabled(payload);
+    // 跨店订单只读监管
+    case 'listPlatformOrders':
+      return listPlatformOrders(payload);
+    case 'getPlatformOrderDetail':
+      return getPlatformOrderDetail(payload);
     // #12 跨店总览
     case 'getPlatformOverview':
       return getPlatformOverview();

@@ -39,7 +39,22 @@ async function callAdminMenu(action, payload = {}) {
   return response.result || {};
 }
 
+async function getCurrentShopSnapshot() {
+  const shop = getCurrentShop();
+  if (!shop || !shop.id) return { ok: false, code: 'SHOP_CONTEXT_REQUIRED' };
+  const response = await wx.cloud.callFunction({
+    name: 'shop-access',
+    data: {
+      action: 'getCurrentShopSnapshot',
+      shopId: shop.id,
+      entryToken: shop.entryToken || '',
+    },
+  });
+  return response.result || {};
+}
+
 module.exports = {
   ensureCurrentShop,
   callAdminMenu,
+  getCurrentShopSnapshot,
 };

@@ -12,6 +12,15 @@ const VALID_ENTRY_MODES = ['store_entry', 'table_required'];
 const SYSTEM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SYSTEM_ID_LENGTH = 8;
 
+async function bumpShopVersions(shopId, components) {
+  const version = Date.now();
+  const data = { updatedAt: db.serverDate() };
+  components.forEach((component) => {
+    data[`${component}Version`] = version;
+  });
+  await db.collection('shops').doc(shopId).update({ data });
+}
+
 function normalizeAvatarFileId(value) {
   const avatarFileId = String(value || '').trim();
   return avatarFileId.startsWith('cloud://') ? avatarFileId.slice(0, 512) : '';
@@ -180,6 +189,10 @@ async function createShop(user, event) {
     shopCodeHash: hashShopCode(shopCode),
     displayShopCode: shopCode,
     shopCodeVersion: 1,
+    menuVersion: 0,
+    orderVersion: 0,
+    memberVersion: 0,
+    settingsVersion: 0,
     createdBy: user._id,
     createdAt: db.serverDate(),
     updatedAt: db.serverDate(),
@@ -260,6 +273,7 @@ async function updateOperatingRules(context, event) {
   await db.collection('shops').doc(context.shopId).update({
     data: { acceptingOrders, closedDates, updatedAt: db.serverDate() },
   });
+  await bumpShopVersions(context.shopId, ['settings']);
   return { ok: true, settings: { ...makeShopSettings(context.shop), acceptingOrders, closedDates } };
 }
 
@@ -284,6 +298,7 @@ async function updateOrderEntryMode(context, event) {
   await db.collection('shops').doc(context.shopId).update({
     data: { orderEntryMode, updatedAt: db.serverDate() },
   });
+  await bumpShopVersions(context.shopId, ['settings']);
   return { ok: true, settings: { ...makeShopSettings(context.shop), orderEntryMode } };
 }
 
@@ -297,6 +312,7 @@ async function rotateShopCode(context) {
       updatedAt: db.serverDate(),
     },
   });
+  await bumpShopVersions(context.shopId, ['settings']);
   return { ok: true, shopCode };
 }
 
@@ -345,6 +361,7 @@ async function addTable(context, event) {
       updatedAt: db.serverDate(),
     },
   });
+  await bumpShopVersions(context.shopId, ['settings']);
   return { ok: true, table: { id: created._id, name, enabled: true, displayCode: tableCode, sort }, tableCode };
 }
 
@@ -380,6 +397,7 @@ async function updateTableEnabled(context, event) {
     });
     return { ok: true, table: { ...makePublicTable(table), enabled } };
   });
+  if (result.ok) await bumpShopVersions(context.shopId, ['settings']);
   return result;
 }
 
@@ -395,6 +413,7 @@ async function rotateTableCode(context, event) {
       updatedAt: db.serverDate(),
     },
   });
+  await bumpShopVersions(context.shopId, ['settings']);
   return { ok: true, table: makePublicTable(table), tableCode };
 }
 
@@ -519,6 +538,7 @@ async function grantShopMember(context, event) {
         updatedBy: context.isSuperAdmin ? 'super_admin' : context.member.userId,
       },
     });
+    await bumpShopVersions(context.shopId, ['member']);
     return { ok: true, member: makePublicShopMember({ ...existing, role, enabled: true }, target) };
   }
   const created = await db.collection('shop_members').add({
@@ -532,6 +552,7 @@ async function grantShopMember(context, event) {
       createdBy: context.isSuperAdmin ? 'super_admin' : context.member.userId,
     },
   });
+  await bumpShopVersions(context.shopId, ['member']);
   return { ok: true, member: makePublicShopMember({ _id: created._id, shopId: context.shopId, userId, role, enabled: true }, target) };
 }
 
@@ -566,6 +587,7 @@ async function revokeShopMember(context, event) {
       updatedBy: context.isSuperAdmin ? 'super_admin' : context.member.userId,
     },
   });
+  await bumpShopVersions(context.shopId, ['member']);
   return { ok: true };
 }
 
