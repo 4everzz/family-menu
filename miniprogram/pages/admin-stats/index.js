@@ -46,10 +46,10 @@ Page({
         summary: [
           { label: '订单数', value: String(stats.orderCount) },
           { label: '营业额', value: `¥${stats.revenue.toFixed(2)}` },
-          { label: '平均客单', value: `¥${stats.averageOrder.toFixed(2)}` },
+          { label: '完成客单', value: `¥${stats.averageOrder.toFixed(2)}` },
           { label: '完成率', value: `${stats.completionRate}%` },
           { label: '已完成订单', value: String(stats.completedCount) },
-          { label: '桌码订单占比', value: `${stats.tableOrderRate}%` },
+          { label: '完成订单中桌码占比', value: `${stats.tableOrderRate}%` },
         ],
       });
     } catch (error) {

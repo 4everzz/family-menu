@@ -48,7 +48,7 @@
           <text class="rank-revenue">¥{{item.revenueText}}</text>
         </view>
       </view>
-      <text wx:else class="section-empty">该时段暂无已提交订单</text>
+      <text wx:else class="section-empty">该时段暂无已完成订单</text>
     </view>
   </view>
 

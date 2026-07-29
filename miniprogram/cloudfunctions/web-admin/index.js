@@ -251,7 +251,7 @@ function formatChinaDateTime(value, fallback = '') {
   if (!date || Number.isNaN(date.getTime())) return String(fallback || '—');
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
   }).format(date);
 }
 
@@ -588,8 +588,9 @@ async function setUserEnabled(payload) {
 }
 
 // ==== 业务：跨店订单只读监管 ====
-const PLATFORM_ORDER_STATUSES = ['制作中', '已完成'];
+const PLATFORM_ORDER_STATUSES = ['制作中', '已完成', '已取消'];
 const PLATFORM_ORDER_FETCH_LIMIT = 5000;
+const SHOP_BACKUP_ORDER_LIMIT = 5000;
 
 function makePlatformOrderSummary(order, shopNames) {
   return {
@@ -706,11 +707,17 @@ async function getPlatformReport(payload) {
   let completedCount = 0;
   let makingCount = 0;
 
+  let cancelledCount = 0;
   orders.forEach((order) => {
+    if (order.status === '制作中') makingCount += 1;
+    if (order.status === '已取消') {
+      cancelledCount += 1;
+      return;
+    }
+    if (order.status !== '已完成') return;
     const total = Number(order.total) || 0;
     revenue += total;
-    if (order.status === '已完成') completedCount += 1;
-    if (order.status === '制作中') makingCount += 1;
+    completedCount += 1;
     const dateKey = getChinaDateKeyOf(new Date(order.createdAtServer));
     const day = daily.get(dateKey);
     if (day) { day.revenue += total; day.orderCount += 1; }
@@ -736,7 +743,8 @@ async function getPlatformReport(payload) {
       revenue: Number(revenue.toFixed(2)),
       completedCount,
       makingCount,
-      averageOrderValue: orders.length ? Number((revenue / orders.length).toFixed(2)) : 0,
+      cancelledCount,
+      averageOrderValue: completedCount ? Number((revenue / completedCount).toFixed(2)) : 0,
       daily: [...daily.values()].map((item) => ({ ...item, revenue: Number(item.revenue.toFixed(2)) })),
       topShops: [...shops.values()]
         .map((item) => ({ ...item, name: shopNames.get(item.shopId) || '（未知店铺）', revenue: Number(item.revenue.toFixed(2)) }))
@@ -784,6 +792,136 @@ async function exportPlatformOrders(payload) {
   return { ok: true, rows, truncated: source.truncated, dateStart: range.dateStart, dateEnd: range.dateEnd };
 }
 
+function makeBackupFileName(shopId, dateStart, dateEnd) {
+  return `shop-backups/${shopId}/backup_${dateStart}_${dateEnd}_${Date.now()}.json`;
+}
+
+function makeBackupShop(shop) {
+  const { _id, ...settings } = shop || {};
+  return { recordId: _id || '', ...settings };
+}
+
+function makeBackupOrder(order) {
+  const { _id, ...snapshot } = order || {};
+  return { recordId: _id || '', ...snapshot };
+}
+
+async function getAllShopDocuments(collectionName, shopId) {
+  const documents = [];
+  for (let skip = 0; skip < 1000; skip += 100) {
+    const result = await db.collection(collectionName).where({ shopId }).skip(skip).limit(100).get();
+    documents.push(...result.data);
+    if (result.data.length < 100) break;
+  }
+  return documents;
+}
+
+async function getBackupOrders(shopId, range) {
+  const orders = [];
+  for (let skip = 0; skip <= SHOP_BACKUP_ORDER_LIMIT; skip += 100) {
+    const result = await db.collection('orders').where({
+      shopId,
+      createdAtServer: _.gte(range.start).and(_.lt(range.end)),
+    }).skip(skip).limit(100).get();
+    orders.push(...result.data);
+    if (orders.length > SHOP_BACKUP_ORDER_LIMIT) {
+      const error = new Error(`订单数量超过 ${SHOP_BACKUP_ORDER_LIMIT} 笔，请缩小日期范围后再备份`);
+      error.code = 'BACKUP_ORDER_LIMIT';
+      throw error;
+    }
+    if (result.data.length < 100) break;
+  }
+  return orders;
+}
+
+async function createShopBackup(payload, session) {
+  const shopId = String(payload.shopId || '').trim();
+  const range = getChinaDateRange(payload);
+  if (!shopId) return { ok: false, code: 'INVALID_SHOP', message: '请选择需要备份的店铺' };
+  if (range.error) return { ok: false, code: 'INVALID_DATE_RANGE', message: range.error };
+  const shop = await getShopById(shopId);
+  if (!shop) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺不存在' };
+
+  let uploadedFileId = '';
+  try {
+    const [categories, dishes, tables, orders] = await Promise.all([
+      getAllShopDocuments('categories', shopId),
+      getAllShopDocuments('dishes', shopId),
+      getAllShopDocuments('shop_tables', shopId),
+      getBackupOrders(shopId, range),
+    ]);
+    const createdAt = new Date().toISOString();
+    const backup = {
+      schemaVersion: 1,
+      generatedAt: createdAt,
+      timezone: 'Asia/Shanghai',
+      orderDateRange: { start: range.dateStart, end: range.dateEnd },
+      shop: makeBackupShop(shop),
+      categories,
+      dishes,
+      tables,
+      orders: orders.map(makeBackupOrder),
+    };
+    const content = Buffer.from(JSON.stringify(backup, null, 2), 'utf8');
+    const fileName = makeBackupFileName(shopId, range.dateStart, range.dateEnd);
+    const uploadResult = await cloud.uploadFile({ cloudPath: fileName, fileContent: content });
+    uploadedFileId = uploadResult.fileID;
+    const metadata = {
+      shopId,
+      shopName: shop.name || '未命名店铺',
+      fileId: uploadedFileId,
+      fileName: fileName.split('/').pop(),
+      schemaVersion: 1,
+      dateStart: range.dateStart,
+      dateEnd: range.dateEnd,
+      orderCount: orders.length,
+      byteSize: content.length,
+      createdBy: session.username || '',
+      createdAt: db.serverDate(),
+    };
+    const result = await db.collection('shop_backups').add({ data: metadata });
+    return { ok: true, backup: { id: result._id, ...metadata } };
+  } catch (error) {
+    if (uploadedFileId) await cloud.deleteFile({ fileList: [uploadedFileId] }).catch(() => {});
+    return { ok: false, code: error.code || 'CREATE_BACKUP_FAILED', message: error.message || '生成备份失败' };
+  }
+}
+
+async function attachBackupUrls(backups) {
+  const fileIds = backups.map((item) => item.fileId).filter(Boolean);
+  if (!fileIds.length) return backups.map((item) => ({ ...item, downloadUrl: '' }));
+  const urlMap = new Map();
+  for (let index = 0; index < fileIds.length; index += 50) {
+    const result = await cloud.getTempFileURL({ fileList: fileIds.slice(index, index + 50) }).catch(() => ({ fileList: [] }));
+    (result.fileList || []).filter((item) => item.status === 0 && item.tempFileURL)
+      .forEach((item) => urlMap.set(item.fileID, item.tempFileURL));
+  }
+  return backups.map((item) => ({ ...item, downloadUrl: urlMap.get(item.fileId) || '' }));
+}
+
+async function listShopBackups(payload) {
+  const shopId = String(payload.shopId || '').trim();
+  const query = shopId ? db.collection('shop_backups').where({ shopId }) : db.collection('shop_backups');
+  const result = await safeGet(query.orderBy('createdAt', 'desc').limit(100));
+  const backups = await attachBackupUrls(result.data || []);
+  return {
+    ok: true,
+    backups: backups.map((item) => ({
+      id: item._id,
+      shopId: item.shopId,
+      shopName: item.shopName,
+      fileName: item.fileName,
+      dateStart: item.dateStart,
+      dateEnd: item.dateEnd,
+      orderCount: Number(item.orderCount || 0),
+      byteSize: Number(item.byteSize || 0),
+      createdBy: item.createdBy || '',
+      createdAt: formatChinaDateTime(item.createdAt),
+      downloadUrl: item.downloadUrl,
+    })),
+  };
+}
+
 // ==== 业务：跨店数据总览（#12）====
 async function getPlatformOverview() {
   const { start, end } = getChinaTodayRange();
@@ -815,10 +953,16 @@ async function getPlatformOverview() {
   let todayRevenue = 0;
   let completedCount = 0;
   const perShop = new Map();
+  let cancelledCount = 0;
   orders.forEach((order) => {
+    if (order.status === '已取消') {
+      cancelledCount += 1;
+      return;
+    }
+    if (order.status !== '已完成') return;
     const total = Number(order.total) || 0;
     todayRevenue += total;
-    if (order.status === '已完成') completedCount += 1;
+    completedCount += 1;
     const bucket = perShop.get(order.shopId) || { shopId: order.shopId, orderCount: 0, revenue: 0 };
     bucket.orderCount += 1;
     bucket.revenue += total;
@@ -844,6 +988,7 @@ async function getPlatformOverview() {
       todayOrderCount: orders.length,
       todayRevenue: Number(todayRevenue.toFixed(2)),
       todayCompletedCount: completedCount,
+      todayCancelledCount: cancelledCount,
       topShops,
     },
   };
@@ -966,6 +1111,10 @@ async function handleAuthedAction(action, payload, session) {
       return getPlatformReport(payload);
     case 'exportPlatformOrders':
       return exportPlatformOrders(payload);
+    case 'createShopBackup':
+      return createShopBackup(payload, session);
+    case 'listShopBackups':
+      return listShopBackups(payload);
     // #12 跨店总览
     case 'getPlatformOverview':
       return getPlatformOverview();

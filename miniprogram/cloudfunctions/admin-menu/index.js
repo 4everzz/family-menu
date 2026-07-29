@@ -6,6 +6,11 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
+const ORDER_STATUS = {
+  MAKING: '制作中',
+  COMPLETED: '已完成',
+  CANCELLED: '已取消',
+};
 
 function normalizeImageFileId(value) {
   const imageFileId = String(value || '').trim();
@@ -60,6 +65,26 @@ function getChinaDayRange() {
 
 function hashEntryToken(token) {
   return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+function normalizeOrderRequestId(value) {
+  const requestId = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{12,64}$/.test(requestId) ? requestId : '';
+}
+
+function createOrderBusinessId() {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = crypto.randomBytes(5).toString('hex').toUpperCase();
+  return `HJ${timestamp}${random}`;
+}
+
+function normalizeCancelReason(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+}
+
+function getOrderCreatedDateKey(order) {
+  const date = new Date(order && order.createdAtServer || 0);
+  return Number.isNaN(date.getTime()) ? '' : getChinaDateKeyOf(date);
 }
 
 async function getCurrentUser(openId) {
@@ -222,12 +247,14 @@ async function syncDailyInventory(shopId) {
   const dishes = await getAllDishes(shopId);
   const updates = dishes.filter((dish) => dish.stockResetDate !== dateKey).map((dish) => {
     const dailyStock = Number.isInteger(dish.dailyStock) && dish.dailyStock >= 0 ? dish.dailyStock : 10;
-    return db.collection('dishes').doc(dish._id).update({
+    // 仅在仍是旧日期库存时重置，避免零点并发下单的扣减被旧写入覆盖。
+    return db.collection('dishes').where({ _id: dish._id, stockResetDate: _.neq(dateKey) }).update({
       data: { dailyStock, stock: dailyStock, stockResetDate: dateKey, updatedAt: db.serverDate() },
     });
   });
-  await Promise.all(updates);
-  return { reset: updates.length, dateKey };
+  const results = await Promise.all(updates);
+  const reset = results.reduce((total, result) => total + Number(result.stats && result.stats.updated || 0), 0);
+  return { reset, dateKey };
 }
 
 async function attachTemporaryImageUrls(dishes) {
@@ -258,9 +285,16 @@ async function getCustomerMenu(shopId) {
   return { dishes: await attachTemporaryImageUrls(visibleDishes), categories };
 }
 
+async function findOrderByRequestId(shopId, ownerUserId, requestId) {
+  if (!requestId) return null;
+  const result = await db.collection('orders').where({ shopId, ownerUserId, requestId }).limit(1).get();
+  return result.data[0] || null;
+}
+
 async function createOrder(openId, ownerUserId, shopContext, event) {
   const requestedItems = Array.isArray(event.items) ? event.items : [];
   const remark = String(event.remark || '').trim().slice(0, 80);
+  const requestId = normalizeOrderRequestId(event.requestId);
   const table = shopContext.table || null;
   const mergedItems = requestedItems.reduce((result, item) => {
     const id = String(item.id || '');
@@ -288,9 +322,20 @@ async function createOrder(openId, ownerUserId, shopContext, event) {
       return { ok: false, code: 'TABLE_REQUIRED', message: '请扫描本店桌码后下单' };
     }
   }
+  const previousOrder = await findOrderByRequestId(shopContext.shopId, ownerUserId, requestId);
+  if (previousOrder) return { ok: true, order: previousOrder, reused: true };
   const categories = await getAllCategories(shopContext.shopId);
   try {
-    const order = await db.runTransaction(async (transaction) => {
+    const transactionResult = await db.runTransaction(async (transaction) => {
+      if (requestId) {
+        const existingResult = await transaction.collection('orders').where({
+          shopId: shopContext.shopId,
+          ownerUserId,
+          requestId,
+        }).limit(1).get();
+        const existingOrder = existingResult.data[0];
+        if (existingOrder) return { order: existingOrder, created: false };
+      }
       const dateKey = getChinaDateKey();
       const checkedItems = [];
       const unavailableNames = [];
@@ -348,17 +393,18 @@ async function createOrder(openId, ownerUserId, shopContext, event) {
       }
       const createdAt = new Intl.DateTimeFormat('zh-CN', {
         timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
       }).format(new Date());
       const order = {
-        id: `HJ${Date.now().toString().slice(-8)}`,
+        id: createOrderBusinessId(),
         shopId: shopContext.shopId,
         tableId: table ? table._id : '',
         tableName: table ? table.name : '',
         orderChannel: table ? 'table' : 'store_entry',
         ownerUserId,
         ownerOpenId: openId,
-        status: '制作中',
+        requestId,
+        status: ORDER_STATUS.MAKING,
         statusNote: '订单已提交，正在制作中',
         total: total.toFixed(2),
         createdAt,
@@ -369,11 +415,13 @@ async function createOrder(openId, ownerUserId, shopContext, event) {
         createdAtServer: db.serverDate(),
       };
       await transaction.collection('orders').add({ data: order });
-      return order;
+      return { order, created: true };
     });
-    await bumpShopVersions(shopContext.shopId, ['menu', 'order']);
-    return { ok: true, order };
+    if (transactionResult.created) await bumpShopVersions(shopContext.shopId, ['menu', 'order']);
+    return { ok: true, order: transactionResult.order, reused: !transactionResult.created };
   } catch (error) {
+    const previousOrderAfterConflict = await findOrderByRequestId(shopContext.shopId, ownerUserId, requestId);
+    if (previousOrderAfterConflict) return { ok: true, order: previousOrderAfterConflict, reused: true };
     return {
       ok: false,
       code: error.code || 'CREATE_ORDER_FAILED',
@@ -410,11 +458,16 @@ async function getTodayDashboard(shopId) {
   let revenue = 0;
   let completedCount = 0;
   let makingCount = 0;
+  let cancelledCount = 0;
 
   orders.forEach((order) => {
-    revenue += Number(order.total) || 0;
-    if (order.status === '已完成') completedCount += 1;
-    if (order.status === '制作中') makingCount += 1;
+    if (order.status === ORDER_STATUS.COMPLETED) {
+      revenue += Number(order.total) || 0;
+      completedCount += 1;
+    }
+    if (order.status === ORDER_STATUS.MAKING) makingCount += 1;
+    if (order.status === ORDER_STATUS.CANCELLED) cancelledCount += 1;
+    if (order.status !== ORDER_STATUS.COMPLETED) return;
     (Array.isArray(order.items) ? order.items : []).forEach((item) => {
       const quantity = Number(item.quantity) || 0;
       if (quantity <= 0) return;
@@ -437,6 +490,7 @@ async function getTodayDashboard(shopId) {
     orderCount: orders.length,
     completedCount,
     makingCount,
+    cancelledCount,
     soldOutCount,
     revenue: Number(revenue.toFixed(2)),
     topDishes,
@@ -484,10 +538,16 @@ async function getShopStats(shopId, days) {
   let revenue = 0;
   let completedCount = 0;
   let tableOrderCount = 0;
+  let cancelledCount = 0;
   orders.forEach((order) => {
+    if (order.status === ORDER_STATUS.CANCELLED) {
+      cancelledCount += 1;
+      return;
+    }
+    if (order.status !== ORDER_STATUS.COMPLETED) return;
     const orderTotal = Number(order.total) || 0;
     revenue += orderTotal;
-    if (order.status === '已完成') completedCount += 1;
+    completedCount += 1;
     if (order.orderChannel === 'table') tableOrderCount += 1;
     const dateKey = order.createdAtServer ? getChinaDateKeyOf(new Date(order.createdAtServer)) : '';
     const bucket = dailyMap.get(dateKey);
@@ -518,11 +578,12 @@ async function getShopStats(shopId, days) {
     endKey: getChinaDateKey(),
     orderCount,
     revenue: Number(revenue.toFixed(2)),
-    averageOrder: orderCount ? Number((revenue / orderCount).toFixed(2)) : 0,
+    averageOrder: completedCount ? Number((revenue / completedCount).toFixed(2)) : 0,
     completedCount,
+    cancelledCount,
     completionRate: orderCount ? Math.round((completedCount / orderCount) * 100) : 0,
     tableOrderCount,
-    tableOrderRate: orderCount ? Math.round((tableOrderCount / orderCount) * 100) : 0,
+    tableOrderRate: completedCount ? Math.round((tableOrderCount / completedCount) * 100) : 0,
     daily,
     topDishes,
   };
@@ -546,14 +607,65 @@ async function getMyOrder(id, userId, openId, shopId) {
 }
 
 async function completeOrder(id, shopId) {
-  const result = await db.collection('orders').where({ id, shopId, status: '制作中' }).update({
+  const result = await db.collection('orders').where({ id, shopId, status: ORDER_STATUS.MAKING }).update({
     data: {
-      status: '已完成',
+      status: ORDER_STATUS.COMPLETED,
       statusNote: '订单已完成，感谢使用小家菜单',
       updatedAt: db.serverDate(),
     },
   });
   return result.stats.updated > 0;
+}
+
+async function cancelOrder(id, shopId, reason, operator) {
+  await syncDailyInventory(shopId);
+  const todayKey = getChinaDateKey();
+  return db.runTransaction(async (transaction) => {
+    const orderResult = await transaction.collection('orders').where({ id, shopId }).limit(1).get();
+    const order = orderResult.data[0];
+    if (!order || order.status !== ORDER_STATUS.MAKING) {
+      const error = new Error('订单已完成、已取消或不存在，无法取消');
+      error.code = 'ORDER_NOT_ACTIVE';
+      throw error;
+    }
+
+    let restoredQuantity = 0;
+    const skippedDishNames = [];
+    if (getOrderCreatedDateKey(order) === todayKey) {
+      for (const item of Array.isArray(order.items) ? order.items : []) {
+        const quantity = Number(item.quantity) || 0;
+        if (!item.id || quantity <= 0) continue;
+        const dishResult = await transaction.collection('dishes').where({ id: item.id, shopId }).limit(1).get();
+        const dish = dishResult.data[0];
+        if (!dish || dish.stockResetDate !== todayKey) {
+          skippedDishNames.push(item.name || '已删除菜品');
+          continue;
+        }
+        const dailyStock = Number.isInteger(dish.dailyStock) && dish.dailyStock >= 0 ? dish.dailyStock : 0;
+        const currentStock = Number.isInteger(dish.stock) && dish.stock >= 0 ? dish.stock : 0;
+        const nextStock = Math.min(dailyStock, currentStock + quantity);
+        if (nextStock > currentStock) {
+          await transaction.collection('dishes').doc(dish._id).update({
+            data: { stock: nextStock, updatedAt: db.serverDate() },
+          });
+          restoredQuantity += nextStock - currentStock;
+        }
+      }
+    }
+
+    await transaction.collection('orders').doc(order._id).update({
+      data: {
+        status: ORDER_STATUS.CANCELLED,
+        statusNote: `订单已取消：${reason}`,
+        cancelReason: reason,
+        cancelledAt: db.serverDate(),
+        cancelledByUserId: operator._id,
+        cancelledByName: operator.nickname || operator.systemId || '店铺管理员',
+        updatedAt: db.serverDate(),
+      },
+    });
+    return { restoredQuantity, skippedDishNames };
+  });
 }
 
 async function deleteDish(id, shopId) {
@@ -621,6 +733,15 @@ exports.main = async (event) => {
     const completed = await completeOrder(id, shopId);
     if (completed) await bumpShopVersions(shopId, ['order']);
     return completed ? { ok: true } : { ok: false, code: 'ORDER_NOT_ACTIVE', message: '订单已完成或不存在' };
+  }
+  if (event.action === 'cancelOrder') {
+    const id = String(event.id || '');
+    const reason = normalizeCancelReason(event.reason);
+    if (!id) return { ok: false, code: 'INVALID_ORDER', message: '订单无效' };
+    if (reason.length < 2) return { ok: false, code: 'INVALID_CANCEL_REASON', message: '请填写至少 2 个字的取消原因' };
+    const cancelled = await cancelOrder(id, shopId, reason, user);
+    await bumpShopVersions(shopId, cancelled.restoredQuantity > 0 ? ['order', 'menu'] : ['order']);
+    return { ok: true, ...cancelled };
   }
   if (event.action === 'initializeDishInventory') return { ok: true, initialized: await initializeDishInventory(shopId) };
   if (event.action === 'listDishes') {

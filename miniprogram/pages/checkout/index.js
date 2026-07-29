@@ -3,6 +3,7 @@ const { getCartItems, getCartSummary, submitCartOrder } = require('../../utils/c
 const { callAdminMenu } = require('../../utils/shop-context');
 const { getCurrentShop } = require('../../utils/shop-store');
 const { readShopCache, refreshDishImageUrls, hasMissingDishImageUrls } = require('../../utils/shop-cache');
+
 Page({
   data: {
     loading: true,

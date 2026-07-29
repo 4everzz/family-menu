@@ -6,6 +6,14 @@ function getCartKey(item) {
   return item.cartKey || `${item.id}|${(item.options || []).join('|')}`;
 }
 
+function getOrderRequestId() {
+  const app = getApp();
+  if (!app.globalData.orderRequestId) {
+    app.globalData.orderRequestId = `order_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+  }
+  return app.globalData.orderRequestId;
+}
+
 function getCartItems() {
   return getApp().globalData.cart.map((item) => ({
     ...item,
@@ -49,6 +57,7 @@ async function submitCartOrder(remark) {
     remark: String(remark || '').trim(),
     requireTable: true,
     tableId: shop.tableId,
+    requestId: getOrderRequestId(),
   });
   if (!result.ok || !result.order) return result;
   app.globalData.orders.unshift(result.order);
