@@ -43,7 +43,9 @@ function shiftDate(dateKey, days) {
 }
 
 function statusClass(status) {
-  return status === '已完成' ? 'badge-on' : 'badge-making';
+  if (status === '已完成') return 'badge-on';
+  if (status === '已取消') return 'badge-off';
+  return 'badge-making';
 }
 
 function channelText(channel) {
@@ -183,6 +185,7 @@ onMounted(async () => {
           <option value="">全部状态</option>
           <option value="制作中">制作中</option>
           <option value="已完成">已完成</option>
+          <option value="已取消">已取消</option>
         </select>
       </label>
       <button class="btn btn-primary filter-submit" :disabled="loading" @click="applyFilters">查询订单</button>

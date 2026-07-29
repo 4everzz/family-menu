@@ -3,7 +3,7 @@
     <text class="empty-copy">正在读取订单</text>
   </view>
 
-  <view wx:elif="{{activeOrders.length || completedOrders.length}}" class="order-page">
+  <view wx:elif="{{activeOrders.length || completedOrders.length || cancelledOrders.length}}" class="order-page">
     <view wx:if="{{activeOrders.length}}" class="order-section">
       <view class="section-head">
         <text class="section-title">制作中</text>
@@ -23,7 +23,7 @@
               wx:for="{{item.progress}}"
               wx:for-item="step"
               wx:key="label"
-              class="progress-step {{step.completed ? 'completed' : ''}} {{step.current ? 'current' : ''}}"
+              class="progress-step {{step.completed ? 'completed' : ''}} {{step.current ? 'current' : ''}} {{step.cancelled ? 'cancelled' : ''}}"
             >
               <view class="progress-dot"></view>
               <text>{{step.label}}</text>
@@ -57,7 +57,7 @@
               wx:for="{{item.progress}}"
               wx:for-item="step"
               wx:key="label"
-              class="progress-step {{step.completed ? 'completed' : ''}} {{step.current ? 'current' : ''}}"
+              class="progress-step {{step.completed ? 'completed' : ''}} {{step.current ? 'current' : ''}} {{step.cancelled ? 'cancelled' : ''}}"
             >
               <view class="progress-dot"></view>
               <text>{{step.label}}</text>
@@ -72,6 +72,39 @@
       </view>
 
       <text class="completed-hint">此处仅展示最近三次订单，更多请查看历史订单</text>
+    </view>
+
+    <view wx:if="{{cancelledOrders.length}}" class="order-section cancelled-section">
+      <view class="section-head">
+        <text class="section-title">已取消</text>
+        <text class="section-count">最近 {{cancelledOrders.length}} 笔</text>
+      </view>
+
+      <view class="order-list">
+        <view wx:for="{{cancelledOrders}}" wx:key="id" class="order-card cancelled-order-card" data-id="{{item.id}}" bindtap="openOrder" aria-label="查看订单{{item.id}}详情">
+          <view class="order-head">
+            <text class="order-id">订单 {{item.id}}</text>
+            <text class="order-status cancelled-status">{{item.status}}</text>
+          </view>
+          <text class="order-items">{{item.summary}}</text>
+          <text wx:if="{{item.statusNote}}" class="order-note">{{item.statusNote}}</text>
+          <view class="progress-row">
+            <view
+              wx:for="{{item.progress}}"
+              wx:for-item="step"
+              wx:key="label"
+              class="progress-step {{step.completed ? 'completed' : ''}} {{step.current ? 'current' : ''}} {{step.cancelled ? 'cancelled' : ''}}"
+            >
+              <view class="progress-dot"></view>
+              <text>{{step.label}}</text>
+            </view>
+          </view>
+          <view class="order-foot">
+            <text>{{item.createdAt}}</text>
+            <text class="order-total">¥{{item.total}}</text>
+          </view>
+        </view>
+      </view>
     </view>
   </view>
 

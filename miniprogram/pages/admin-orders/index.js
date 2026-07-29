@@ -19,6 +19,7 @@ function normalizeAdminOrder(order, previousOrders = []) {
     items,
     summary: order.summaryWithOptions || items.map(getDishSummary).join('、') || order.summary || '',
     isCompleting: previousOrders.some((previous) => previous.id === order.id && previous.isCompleting),
+    isCancelling: previousOrders.some((previous) => previous.id === order.id && previous.isCancelling),
   };
 }
 
@@ -30,6 +31,9 @@ Page({
     historyOrders: [],
     activeTab: 'active',
     selectedOrder: null,
+    cancelTarget: null,
+    cancelReason: '',
+    isCancelling: false,
   },
   onShow() {
     this.loadOrders();
@@ -48,7 +52,7 @@ Page({
       const allOrders = result.orders || [];
       const previousOrders = this.data.orders;
       const orders = allOrders.filter((item) => item.status === '制作中').map((item) => normalizeAdminOrder(item, previousOrders));
-      const historyOrders = allOrders.filter((item) => item.status === '已完成').map((item) => normalizeAdminOrder(item));
+      const historyOrders = allOrders.filter((item) => item.status !== '制作中').map((item) => normalizeAdminOrder(item));
       this.setData({ hasAccess: true, orders, historyOrders, loading: false });
     } catch (error) {
       this.setData({ loading: false });
@@ -85,6 +89,45 @@ Page({
           })),
         });
       }
+    }
+  },
+  openCancelOrder(event) {
+    const id = event.currentTarget.dataset.id;
+    const targetOrder = this.data.orders.find((item) => item.id === id);
+    if (!targetOrder || targetOrder.isCompleting || targetOrder.isCancelling) return;
+    this.setData({ cancelTarget: targetOrder, cancelReason: '' });
+  },
+  closeCancelOrder() {
+    if (!this.data.isCancelling) this.setData({ cancelTarget: null, cancelReason: '' });
+  },
+  inputCancelReason(event) {
+    this.setData({ cancelReason: event.detail.value });
+  },
+  async submitCancelOrder() {
+    const targetOrder = this.data.cancelTarget;
+    const reason = String(this.data.cancelReason || '').trim();
+    if (!targetOrder || this.data.isCancelling) return;
+    if (reason.length < 2) {
+      wx.showToast({ title: '请填写至少 2 个字的取消原因', icon: 'none' });
+      return;
+    }
+    this.setData({
+      isCancelling: true,
+      orders: this.data.orders.map((item) => ({ ...item, isCancelling: item.id === targetOrder.id ? true : item.isCancelling })),
+    });
+    try {
+      const result = await this.callAdmin('cancelOrder', { id: targetOrder.id, reason });
+      if (!result.ok) {
+        wx.showToast({ title: result.message || '订单状态已变化，请刷新后重试', icon: 'none' });
+        return;
+      }
+      wx.showToast({ title: '订单已取消', icon: 'success' });
+      this.setData({ cancelTarget: null, cancelReason: '' });
+      await this.loadOrders();
+    } catch (error) {
+      wx.showToast({ title: '取消订单失败，请稍后重试', icon: 'none' });
+    } finally {
+      this.setData({ isCancelling: false });
     }
   },
   switchTab(event) {

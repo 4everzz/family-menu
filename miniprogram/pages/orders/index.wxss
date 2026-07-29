@@ -13,6 +13,8 @@
 .order-status { padding: 6rpx 14rpx; border-radius: 8rpx; background: #FEE2E2; color: #B91C1C; font-size: 24rpx; font-weight: 700; }
 .completed-order-card { border-color: #E2E8F0; }
 .completed-status { background: #F1F5F9; color: #475569; }
+.cancelled-order-card { border-color: #E2E8F0; background: #FCFCFC; }
+.cancelled-status { background: #F1F5F9; color: #64748B; }
 .completed-hint { margin-top: 8rpx; padding: 12rpx 8rpx 24rpx; color: #64748B; font-size: 24rpx; line-height: 1.5; text-align: center; }
 .order-items, .order-foot { color: #64748B; font-size: 26rpx; }
 .order-remark, .order-note { color: #7C2D12; font-size: 26rpx; line-height: 1.55; }
@@ -23,6 +25,8 @@
 .progress-step.completed .progress-dot { background: #CBD5E1; }
 .progress-step.current { color: #B91C1C; font-weight: 700; }
 .progress-step.current .progress-dot { background: #DC2626; }
+.progress-step.cancelled { color: #64748B; }
+.progress-step.cancelled .progress-dot { background: #94A3B8; }
 .order-total { color: #DC2626; font-size: 34rpx; font-weight: 700; }
 .empty-state { margin-top: 180rpx; display: flex; flex-direction: column; align-items: center; gap: 12rpx; color: #64748B; }
 .empty-title { color: #450A0A; font-size: 36rpx; font-weight: 700; }

@@ -13,13 +13,14 @@ Page({
       wx.showToast({ title: error.message || '读取订单失败', icon: 'none' });
     }
     const historyOrders = orders
-      .filter((order) => order.status === '已完成')
+      .filter((order) => order.status === '已完成' || order.status === '已取消')
       .map((order) => ({
         id: order.id,
         status: order.status,
         summary: order.summary,
         createdAt: order.createdAt,
         total: order.total,
+        statusNote: order.statusNote || '',
       }));
     this.setData({ historyOrders, loading: false });
   },

@@ -23,7 +23,7 @@
           <text class="sales-quantity">{{item.quantity}} 份</text>
         </view>
       </view>
-      <text wx:else class="sales-empty">今日暂无已提交订单</text>
+      <text wx:else class="sales-empty">今日暂无已完成订单</text>
     </view>
     <view class="manage-actions">
       <button class="manage-button" bindtap="openDishesPage" loading="{{navigatingTarget === 'dishes'}}" disabled="{{!!navigatingTarget}}">管理菜品</button>

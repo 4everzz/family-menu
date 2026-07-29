@@ -4,6 +4,7 @@ App({
     orders: [],
     menuUpdatedAt: 0,
     currentShop: null,
+    orderRequestId: '',
   },
   onLaunch() {
     if (wx.cloud) {
@@ -19,6 +20,8 @@ App({
     wx.removeStorageSync('current_shop_context');
   },
   saveCart() {
+    // 购物车变化后必须生成新的下单请求，避免旧请求复用到新购物车。
+    this.globalData.orderRequestId = '';
     wx.setStorageSync('family_cart', this.globalData.cart);
   },
   saveOrders() {

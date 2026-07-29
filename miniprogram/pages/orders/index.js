@@ -7,6 +7,7 @@ Page({
   data: {
     activeOrders: [],
     completedOrders: [],
+    cancelledOrders: [],
     loading: true,
   },
 
@@ -24,13 +25,17 @@ Page({
     }
 
     const withProgress = (order) => {
-      const current = Math.max(0, ORDER_STEPS.indexOf(order.status));
+      const cancelled = order.status === '已取消';
+      const steps = cancelled ? ['制作中', '已取消'] : ORDER_STEPS;
+      const current = Math.max(0, steps.indexOf(order.status));
       return {
         ...order,
-        progress: ORDER_STEPS.map((label, index) => ({
+        isCancelled: cancelled,
+        progress: steps.map((label, index) => ({
           label,
           completed: index < current,
           current: index === current,
+          cancelled: cancelled && label === '已取消',
         })),
       };
     };
@@ -44,10 +49,16 @@ Page({
       .slice(0, 3)
       .map(withProgress);
 
+    const cancelledOrders = orders
+      .filter((item) => item.status === '已取消')
+      .slice(0, 3)
+      .map(withProgress);
+
     this.setData({
       loading: false,
       activeOrders,
       completedOrders,
+      cancelledOrders,
     });
   },
 

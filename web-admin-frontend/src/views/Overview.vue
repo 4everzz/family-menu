@@ -49,12 +49,12 @@ onMounted(load);
       <div class="metric metric-lead">
         <span class="metric-label">今日营业额（全平台）</span>
         <span class="metric-value num">{{ money(data.todayRevenue) }}</span>
-        <span class="metric-foot">{{ int(data.todayOrderCount) }} 笔订单 · 已完成 {{ int(data.todayCompletedCount) }}</span>
+        <span class="metric-foot">{{ int(data.todayOrderCount) }} 笔订单 · 已完成 {{ int(data.todayCompletedCount) }} · 已取消 {{ int(data.todayCancelledCount) }}</span>
       </div>
       <div class="metric">
         <span class="metric-label">今日订单</span>
         <span class="metric-value num">{{ int(data.todayOrderCount) }}</span>
-        <span class="metric-foot">已完成 {{ int(data.todayCompletedCount) }} 笔</span>
+        <span class="metric-foot">已完成 {{ int(data.todayCompletedCount) }} · 已取消 {{ int(data.todayCancelledCount) }}</span>
       </div>
       <div class="metric">
         <span class="metric-label">营业中店铺</span>

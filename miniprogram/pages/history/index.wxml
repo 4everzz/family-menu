@@ -4,11 +4,12 @@
     <view class="section-head"><text class="section-title">全部历史订单</text><text class="section-count">{{historyOrders.length}} 笔</text></view>
     <view class="history-list">
     <view wx:for="{{historyOrders}}" wx:key="id" class="history-card" data-id="{{item.id}}" bindtap="openOrder" aria-label="查看订单{{item.id}}详情">
-      <view class="history-head"><text class="history-id">订单 {{item.id}}</text><text class="history-status completed-status">{{item.status}}</text></view>
+      <view class="history-head"><text class="history-id">订单 {{item.id}}</text><text class="history-status {{item.status === '已取消' ? 'cancelled-status' : 'completed-status'}}">{{item.status}}</text></view>
       <text class="history-summary">{{item.summary}}</text>
+      <text wx:if="{{item.status === '已取消' && item.statusNote}}" class="history-note">{{item.statusNote}}</text>
       <view class="history-foot"><text>{{item.createdAt}}</text><view><text class="history-total">¥{{item.total}}</text><text class="history-arrow">›</text></view></view>
     </view>
     </view>
   </view>
-  <view wx:else class="empty-state"><text class="empty-title">还没有历史订单</text><text class="empty-copy">已完成或较早的订单会显示在这里</text></view>
+  <view wx:else class="empty-state"><text class="empty-title">还没有历史订单</text><text class="empty-copy">已完成或已取消的订单会显示在这里</text></view>
 </view>

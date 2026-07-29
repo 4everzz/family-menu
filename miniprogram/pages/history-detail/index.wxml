@@ -1,7 +1,7 @@
 <view wx:if="{{loading}}" class="page-shell"><view class="detail-card"><text class="detail-time">正在读取订单</text></view></view>
 <view wx:elif="{{order}}" class="page-shell">
   <view class="detail-card">
-    <view class="detail-head"><text class="detail-id">订单 {{order.id}}</text><text class="detail-status">{{order.status}}</text></view>
+    <view class="detail-head"><text class="detail-id">订单 {{order.id}}</text><text class="detail-status {{order.status === '已取消' ? 'cancelled-status' : ''}}">{{order.status}}</text></view>
     <text class="detail-time">{{order.createdAt}}</text>
   </view>
   <view class="detail-card">
@@ -12,6 +12,7 @@
     </view>
   </view>
   <view wx:if="{{order.remark}}" class="detail-card"><text class="section-title">订单备注</text><text class="detail-remark">{{order.remark}}</text></view>
+  <view wx:if="{{order.cancelReason}}" class="detail-card cancel-card"><text class="section-title">取消原因</text><text class="detail-remark">{{order.cancelReason}}</text></view>
   <view class="detail-total"><text>订单合计</text><text>¥{{order.total}}</text></view>
   <button class="reorder-button" bindtap="reorder">再来一单</button>
 </view>
