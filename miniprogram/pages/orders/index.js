@@ -15,11 +15,20 @@ Page({
     this.syncTabBar();
     if (!(await requireLogin())) return;
 
+    await this.loadOrders();
+  },
+
+  async onPullDownRefresh() {
+    await this.loadOrders(true);
+    wx.stopPullDownRefresh();
+  },
+
+  async loadOrders(force = false) {
     this.setData({ loading: true });
     let orders = [];
 
     try {
-      orders = await loadMyOrders();
+      orders = await loadMyOrders({ force });
     } catch (error) {
       wx.showToast({ title: error.message || '读取订单失败', icon: 'none' });
     }

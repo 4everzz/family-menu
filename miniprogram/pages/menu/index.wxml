@@ -73,7 +73,7 @@
       <view wx:if="{{dishes.length}}" class="dish-list">
         <view wx:for="{{dishes}}" wx:key="id" class="dish-card" data-id="{{item.id}}" bindtap="openDish">
           <view class="dish-visual" style="background: {{item.color}};">
-            <image wx:if="{{item.imageUrl}}" class="dish-photo" src="{{item.imageUrl}}" mode="aspectFill" />
+            <image wx:if="{{item.imageUrl}}" class="dish-photo" src="{{item.imageUrl}}" mode="aspectFill" data-id="{{item.id}}" binderror="retryDishImage" />
             <text wx:else>{{item.emoji}}</text>
           </view>
           <view class="dish-copy">

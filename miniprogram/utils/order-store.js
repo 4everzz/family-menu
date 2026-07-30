@@ -1,4 +1,13 @@
 const { callAdminMenu } = require('./shop-context');
+const { getCurrentShop } = require('./shop-store');
+const { clearRuntimeCache, loadRuntimeCache } = require('./runtime-cache');
+
+const MY_ORDERS_CACHE_TTL = 15 * 1000;
+
+function getMyOrdersCacheKey() {
+  const shop = getCurrentShop();
+  return `my-orders:${shop && shop.id || ''}:${shop && shop.tableId || ''}:${shop && shop.entryToken || ''}`;
+}
 
 function toDate(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
@@ -55,10 +64,13 @@ async function callOrderApi(action, payload = {}) {
   return callAdminMenu(action, payload);
 }
 
-async function loadMyOrders() {
-  const result = await callOrderApi('listMyOrders');
-  if (!result.ok) throw new Error(result.message || '读取订单失败');
-  return (result.orders || []).map(normalizeOrder);
+async function loadMyOrders(options = {}) {
+  const result = await loadRuntimeCache(getMyOrdersCacheKey(), MY_ORDERS_CACHE_TTL, async () => {
+    const response = await callOrderApi('listMyOrders');
+    if (!response.ok) throw new Error(response.message || '读取订单失败');
+    return (response.orders || []).map(normalizeOrder);
+  }, options && options.force === true);
+  return Array.isArray(result) ? result : [];
 }
 
 async function loadMyOrder(id) {
@@ -67,4 +79,8 @@ async function loadMyOrder(id) {
   return normalizeOrder(result.order);
 }
 
-module.exports = { loadMyOrders, loadMyOrder, formatChinaDateTime };
+function invalidateMyOrders() {
+  clearRuntimeCache(getMyOrdersCacheKey());
+}
+
+module.exports = { loadMyOrders, loadMyOrder, invalidateMyOrders, formatChinaDateTime };

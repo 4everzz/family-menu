@@ -3,6 +3,8 @@ App({
     cart: [],
     orders: [],
     menuUpdatedAt: 0,
+    ordersUpdatedAt: 0,
+    membersUpdatedAt: 0,
     currentShop: null,
     orderRequestId: '',
   },

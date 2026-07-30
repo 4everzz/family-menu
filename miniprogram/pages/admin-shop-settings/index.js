@@ -33,9 +33,13 @@ Page({
     qrTitle: '',
     qrContent: '',
     qrCanvasSize: 260,
+    loadedAt: 0,
+  },
+  onLoad() {
+    this.loadSettings();
   },
   onShow() {
-    this.loadSettings();
+    if (this.data.loadedAt && Date.now() - this.data.loadedAt > 60 * 1000) this.loadSettings();
   },
   async callShopAdmin(action, payload = {}) {
     const shop = await ensureCurrentShop();
@@ -61,6 +65,7 @@ Page({
         orderEntryMode: result.settings.orderEntryMode === 'table_required' ? 'table_required' : 'store_entry',
         closedDates: result.settings.closedDates || [],
         tables: tableResult.tables || [],
+        loadedAt: Date.now(),
       });
     } catch (error) {
       this.setData({ loading: false });

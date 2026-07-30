@@ -1,6 +1,7 @@
 const { callAdminMenu } = require('./shop-context');
 const { getCurrentShop } = require('./shop-store');
 const { invalidateShopCache } = require('./shop-cache');
+const { invalidateMyOrders } = require('./order-store');
 
 function getCartKey(item) {
   return item.cartKey || `${item.id}|${(item.options || []).join('|')}`;
@@ -64,6 +65,7 @@ async function submitCartOrder(remark) {
   app.saveOrders();
   clearCart();
   invalidateShopCache(shop.id, 'menu');
+  invalidateMyOrders();
   app.globalData.menuUpdatedAt = Date.now();
   return result;
 }

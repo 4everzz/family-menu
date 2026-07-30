@@ -1,4 +1,5 @@
 const { callAdminMenu } = require('../../utils/shop-context');
+const { invalidateMyOrders } = require('../../utils/order-store');
 
 function getDishOptionsText(dish) {
   return dish.optionsText || (Array.isArray(dish.options) ? dish.options.join('、') : '');
@@ -75,6 +76,8 @@ Page({
         wx.showToast({ title: result.message || '订单状态已变化，请刷新后重试', icon: 'none' });
         return;
       }
+      invalidateMyOrders();
+      getApp().globalData.ordersUpdatedAt = Date.now();
       wx.showToast({ title: '订单已完成', icon: 'success' });
       await this.loadOrders();
     } catch (error) {
@@ -121,6 +124,8 @@ Page({
         wx.showToast({ title: result.message || '订单状态已变化，请刷新后重试', icon: 'none' });
         return;
       }
+      invalidateMyOrders();
+      getApp().globalData.ordersUpdatedAt = Date.now();
       wx.showToast({ title: '订单已取消', icon: 'success' });
       this.setData({ cancelTarget: null, cancelReason: '' });
       await this.loadOrders();

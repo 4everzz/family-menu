@@ -23,9 +23,13 @@ Page({
     searching: false,
     operatingUserId: '',
     canGrantOwner: false,
+    loadedAt: 0,
+  },
+  onLoad() {
+    this.loadMembers();
   },
   onShow() {
-    this.loadMembers();
+    if (this.data.loadedAt && Date.now() - this.data.loadedAt > 60 * 1000) this.loadMembers();
   },
   async callShopAdmin(action, payload = {}) {
     const shop = await ensureCurrentShop();
@@ -50,6 +54,7 @@ Page({
         shopName: shop.name || '当前店铺',
         members: (result.members || []).map(decorateMemberCard),
         canGrantOwner: result.canGrantOwner === true,
+        loadedAt: Date.now(),
       });
     } catch (error) {
       wx.showToast({ title: '读取成员失败', icon: 'none' });
@@ -85,6 +90,7 @@ Page({
     try {
       const result = await this.callShopAdmin('grantSelfOwner');
       if (!result.ok) throw new Error(result.message || '设置失败');
+      getApp().globalData.membersUpdatedAt = Date.now();
       wx.showToast({ title: '已设为一级管理员', icon: 'success' });
       await this.loadMembers();
     } catch (error) {
@@ -119,6 +125,7 @@ Page({
     try {
       const result = await this.callShopAdmin('grantShopMember', { userId, role });
       if (!result.ok) throw new Error(result.message || '授权失败');
+      getApp().globalData.membersUpdatedAt = Date.now();
       wx.showToast({ title: '授权成功', icon: 'success' });
       await this.loadMembers();
       if (this.data.keyword.trim()) await this.searchUsers();
@@ -150,6 +157,7 @@ Page({
     try {
       const result = await this.callShopAdmin('revokeShopMember', { userId });
       if (!result.ok) throw new Error(result.message || '撤销失败');
+      getApp().globalData.membersUpdatedAt = Date.now();
       wx.showToast({ title: '已撤销', icon: 'success' });
       await this.loadMembers();
       if (this.data.keyword.trim()) await this.searchUsers();

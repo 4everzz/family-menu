@@ -1,4 +1,7 @@
 const { getCurrentShop, setCurrentShop } = require('./shop-store');
+const { loadRuntimeCache } = require('./runtime-cache');
+
+const SHOP_SNAPSHOT_CACHE_TTL = 10 * 1000;
 
 function isStaffShop(shop) {
   return ['store_admin', 'store_owner', 'store_staff', 'super_admin'].includes(String(shop && shop.role || ''));
@@ -39,18 +42,21 @@ async function callAdminMenu(action, payload = {}) {
   return response.result || {};
 }
 
-async function getCurrentShopSnapshot() {
+async function getCurrentShopSnapshot(options = {}) {
   const shop = getCurrentShop();
   if (!shop || !shop.id) return { ok: false, code: 'SHOP_CONTEXT_REQUIRED' };
-  const response = await wx.cloud.callFunction({
-    name: 'shop-access',
-    data: {
-      action: 'getCurrentShopSnapshot',
-      shopId: shop.id,
-      entryToken: shop.entryToken || '',
-    },
-  });
-  return response.result || {};
+  const cacheKey = `shop-snapshot:${shop.id}:${shop.accessMode}:${shop.tableId || ''}:${shop.entryToken || ''}`;
+  return loadRuntimeCache(cacheKey, SHOP_SNAPSHOT_CACHE_TTL, async () => {
+    const response = await wx.cloud.callFunction({
+      name: 'shop-access',
+      data: {
+        action: 'getCurrentShopSnapshot',
+        shopId: shop.id,
+        entryToken: shop.entryToken || '',
+      },
+    });
+    return response.result || {};
+  }, options && options.force === true);
 }
 
 module.exports = {

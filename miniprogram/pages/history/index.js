@@ -5,10 +5,20 @@ Page({
   data: { historyOrders: [], loading: true },
   async onShow() {
     if (!(await requireLogin())) return;
+
+    await this.loadHistory();
+  },
+
+  async onPullDownRefresh() {
+    await this.loadHistory(true);
+    wx.stopPullDownRefresh();
+  },
+
+  async loadHistory(force = false) {
     this.setData({ loading: true });
     let orders = [];
     try {
-      orders = await loadMyOrders();
+      orders = await loadMyOrders({ force });
     } catch (error) {
       wx.showToast({ title: error.message || '读取订单失败', icon: 'none' });
     }
