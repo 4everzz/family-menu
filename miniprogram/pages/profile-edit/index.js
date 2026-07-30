@@ -1,4 +1,4 @@
-const { callAuth, refreshCurrentUser } = require('../../utils/auth-store');
+const { cacheCurrentUser, callAuth, refreshCurrentUser } = require('../../utils/auth-store');
 
 Page({
   data: {
@@ -7,6 +7,7 @@ Page({
     avatarFileId: '',
     avatarUrl: '',
     avatarText: '我',
+    profileReset: false,
     imageUploading: false,
     saving: false,
   },
@@ -22,6 +23,7 @@ Page({
       avatarFileId: user.avatarFileId || '',
       avatarUrl: user.avatarUrl || '',
       avatarText: (user.nickname || '我').slice(0, 1),
+      profileReset: user.profileReset === true,
     });
   },
   updateNickname(event) {
@@ -57,6 +59,7 @@ Page({
       const result = await callAuth('updateProfile', { nickname, avatarFileId: this.data.avatarFileId });
       if (!result.ok || !result.user) throw new Error(result.message || '保存失败');
       getApp().globalData.currentUser = result.user;
+      cacheCurrentUser(result.user);
       wx.showToast({ title: '资料已保存', icon: 'success' });
       setTimeout(() => wx.navigateBack(), 350);
     } catch (error) {

@@ -3,7 +3,7 @@ const { requireLogin } = require('../../utils/auth-guard');
 const { changeCartQuantity, clearCart, getCartItems, getCartSummary } = require('../../utils/cart-store');
 const { setCurrentShop, getCurrentShop, clearCurrentShop } = require('../../utils/shop-store');
 const { callAdminMenu, getCurrentShopSnapshot } = require('../../utils/shop-context');
-const { readShopCache, writeShopCache, isCacheCurrent, removeTemporaryImageUrls, refreshDishImageUrls, hasMissingDishImageUrls } = require('../../utils/shop-cache');
+const { readShopCache, writeShopCache, isCacheCurrent, removeTemporaryImageUrls, refreshDishImageUrls, hasMissingDishImageUrls, removeTemporaryImageUrl } = require('../../utils/shop-cache');
 
 const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
 
@@ -22,6 +22,10 @@ function hasValidShopContext(shop) {
   if (!shop || !shop.id) return false;
   if (shop.accessMode === 'staff') return true;
   return !!shop.entryToken;
+}
+
+function getMenuRenderKey(shop, version) {
+  return `${String(shop && shop.id || '')}:${Number(version) || 0}`;
 }
 
 function isStaffRole(role) {
@@ -107,10 +111,10 @@ Page({
       }
       return;
     }
-    this.renderDishes();
   },
   resetEntryState() {
     menuDishes = [];
+    this.appliedMenuRenderKey = '';
     this.setData({
       hasShopContext: false,
       canSelectShop: false,
@@ -198,24 +202,32 @@ Page({
       return false;
     }
     try {
+      // 有本店菜单缓存时先渲染，店铺状态和菜单版本随后在后台核验。
+      const cached = readShopCache(shop.id, 'menu');
+      const cachedRenderKey = cached ? getMenuRenderKey(shop, cached.version) : '';
+      if (cached && cached.data && isLatestRequest()) {
+        const cachedPayload = { ...cached.data, dishes: await refreshDishImageUrls(cached.data.dishes) };
+        this.applyMenuPayload(cachedPayload, cachedRenderKey);
+      }
       const snapshot = await getCurrentShopSnapshot();
       if (!snapshot.ok || !snapshot.access) {
         const error = new Error(snapshot.message || '店铺状态读取失败');
         error.code = snapshot.code || '';
         throw error;
       }
-      const cached = readShopCache(shop.id, 'menu');
       if (isCacheCurrent(cached, snapshot.access.versions.menu)) {
         let payload = { ...cached.data, dishes: await refreshDishImageUrls(cached.data.dishes) };
+        let requiresImageFallback = false;
         // 客户端临时链接换取失败时，由云函数兜底，避免缓存菜单退回默认图标。
         if (hasMissingDishImageUrls(cached.data.dishes, payload.dishes)) {
           const result = await callAdminMenu('getCustomerMenu');
           if (result.ok) {
             payload = { dishes: result.dishes || [], categories: result.categories || [] };
             writeShopCache(shop.id, 'menu', snapshot.access.versions.menu, removeTemporaryImageUrls(payload));
+            requiresImageFallback = true;
           }
         }
-        if (isLatestRequest()) this.applyMenuPayload(payload);
+        if (isLatestRequest()) this.applyMenuPayload(payload, getMenuRenderKey(shop, snapshot.access.versions.menu), requiresImageFallback);
         this.lastMenuErrorCode = '';
         return true;
       }
@@ -230,7 +242,7 @@ Page({
         categories: Array.isArray(result.categories) ? result.categories : [],
       };
       writeShopCache(shop.id, 'menu', snapshot.access.versions.menu, removeTemporaryImageUrls(payload));
-      if (isLatestRequest()) this.applyMenuPayload(payload);
+      if (isLatestRequest()) this.applyMenuPayload(payload, getMenuRenderKey(shop, snapshot.access.versions.menu));
       this.lastMenuErrorCode = '';
       return true;
     } catch (error) {
@@ -238,7 +250,10 @@ Page({
       this.lastMenuErrorCode = error.code || '';
       const cached = readShopCache(shop.id, 'menu');
       if (cached) {
-        this.applyMenuPayload({ ...cached.data, dishes: await refreshDishImageUrls(cached.data.dishes) });
+        this.applyMenuPayload(
+          { ...cached.data, dishes: await refreshDishImageUrls(cached.data.dishes) },
+          getMenuRenderKey(shop, cached.version),
+        );
         wx.showToast({ title: '网络异常，暂显示最近菜单', icon: 'none' });
         return true;
       }
@@ -247,7 +262,8 @@ Page({
       return false;
     }
   },
-  applyMenuPayload(payload) {
+  applyMenuPayload(payload, renderKey = '', forceRender = false) {
+    if (!forceRender && renderKey && this.appliedMenuRenderKey === renderKey) return false;
     const cloudDishes = Array.isArray(payload && payload.dishes) ? payload.dishes : [];
     const cloudCategories = Array.isArray(payload && payload.categories) ? payload.categories : [];
     const spiceCategories = cloudCategories.length ? cloudCategories : defaultCategories;
@@ -261,7 +277,9 @@ Page({
       return leftSort - rightSort || left.name.localeCompare(right.name, 'zh-CN');
     });
     const categories = validCategories.length ? [{ id: 'all', name: '全部' }, ...validCategories] : defaultCategories;
+    this.appliedMenuRenderKey = renderKey;
     this.setData({ categories, activeCategory: 'all', menuScrollTop: 0, menuError: '' }, () => this.renderDishes());
+    return true;
   },
   shouldClearShopContext() {
     return ['ENTRY_SESSION_REQUIRED', 'ENTRY_SESSION_EXPIRED', 'SHOP_CONTEXT_REQUIRED', 'SHOP_NOT_AVAILABLE', 'SHOP_NOT_FOUND', 'TABLE_NOT_AVAILABLE', 'TABLE_REQUIRED'].includes(this.lastMenuErrorCode);
@@ -481,6 +499,24 @@ Page({
     });
     const summary = getCartSummary();
     this.setData({ cartItems, cartCount: summary.count, cartTotal: summary.total });
+  },
+  async retryDishImage(event) {
+    const id = event.currentTarget.dataset.id;
+    const dish = menuDishes.find((item) => item.id === id);
+    this.imageRetryCounts = this.imageRetryCounts || {};
+    if (!dish || !dish.imageFileId || this.retryingDishImageId === id || this.imageRetryCounts[id] >= 1) return;
+    this.imageRetryCounts[id] += 1;
+    this.retryingDishImageId = id;
+    try {
+      removeTemporaryImageUrl(dish.imageFileId);
+      const [refreshedDish] = await refreshDishImageUrls([dish], { force: true });
+      if (!refreshedDish || !refreshedDish.imageUrl) return;
+      menuDishes = menuDishes.map((item) => (item.id === id ? { ...item, imageUrl: refreshedDish.imageUrl } : item));
+      delete this.imageRetryCounts[id];
+      this.renderDishes();
+    } finally {
+      this.retryingDishImageId = '';
+    }
   },
   renderCartOnly() {
     const summary = getCartSummary();

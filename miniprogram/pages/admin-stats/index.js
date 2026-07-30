@@ -10,9 +10,18 @@ Page({
     summary: [],
     daily: [],
     topDishes: [],
+    lastOrdersUpdatedAt: 0,
+  },
+  onLoad() {
+    this.setData({ lastOrdersUpdatedAt: getApp().globalData.ordersUpdatedAt || 0 });
+    this.loadStats();
   },
   onShow() {
-    this.loadStats();
+    const updatedAt = getApp().globalData.ordersUpdatedAt || 0;
+    if (updatedAt && updatedAt !== this.data.lastOrdersUpdatedAt) {
+      this.setData({ lastOrdersUpdatedAt: updatedAt });
+      this.loadStats();
+    }
   },
   async loadStats() {
     this.setData({ loading: true });

@@ -8,6 +8,8 @@ Page({
     shopName: '',
     canManageMembers: false,
     topDishes: [],
+    lastDashboardUpdatedAt: 0,
+    loadedAt: 0,
     stats: [
       { label: '今日订单', value: '—' },
       { label: '今日营业额', value: '—' },
@@ -15,9 +17,19 @@ Page({
       { label: '售罄菜品', value: '—' },
     ],
   },
+  onLoad() {
+    this.loadAccess();
+  },
   onShow() {
     this.setData({ navigatingTarget: '' });
-    this.loadAccess();
+    const lastChangedAt = Math.max(
+      getApp().globalData.menuUpdatedAt || 0,
+      getApp().globalData.ordersUpdatedAt || 0,
+      getApp().globalData.membersUpdatedAt || 0,
+    );
+    if (!this.data.loadedAt || lastChangedAt > this.data.lastDashboardUpdatedAt || Date.now() - this.data.loadedAt > 15 * 1000) {
+      this.loadAccess();
+    }
   },
   async callAdmin(action, payload = {}) {
     return callAdminMenu(action, payload);
@@ -31,6 +43,15 @@ Page({
     return response.result || {};
   },
   async loadAccess() {
+    if (this.loadingAccess) return this.loadingAccess;
+    this.loadingAccess = this.doLoadAccess();
+    try {
+      return await this.loadingAccess;
+    } finally {
+      this.loadingAccess = null;
+    }
+  },
+  async doLoadAccess() {
     this.setData({ loading: true });
     try {
       const shop = await ensureCurrentShop();
@@ -46,6 +67,12 @@ Page({
           shopName: shop.name || '当前店铺',
           canManageMembers: memberResult.ok === true,
           topDishes: dashboard.topDishes || [],
+          lastDashboardUpdatedAt: Math.max(
+            getApp().globalData.menuUpdatedAt || 0,
+            getApp().globalData.ordersUpdatedAt || 0,
+            getApp().globalData.membersUpdatedAt || 0,
+          ),
+          loadedAt: Date.now(),
           stats: [
             { label: '今日订单', value: String(dashboard.orderCount || 0) },
             { label: '今日营业额', value: `¥${Number(dashboard.revenue || 0).toFixed(2)}` },

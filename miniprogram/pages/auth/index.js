@@ -1,4 +1,4 @@
-const { callAuth } = require('../../utils/auth-store');
+const { cacheCurrentUser, callAuth } = require('../../utils/auth-store');
 
 Page({
   data: {
@@ -6,6 +6,7 @@ Page({
   },
   async finishLogin(result) {
     getApp().globalData.currentUser = result.user;
+    cacheCurrentUser(result.user);
     wx.showToast({ title: '登录成功', icon: 'success' });
     setTimeout(() => {
       if (result.user.profileCompleted) {

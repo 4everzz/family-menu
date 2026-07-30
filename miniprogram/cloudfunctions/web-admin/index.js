@@ -106,6 +106,8 @@ async function bumpShopVersions(shopId, components) {
 }
 const SYSTEM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SYSTEM_ID_LENGTH = 8;
+const RESET_NICKNAME_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const RESET_NICKNAME_NUMBERS = '23456789';
 
 function normalizeMemberRole(role) {
   const value = String(role || '');
@@ -155,6 +157,13 @@ function createSystemId() {
   return value;
 }
 
+function createResetNickname() {
+  const bytes = crypto.randomBytes(7);
+  const letter = (index) => RESET_NICKNAME_LETTERS[bytes[index] % RESET_NICKNAME_LETTERS.length];
+  const number = (index) => RESET_NICKNAME_NUMBERS[bytes[index] % RESET_NICKNAME_NUMBERS.length];
+  return `U${letter(0)}${letter(1)}${number(2)}${number(3)}${letter(4)}${number(5)}${letter(6)}`;
+}
+
 async function ensureUserSystemId(user) {
   if (!user || user.systemId) return user;
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -177,6 +186,11 @@ function makePublicUser(user) {
     role: user.role || 'user',
     enabled: user.enabled !== false,
   };
+}
+
+function isProfileCompleted(user) {
+  const nickname = String(user && user.nickname || '').trim();
+  return !!nickname && nickname !== '微信用户';
 }
 
 async function attachAvatarUrls(items) {
@@ -272,6 +286,13 @@ async function getUserById(userId) {
   if (!id) return null;
   const result = await db.collection('users').doc(id).get().catch(() => null);
   return result && result.data ? result.data : null;
+}
+
+async function getWebAdminByUsername(username) {
+  const cleanUsername = String(username || '').trim();
+  if (!cleanUsername) return null;
+  const result = await safeGet(db.collection('web_admins').where({ username: cleanUsername, enabled: true }).limit(1));
+  return result.data[0] || null;
 }
 
 // ==== 业务：店铺管理（#10）====
@@ -559,7 +580,7 @@ async function listUsers(payload) {
     const member = summary.get(user._id) || { ownerCount: 0, staffCount: 0, shopCount: 0 };
     return {
       ...makePublicUser(user),
-      profileCompleted: user.profileCompleted === true,
+      profileCompleted: isProfileCompleted(user),
       phoneNumber: user.phoneNumber ? String(user.phoneNumber).replace(/^(\d{3})\d{4}(\d+)/, '$1****$2') : '',
       shopCount: member.shopCount || 0,
       ownerCount: member.ownerCount || 0,
@@ -585,6 +606,73 @@ async function setUserEnabled(payload) {
   const enabled = payload.enabled === true;
   await db.collection('users').doc(user._id).update({ data: { enabled, updatedAt: db.serverDate() } });
   return { ok: true, user: { id: user._id, enabled } };
+}
+
+async function resetUserProfile(payload) {
+  const user = await getUserById(payload.userId);
+  if (!user) return { ok: false, code: 'USER_NOT_FOUND', message: '用户不存在' };
+
+  const nickname = createResetNickname();
+  // 仅解除资料展示绑定，不删除旧云存储文件，避免误删仍被引用的头像。
+  await db.collection('users').doc(user._id).update({
+    data: {
+      nickname,
+      avatarFileId: '',
+      profileResetAt: db.serverDate(),
+      updatedAt: db.serverDate(),
+    },
+  });
+  return {
+    ok: true,
+    user: {
+      id: user._id,
+      nickname,
+      avatarFileId: '',
+      profileCompleted: false,
+    },
+  };
+}
+
+function normalizeNicknameRestriction(value) {
+  return String(value || '').trim().replace(/\s+/g, '').toUpperCase().slice(0, 12);
+}
+
+async function listNicknameRestrictions() {
+  const result = await db.collection('nickname_restrictions').orderBy('createdAt', 'desc').limit(100).get();
+  return {
+    ok: true,
+    restrictions: (result.data || []).map((item) => ({
+      id: item._id,
+      word: String(item.word || item.normalizedWord || ''),
+      createdBy: item.createdBy || '',
+    })).filter((item) => item.word),
+  };
+}
+
+async function addNicknameRestriction(payload, session) {
+  const word = normalizeNicknameRestriction(payload.word);
+  if (!word || word.length > 12) {
+    return { ok: false, code: 'INVALID_RESTRICTION', message: '限制词请填写 1 至 12 个字符，且不能包含空格' };
+  }
+  const existing = await db.collection('nickname_restrictions').where({ normalizedWord: word }).limit(1).get();
+  if (existing.data.length) return { ok: false, code: 'RESTRICTION_EXISTS', message: '该限制词已存在' };
+  const added = await db.collection('nickname_restrictions').add({
+    data: {
+      word,
+      normalizedWord: word,
+      createdBy: session.username || '',
+      createdAt: db.serverDate(),
+    },
+  });
+  return { ok: true, restriction: { id: added._id, word, createdBy: session.username || '' } };
+}
+
+async function deleteNicknameRestriction(payload) {
+  const id = String(payload.id || '').trim();
+  if (!id) return { ok: false, code: 'INVALID_RESTRICTION', message: '限制词信息无效' };
+  const result = await db.collection('nickname_restrictions').doc(id).remove();
+  if (!result.stats || result.stats.removed !== 1) return { ok: false, code: 'RESTRICTION_NOT_FOUND', message: '限制词不存在或已删除' };
+  return { ok: true, id };
 }
 
 // ==== 业务：跨店订单只读监管 ====
@@ -680,6 +768,101 @@ async function getPlatformOrderDetail(payload) {
   if (!result || !result.data) return { ok: false, code: 'ORDER_NOT_FOUND', message: '订单不存在或已删除' };
   const shopNames = await getShopNameMap();
   return { ok: true, order: makePlatformOrderDetail(result.data, shopNames) };
+}
+
+async function verifySecondaryPassword(password, session) {
+  const admin = await getWebAdminByUsername(session && session.username);
+  if (!admin) return { ok: false, code: 'ADMIN_NOT_FOUND', message: '当前超管账号不可用，请重新登录' };
+  if (!admin.secondaryPasswordHash || !admin.secondaryPasswordSalt) {
+    return { ok: false, code: 'SECONDARY_PASSWORD_NOT_SET', message: '请先设置订单删除二级密码' };
+  }
+  const input = String(password || '');
+  const computed = hashPassword(input, admin.secondaryPasswordSalt);
+  if (!input || !safeEqual(computed, admin.secondaryPasswordHash)) {
+    return { ok: false, code: 'SECONDARY_PASSWORD_INVALID', message: '二级密码错误' };
+  }
+  return { ok: true, admin };
+}
+
+async function setSecondaryPassword(payload, session) {
+  const currentPassword = String(payload.currentPassword || '');
+  const secondaryPassword = String(payload.secondaryPassword || '');
+  if (!currentPassword) return { ok: false, code: 'CURRENT_PASSWORD_REQUIRED', message: '请输入当前网页登录密码' };
+  if (secondaryPassword.length < 8 || secondaryPassword.length > 64) {
+    return { ok: false, code: 'INVALID_SECONDARY_PASSWORD', message: '二级密码需为 8 至 64 位' };
+  }
+  const admin = await getWebAdminByUsername(session && session.username);
+  if (!admin) return { ok: false, code: 'ADMIN_NOT_FOUND', message: '当前超管账号不可用，请重新登录' };
+  const currentHash = hashPassword(currentPassword, admin.salt);
+  if (!safeEqual(currentHash, admin.passwordHash)) {
+    return { ok: false, code: 'CURRENT_PASSWORD_INVALID', message: '当前网页登录密码错误' };
+  }
+  const salt = crypto.randomBytes(16).toString('hex');
+  await db.collection('web_admins').doc(admin._id).update({
+    data: {
+      secondaryPasswordSalt: salt,
+      secondaryPasswordHash: hashPassword(secondaryPassword, salt),
+      secondaryPasswordUpdatedAt: db.serverDate(),
+    },
+  });
+  return { ok: true, hasSecondaryPassword: true };
+}
+
+function getOrderCreatedDateKey(order) {
+  const value = order && (order.createdAtServer || order.createdAt);
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? getChinaDateKeyOf(date) : '';
+}
+
+async function deletePlatformOrder(payload, session) {
+  const recordId = String(payload.recordId || '').trim();
+  if (!recordId) return { ok: false, code: 'INVALID_ORDER', message: '订单参数无效' };
+
+  const verified = await verifySecondaryPassword(payload.secondaryPassword, session);
+  if (!verified.ok) return verified;
+
+  const todayKey = getChinaDateKeyOf(new Date());
+  const transactionResult = await db.runTransaction(async (transaction) => {
+    const orderResult = await transaction.collection('orders').doc(recordId).get();
+    const order = orderResult && orderResult.data;
+    if (!order) {
+      const error = new Error('订单不存在或已删除');
+      error.code = 'ORDER_NOT_FOUND';
+      throw error;
+    }
+    const shopId = String(order.shopId || '').trim();
+    if (!shopId) {
+      const error = new Error('订单缺少店铺信息，无法删除');
+      error.code = 'INVALID_ORDER_SHOP';
+      throw error;
+    }
+
+    let restoredQuantity = 0;
+    if (order.status === '制作中' && getOrderCreatedDateKey(order) === todayKey) {
+      for (const item of Array.isArray(order.items) ? order.items : []) {
+        const quantity = Number(item.quantity) || 0;
+        if (!item.id || quantity <= 0) continue;
+        const dishResult = await transaction.collection('dishes').where({ id: item.id, shopId }).limit(1).get();
+        const dish = dishResult.data[0];
+        if (!dish || dish.stockResetDate !== todayKey) continue;
+        const dailyStock = Number.isInteger(dish.dailyStock) && dish.dailyStock >= 0 ? dish.dailyStock : 0;
+        const currentStock = Number.isInteger(dish.stock) && dish.stock >= 0 ? dish.stock : 0;
+        const nextStock = Math.min(dailyStock, currentStock + quantity);
+        if (nextStock > currentStock) {
+          await transaction.collection('dishes').doc(dish._id).update({
+            data: { stock: nextStock, updatedAt: db.serverDate() },
+          });
+          restoredQuantity += nextStock - currentStock;
+        }
+      }
+    }
+
+    await transaction.collection('orders').doc(recordId).remove();
+    return { shopId, restoredQuantity, status: order.status || '制作中' };
+  });
+
+  await bumpShopVersions(transactionResult.shopId, transactionResult.restoredQuantity > 0 ? ['orders', 'menu'] : ['orders']);
+  return { ok: true, recordId, ...transactionResult };
 }
 
 function createDateBuckets(range) {
@@ -1065,6 +1248,11 @@ async function login(payload) {
   return { ok: true, token, expiresAt: expiresAt.toISOString(), username };
 }
 
+async function getSecurityStatus(session) {
+  const admin = await getWebAdminByUsername(session && session.username);
+  return { ok: true, hasSecondaryPassword: !!(admin && admin.secondaryPasswordHash && admin.secondaryPasswordSalt) };
+}
+
 async function logout(payload) {
   const token = String(payload.token || '').trim();
   if (token) {
@@ -1078,7 +1266,9 @@ async function logout(payload) {
 async function handleAuthedAction(action, payload, session) {
   switch (action) {
     case 'me':
-      return { ok: true, username: session.username };
+      return { ok: true, username: session.username, ...(await getSecurityStatus(session)) };
+    case 'setSecondaryPassword':
+      return setSecondaryPassword(payload, session);
     // #10 店铺管理
     case 'listShops':
       return listShops();
@@ -1102,11 +1292,21 @@ async function handleAuthedAction(action, payload, session) {
       return listUsers(payload);
     case 'setUserEnabled':
       return setUserEnabled(payload);
+    case 'resetUserProfile':
+      return resetUserProfile(payload);
+    case 'listNicknameRestrictions':
+      return listNicknameRestrictions();
+    case 'addNicknameRestriction':
+      return addNicknameRestriction(payload, session);
+    case 'deleteNicknameRestriction':
+      return deleteNicknameRestriction(payload);
     // 跨店订单只读监管
     case 'listPlatformOrders':
       return listPlatformOrders(payload);
     case 'getPlatformOrderDetail':
       return getPlatformOrderDetail(payload);
+    case 'deletePlatformOrder':
+      return deletePlatformOrder(payload, session);
     case 'getPlatformReport':
       return getPlatformReport(payload);
     case 'exportPlatformOrders':

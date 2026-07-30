@@ -11,9 +11,18 @@ Page({
     isAdding: false,
     isSaving: false,
     isDeleting: false,
+    lastMenuUpdatedAt: 0,
+  },
+  onLoad() {
+    this.setData({ lastMenuUpdatedAt: getApp().globalData.menuUpdatedAt || 0 });
+    this.loadCategories();
   },
   onShow() {
-    this.loadCategories();
+    const updatedAt = getApp().globalData.menuUpdatedAt || 0;
+    if (updatedAt && updatedAt !== this.data.lastMenuUpdatedAt) {
+      this.setData({ lastMenuUpdatedAt: updatedAt });
+      this.loadCategories();
+    }
   },
   async callAdmin(action, payload = {}) {
     return callAdminMenu(action, payload);

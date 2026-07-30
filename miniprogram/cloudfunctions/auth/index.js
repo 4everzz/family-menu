@@ -11,6 +11,7 @@ const ROLES = {
 };
 const SYSTEM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SYSTEM_ID_LENGTH = 8;
+const RESET_NICKNAME_MAX_LENGTH = 12;
 
 function normalizeAvatarFileId(value) {
   const avatarFileId = String(value || '').trim();
@@ -22,6 +23,21 @@ function isProfileCompleted(user) {
   return !!nickname && nickname !== '微信用户';
 }
 
+function normalizeNicknameForComparison(value) {
+  return String(value || '').trim().replace(/\s+/g, '').toUpperCase();
+}
+
+async function findNicknameRestriction(nickname) {
+  const normalizedNickname = normalizeNicknameForComparison(nickname);
+  if (!normalizedNickname) return '';
+  const result = await db.collection('nickname_restrictions').limit(100).get().catch(() => ({ data: [] }));
+  const matched = (result.data || []).find((item) => {
+    const word = normalizeNicknameForComparison(item.normalizedWord || item.word);
+    return word && normalizedNickname.includes(word);
+  });
+  return matched ? String(matched.word || '').trim() : '';
+}
+
 function makePublicUser(user) {
   return {
     id: user._id,
@@ -29,6 +45,7 @@ function makePublicUser(user) {
     nickname: user.nickname || '微信用户',
     avatarFileId: normalizeAvatarFileId(user.avatarFileId),
     profileCompleted: isProfileCompleted(user),
+    profileReset: !!user.profileResetAt,
     role: user.role,
     enabled: user.enabled !== false,
   };
@@ -154,15 +171,19 @@ async function getCurrentUser(openId) {
 async function updateProfile(openId, event) {
   const user = await findUserByOpenId(openId);
   if (!user || user.enabled === false) return { ok: false, code: 'NOT_LOGGED_IN', message: '请先登录' };
-  const nickname = String(event.nickname || '').trim().slice(0, 12);
+  const nickname = String(event.nickname || '').trim().slice(0, RESET_NICKNAME_MAX_LENGTH);
   const avatarFileId = normalizeAvatarFileId(event.avatarFileId);
   if (!nickname || nickname === '微信用户') {
     return { ok: false, code: 'INVALID_NICKNAME', message: '请填写 1 至 12 个字的昵称' };
   }
+  const restrictedWord = await findNicknameRestriction(nickname);
+  if (restrictedWord) {
+    return { ok: false, code: 'NICKNAME_RESTRICTED', message: '昵称包含限制词，请合理修改后再保存' };
+  }
   const userWithSystemId = await ensureSystemId(user);
   const updatedUser = { ...userWithSystemId, nickname, avatarFileId };
   await db.collection('users').doc(user._id).update({
-    data: { nickname, avatarFileId, updatedAt: db.serverDate() },
+    data: { nickname, avatarFileId, profileResetAt: null, updatedAt: db.serverDate() },
   });
   return { ok: true, user: await makePublicUserWithAvatar(updatedUser) };
 }

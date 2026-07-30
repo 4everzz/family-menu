@@ -15,6 +15,16 @@ const total = ref(0);
 const hasMore = ref(false);
 const page = ref(1);
 const detail = ref(null);
+const success = ref('');
+const toast = ref('');
+const deleting = ref(false);
+const showDeleteConfirm = ref(false);
+const secondaryPassword = ref('');
+const deleteError = ref('');
+const showSecurityModal = ref(false);
+const securitySaving = ref(false);
+const securityError = ref('');
+const securityForm = ref({ currentPassword: '', secondaryPassword: '', confirmPassword: '' });
 
 const today = getChinaDateKey();
 const filters = ref({
@@ -64,6 +74,7 @@ async function load({ reset = false } = {}) {
   loading.value = true;
   error.value = '';
   warning.value = '';
+  success.value = '';
   const result = await callApi('listPlatformOrders', {
     ...filters.value,
     page: page.value,
@@ -103,6 +114,7 @@ async function loadMore() {
 }
 
 async function openDetail(order) {
+  success.value = '';
   loadingDetail.value = true;
   detail.value = { ...order, items: [] };
   const result = await callApi('getPlatformOrderDetail', { recordId: order.recordId });
@@ -115,7 +127,96 @@ async function openDetail(order) {
 }
 
 function closeDetail() {
-  if (!loadingDetail.value) detail.value = null;
+  if (!loadingDetail.value && !deleting.value) {
+    showDeleteConfirm.value = false;
+    detail.value = null;
+  }
+}
+
+function openDeleteConfirm() {
+  secondaryPassword.value = '';
+  deleteError.value = '';
+  showDeleteConfirm.value = true;
+}
+
+function flash(message) {
+  toast.value = message;
+  setTimeout(() => {
+    if (toast.value === message) toast.value = '';
+  }, 2800);
+}
+
+function closeDeleteConfirm() {
+  if (deleting.value) return;
+  secondaryPassword.value = '';
+  deleteError.value = '';
+  showDeleteConfirm.value = false;
+}
+
+function openSecurityModal() {
+  securityError.value = '';
+  securityForm.value = { currentPassword: '', secondaryPassword: '', confirmPassword: '' };
+  showSecurityModal.value = true;
+}
+
+function closeSecurityModal() {
+  if (securitySaving.value) return;
+  securityError.value = '';
+  showSecurityModal.value = false;
+}
+
+async function saveSecondaryPassword() {
+  const form = securityForm.value;
+  if (!form.currentPassword || !form.secondaryPassword || !form.confirmPassword) {
+    securityError.value = '请完整填写三个密码输入框';
+    return;
+  }
+  if (form.secondaryPassword !== form.confirmPassword) {
+    securityError.value = '两次输入的二级密码不一致';
+    return;
+  }
+  securitySaving.value = true;
+  securityError.value = '';
+  const result = await callApi('setSecondaryPassword', {
+    currentPassword: form.currentPassword,
+    secondaryPassword: form.secondaryPassword,
+  });
+  securitySaving.value = false;
+  if (!result.ok) {
+    securityError.value = result.message || '保存二级密码失败';
+    return;
+  }
+  showSecurityModal.value = false;
+  success.value = '订单删除二级密码已保存';
+}
+
+async function deleteOrder() {
+  if (!detail.value || deleting.value) return;
+  if (!secondaryPassword.value) {
+    deleteError.value = '请输入订单删除二级密码';
+    return;
+  }
+  deleting.value = true;
+  deleteError.value = '';
+  const result = await callApi('deletePlatformOrder', {
+    recordId: detail.value.recordId,
+    secondaryPassword: secondaryPassword.value,
+  });
+  deleting.value = false;
+  if (!result.ok) {
+    deleteError.value = result.message || '删除订单失败';
+    flash(`删除失败：${deleteError.value}`);
+    return;
+  }
+  orders.value = orders.value.filter((order) => order.recordId !== result.recordId);
+  total.value = Math.max(0, total.value - 1);
+  showDeleteConfirm.value = false;
+  detail.value = null;
+  secondaryPassword.value = '';
+  success.value = result.restoredQuantity > 0
+    ? `订单已永久删除，已回补 ${result.restoredQuantity} 份当天库存`
+    : '订单已永久删除';
+  flash(success.value);
 }
 
 function csvCell(value) {
@@ -152,6 +253,7 @@ onMounted(async () => {
       <h2 class="page-title">跨店订单</h2>
     </div>
     <div class="row">
+      <button class="btn btn-sm" @click="openSecurityModal">设置删除二级密码</button>
       <button class="btn btn-sm" :disabled="exporting" @click="exportOrders">{{ exporting ? '导出中…' : '导出 CSV' }}</button>
       <button class="btn btn-sm" :disabled="loading" @click="load({ reset: true })">{{ loading ? '刷新中…' : '刷新' }}</button>
     </div>
@@ -194,6 +296,7 @@ onMounted(async () => {
 
   <p v-if="error" class="notice notice-error feedback">{{ error }}</p>
   <p v-if="warning" class="notice notice-warn feedback">{{ warning }}</p>
+  <p v-if="success" class="notice notice-ok feedback">{{ success }}</p>
 
   <div class="result-head spread">
     <span class="muted result-summary">{{ rangeLabel }} · 共 {{ total }} 笔</span>
@@ -262,9 +365,71 @@ onMounted(async () => {
           <p>{{ detail.remark }}</p>
         </section>
         <footer class="detail-total"><span>订单合计</span><strong class="num">{{ money(detail.total) }}</strong></footer>
+        <section class="delete-section">
+          <div>
+            <h4>危险操作</h4>
+            <p>永久删除后不可恢复。仅当天“制作中”订单会按现有库存规则回补库存。</p>
+          </div>
+          <button class="btn btn-danger" @click="openDeleteConfirm">永久删除订单</button>
+        </section>
       </div>
     </section>
   </div>
+
+  <div v-if="showDeleteConfirm && detail" class="overlay security-overlay" @click.self="closeDeleteConfirm">
+    <section class="modal security-modal" role="dialog" aria-modal="true" aria-labelledby="delete-order-title">
+      <header class="modal-head">
+        <p class="modal-eyebrow">危险操作确认</p>
+        <h3 id="delete-order-title" class="modal-title">永久删除订单</h3>
+      </header>
+      <div class="modal-body">
+        <p class="danger-copy">订单 {{ detail.orderId }} 删除后不可恢复，也不会再计入平台订单与经营报表。</p>
+        <p class="muted security-note">删除当天“制作中”订单时，系统会在同一事务中回补可用库存；已完成和已取消订单不回补。</p>
+        <label class="field">
+          <span>订单删除二级密码</span>
+          <input v-model="secondaryPassword" class="input" type="password" maxlength="64" autocomplete="current-password" placeholder="输入二级密码后确认删除" @keyup.enter="deleteOrder" />
+        </label>
+        <p v-if="deleteError" class="notice notice-error">{{ deleteError }}</p>
+      </div>
+      <footer class="modal-foot">
+        <button class="btn" :disabled="deleting" @click="closeDeleteConfirm">取消</button>
+        <button class="btn btn-danger" :disabled="deleting || !secondaryPassword" @click="deleteOrder">{{ deleting ? '正在删除…' : '确认永久删除' }}</button>
+      </footer>
+    </section>
+  </div>
+
+  <div v-if="showSecurityModal" class="overlay security-overlay" @click.self="closeSecurityModal">
+    <section class="modal security-modal" role="dialog" aria-modal="true" aria-labelledby="secondary-password-title">
+      <header class="modal-head">
+        <p class="modal-eyebrow">超管安全设置</p>
+        <h3 id="secondary-password-title" class="modal-title">订单删除二级密码</h3>
+      </header>
+      <div class="modal-body">
+        <p class="muted security-note">二级密码只用于永久删除订单。保存或修改时，需要再次验证当前网页登录密码。</p>
+        <label class="field">
+          <span>当前网页登录密码</span>
+          <input v-model="securityForm.currentPassword" class="input" type="password" maxlength="64" autocomplete="current-password" />
+        </label>
+        <label class="field">
+          <span>新二级密码</span>
+          <input v-model="securityForm.secondaryPassword" class="input" type="password" minlength="8" maxlength="64" autocomplete="new-password" placeholder="8 至 64 位" />
+        </label>
+        <label class="field">
+          <span>确认新二级密码</span>
+          <input v-model="securityForm.confirmPassword" class="input" type="password" minlength="8" maxlength="64" autocomplete="new-password" @keyup.enter="saveSecondaryPassword" />
+        </label>
+        <p v-if="securityError" class="notice notice-error">{{ securityError }}</p>
+      </div>
+      <footer class="modal-foot">
+        <button class="btn" :disabled="securitySaving" @click="closeSecurityModal">取消</button>
+        <button class="btn btn-primary" :disabled="securitySaving" @click="saveSecondaryPassword">{{ securitySaving ? '正在保存…' : '保存二级密码' }}</button>
+      </footer>
+    </section>
+  </div>
+
+  <transition name="toast">
+    <div v-if="toast" class="toast">{{ toast }}</div>
+  </transition>
 </template>
 
 <style scoped>
@@ -307,7 +472,7 @@ onMounted(async () => {
 .order-total { text-align: right; font-size: 14px; font-weight: 650; }
 .badge-making { background: var(--warn-soft); color: var(--warn); }
 .load-more { display: flex; justify-content: center; padding-top: 18px; }
-.order-modal { max-width: 640px; }
+.order-modal { max-width: 640px; max-height: calc(100vh - 40px); overflow-y: auto; }
 .modal-head { padding: 18px 20px; border-bottom: 1px solid var(--line); }
 .modal-title { margin-top: 2px; font-size: 16px; font-weight: 650; }
 .close-btn { height: 32px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 13px; cursor: pointer; }
@@ -330,6 +495,18 @@ onMounted(async () => {
 .remark-section p { color: var(--ink-soft); font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
 .detail-total { display: flex; justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; }
 .detail-total strong { font-size: 18px; }
+.delete-section { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid #f1cfca; border-radius: var(--radius-sm); background: #fffafa; }
+.delete-section > div { min-width: 0; }
+.delete-section h4 { margin: 0; color: var(--danger); font-size: 13.5px; }
+.delete-section p { margin: 5px 0 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.55; }
+.delete-section .btn-danger { flex: none; white-space: nowrap; }
+.security-overlay { z-index: 70; }
+.security-modal { max-width: 500px; }
+.security-note, .danger-copy { margin: 0; font-size: 13px; line-height: 1.65; }
+.danger-copy { color: var(--danger); }
+.toast { position: fixed; left: 50%; bottom: 32px; z-index: 80; transform: translateX(-50%); max-width: min(420px, calc(100vw - 32px)); padding: 11px 18px; border-radius: 100px; background: var(--ink); color: #fff; box-shadow: 0 8px 24px rgba(20, 28, 24, 0.25); font-size: 13.5px; text-align: center; }
+.toast-enter-active, .toast-leave-active { transition: opacity 0.25s, transform 0.25s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, 8px); }
 
 @media (max-width: 960px) {
   .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -341,6 +518,7 @@ onMounted(async () => {
 @media (max-width: 560px) {
   .filter-grid { grid-template-columns: 1fr; }
   .detail-meta { grid-template-columns: 1fr; }
-  .order-modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+  .delete-section { align-items: stretch; flex-direction: column; }
+  .order-modal { max-height: calc(100vh - 32px); }
 }
 </style>

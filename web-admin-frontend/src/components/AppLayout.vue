@@ -66,7 +66,11 @@ async function logout() {
         <span class="topbar-tag">超级管理员</span>
       </header>
       <main class="content">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <keep-alive>
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </main>
     </div>
   </div>
