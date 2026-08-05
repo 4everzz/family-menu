@@ -27,6 +27,7 @@ Page({
       spiceOptions: [],
       defaultSpice: '',
     },
+    newDishImagePreviewUrl: '',
     editDraft: {
       name: '',
       category: '',
@@ -40,11 +41,13 @@ Page({
       dailyStock: '10',
       stock: '10',
     },
+    editDishImagePreviewUrl: '',
     draftStatusText: '在售',
     draftStatusClass: '',
     isSubmitting: false,
     imageUploading: false,
     savingDetails: false,
+    statusUpdating: '',
     deleting: false,
   },
   onLoad(options) {
@@ -63,6 +66,17 @@ Page({
   },
   async callAdmin(action, payload = {}) {
     return callAdminMenu(action, payload);
+  },
+  async getImagePreviewUrl(imageFileId) {
+    if (!imageFileId) return '';
+    if (!String(imageFileId).startsWith('cloud://')) return imageFileId;
+    try {
+      const result = await wx.cloud.getTempFileURL({ fileList: [imageFileId] });
+      const file = result.fileList && result.fileList[0];
+      return file && file.status === 0 ? (file.tempFileURL || '') : '';
+    } catch (error) {
+      return '';
+    }
   },
   getDraftStatus(draft) {
     const isOffline = draft.enabled === false || draft.manualSoldOut === true || Number(draft.stock) <= 0;
@@ -136,6 +150,7 @@ Page({
         stock: String(stock),
       };
       const draftStatus = this.getDraftStatus(editDraft);
+      const editDishImagePreviewUrl = await this.getImagePreviewUrl(normalizedDish.imageFileId);
       this.setData({
         hasAccess: true,
         loading: false,
@@ -144,6 +159,7 @@ Page({
         categories: categoryResult.categories,
         categoryIndex: Math.max(0, categoryResult.categories.findIndex((item) => item.id === dish.category)),
         editDraft,
+        editDishImagePreviewUrl,
         editSpiceChoices: makeSpiceChoices(normalizedDish.spiceOptions || []),
         draftStatusText: draftStatus.text,
         draftStatusClass: draftStatus.className,
@@ -208,9 +224,15 @@ Page({
       });
       if (!uploaded.fileID) throw new Error('图片上传失败');
       if (mode === 'create') {
-        this.setData({ newDish: { ...this.data.newDish, imageFileId: uploaded.fileID } });
+        this.setData({
+          newDish: { ...this.data.newDish, imageFileId: uploaded.fileID },
+          newDishImagePreviewUrl: filePath,
+        });
       } else {
-        this.setEditDraft({ ...this.data.editDraft, imageFileId: uploaded.fileID });
+        this.setEditDraft(
+          { ...this.data.editDraft, imageFileId: uploaded.fileID },
+          { editDishImagePreviewUrl: filePath },
+        );
       }
       wx.showToast({ title: '图片已上传', icon: 'success' });
     } catch (error) {
@@ -286,8 +308,6 @@ Page({
         imageFileId: editDraft.imageFileId,
         spiceOptions: editDraft.spiceOptions,
         defaultSpice: editDraft.defaultSpice,
-        enabled: editDraft.enabled !== false,
-        manualSoldOut: editDraft.manualSoldOut === true,
         dailyStock,
         stock,
       });
@@ -307,10 +327,12 @@ Page({
         dailyStock: String(result.dish.dailyStock),
         stock: String(result.dish.stock),
       };
+      const editDishImagePreviewUrl = await this.getImagePreviewUrl(result.dish.imageFileId);
       this.setEditDraft(nextDraft, {
         dish: { ...this.data.dish, ...result.dish },
         categoryName: category ? category.name : result.dish.category,
         editSpiceChoices: makeSpiceChoices(result.dish.spiceOptions || []),
+        editDishImagePreviewUrl,
       });
       wx.showToast({ title: '菜品已保存', icon: 'success' });
     } catch (error) {
@@ -320,10 +342,54 @@ Page({
     }
   },
   async toggleDishEnabled() {
-    this.setEditDraft({ ...this.data.editDraft, enabled: this.data.editDraft.enabled === false });
+    if (this.data.statusUpdating || this.data.savingDetails) return;
+    const enabled = this.data.editDraft.enabled === false;
+    const modal = await new Promise((resolve) => wx.showModal({
+      title: enabled ? '确认恢复上架' : '确认下架菜品',
+      content: enabled ? '恢复上架后，顾客菜单将立即显示该菜品。' : '下架后，顾客菜单将立即隐藏该菜品。',
+      confirmText: enabled ? '恢复上架' : '确认下架',
+      confirmColor: enabled ? '#15803D' : '#DC2626',
+      success: resolve,
+    }));
+    if (!modal.confirm) return;
+    this.setData({ statusUpdating: 'enabled' });
+    try {
+      const result = await this.callAdmin('updateDishEnabled', { id: this.data.id, enabled });
+      if (!result.ok) throw new Error(result.message || '状态更新失败');
+      const editDraft = { ...this.data.editDraft, enabled: result.enabled === true };
+      this.setEditDraft(editDraft, { dish: { ...this.data.dish, enabled: result.enabled === true } });
+      getApp().globalData.menuUpdatedAt = Date.now();
+      wx.showToast({ title: enabled ? '已恢复上架' : '已下架', icon: 'success' });
+    } catch (error) {
+      wx.showToast({ title: error.message || '状态更新失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ statusUpdating: '' });
+    }
   },
   async toggleManualSoldOut() {
-    this.setEditDraft({ ...this.data.editDraft, manualSoldOut: this.data.editDraft.manualSoldOut !== true });
+    if (this.data.statusUpdating || this.data.savingDetails) return;
+    const manualSoldOut = this.data.editDraft.manualSoldOut !== true;
+    const modal = await new Promise((resolve) => wx.showModal({
+      title: manualSoldOut ? '确认设为售罄' : '确认恢复销售',
+      content: manualSoldOut ? '设为售罄后，顾客仍可查看，但不能加入购物车。' : '恢复销售后，库存充足时顾客可重新加入购物车。',
+      confirmText: manualSoldOut ? '设为售罄' : '恢复销售',
+      confirmColor: manualSoldOut ? '#B45309' : '#15803D',
+      success: resolve,
+    }));
+    if (!modal.confirm) return;
+    this.setData({ statusUpdating: 'soldout' });
+    try {
+      const result = await this.callAdmin('updateDishManualSoldOut', { id: this.data.id, manualSoldOut });
+      if (!result.ok) throw new Error(result.message || '状态更新失败');
+      const editDraft = { ...this.data.editDraft, manualSoldOut: result.manualSoldOut === true };
+      this.setEditDraft(editDraft, { dish: { ...this.data.dish, manualSoldOut: result.manualSoldOut === true } });
+      getApp().globalData.menuUpdatedAt = Date.now();
+      wx.showToast({ title: manualSoldOut ? '已设为售罄' : '已恢复销售', icon: 'success' });
+    } catch (error) {
+      wx.showToast({ title: error.message || '状态更新失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ statusUpdating: '' });
+    }
   },
   async deleteDish() {
     if (this.data.deleting) return;

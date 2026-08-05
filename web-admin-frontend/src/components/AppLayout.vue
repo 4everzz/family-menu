@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { auth } from '../store.js';
 import { callApi } from '../api.js';
@@ -8,16 +8,52 @@ const router = useRouter();
 const route = useRoute();
 
 const nav = [
-  { name: 'overview', label: '跨店总览', hint: '平台今日经营' },
-  { name: 'orders', label: '跨店订单', hint: '筛选与订单详情' },
-  { name: 'reports', label: '经营报表', hint: '跨店经营分析' },
-  { name: 'backups', label: '数据备份', hint: '店铺配置与订单留存' },
-  { name: 'shops', label: '店铺管理', hint: '建店与启停' },
-  { name: 'members', label: '管理员授权', hint: '指派一级 / 二级' },
-  { name: 'users', label: '用户管理', hint: '搜索与停用账号' },
+  {
+    name: 'operations',
+    label: '经营中心',
+    hint: '跨店总览与订单',
+    defaultTab: 'overview',
+    tabs: { overview: '跨店总览', orders: '跨店订单' },
+  },
+  {
+    name: 'shops',
+    label: '店铺管理',
+    hint: '店铺、报表与备份',
+    defaultTab: 'shops',
+    tabs: { shops: '店铺列表', reports: '经营报表', backups: '数据备份' },
+  },
+  {
+    name: 'accounts',
+    label: '账号与权限',
+    hint: '用户、授权与限制词',
+    defaultTab: 'users',
+    tabs: { users: '用户管理', members: '管理员授权', restrictions: '昵称限制词' },
+  },
 ];
 
-const currentTitle = computed(() => route.meta.title || '平台后台');
+// 左侧工作区切换时保留各自最后停留的标签，避免用户返回后丢失筛选上下文。
+const lastTabs = reactive(Object.fromEntries(nav.map((item) => [item.name, item.defaultTab])));
+
+watch(
+  () => [route.name, route.query.tab],
+  ([routeName, tab]) => {
+    const item = nav.find((entry) => entry.name === routeName);
+    if (!item) return;
+    lastTabs[item.name] = item.tabs[tab] ? tab : item.defaultTab;
+  },
+  { immediate: true },
+);
+
+function navTarget(item) {
+  return { name: item.name, query: { tab: lastTabs[item.name] || item.defaultTab } };
+}
+
+const currentTitle = computed(() => {
+  const item = nav.find((entry) => entry.name === route.name);
+  if (!item) return route.meta.title || '平台后台';
+  const tab = item.tabs[route.query.tab] || item.tabs[item.defaultTab];
+  return tab ? `${item.label} · ${tab}` : item.label;
+});
 const initial = computed(() => (auth.username || '·').slice(0, 1).toUpperCase());
 
 async function logout() {
@@ -42,7 +78,7 @@ async function logout() {
         <router-link
           v-for="item in nav"
           :key="item.name"
-          :to="{ name: item.name }"
+          :to="navTarget(item)"
           class="nav-item"
           :class="{ active: route.name === item.name }"
         >

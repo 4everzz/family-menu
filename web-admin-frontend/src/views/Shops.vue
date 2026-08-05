@@ -15,6 +15,11 @@ const busyId = ref('');
 const rotatingId = ref('');
 const toast = ref('');
 const qrShop = ref(null);
+const renameShop = ref(null);
+const renameName = ref('');
+const renamePassword = ref('');
+const renameError = ref('');
+const renaming = ref(false);
 
 async function copyText(text, successText = '已复制') {
   const value = String(text || '').trim();
@@ -42,6 +47,55 @@ function qrImageUrl(code) {
 function openQr(shop) {
   if (!shop || !shop.displayShopCode) return;
   qrShop.value = shop;
+}
+
+function openRename(shop) {
+  if (!shop) return;
+  renameShop.value = shop;
+  renameName.value = shop.name || '';
+  renamePassword.value = '';
+  renameError.value = '';
+}
+
+function closeRename() {
+  if (renaming.value) return;
+  renameShop.value = null;
+  renameName.value = '';
+  renamePassword.value = '';
+  renameError.value = '';
+}
+
+async function submitRename() {
+  const shop = renameShop.value;
+  const name = renameName.value.trim();
+  if (!shop) return;
+  if (!name) {
+    renameError.value = '请输入店铺名称';
+    return;
+  }
+  if (name === shop.name) {
+    renameError.value = '新店铺名称与当前名称相同';
+    return;
+  }
+  if (!renamePassword.value) {
+    renameError.value = '请输入订单删除二级密码';
+    return;
+  }
+  renaming.value = true;
+  renameError.value = '';
+  const result = await callApi('renameShop', {
+    shopId: shop.id,
+    name,
+    secondaryPassword: renamePassword.value,
+  });
+  renaming.value = false;
+  if (!result.ok) {
+    renameError.value = result.message || '修改店铺名称失败';
+    return;
+  }
+  shop.name = result.shop?.name || name;
+  closeRename();
+  flash('店铺名称已修改');
 }
 
 async function load() {
@@ -174,6 +228,7 @@ onMounted(load);
               >
                 {{ rotatingId === shop.id ? '重置中…' : '重置码' }}
               </button>
+              <button class="btn btn-sm" @click="openRename(shop)">改名</button>
               <button
                 class="btn btn-sm"
                 :class="shop.enabled ? 'btn-danger' : 'btn-primary'"
@@ -187,6 +242,31 @@ onMounted(load);
         </tr>
       </tbody>
     </table>
+  </div>
+
+  <div v-if="renameShop" class="overlay" @click.self="closeRename">
+    <div class="modal rename-modal" role="dialog" aria-modal="true" aria-labelledby="rename-shop-title">
+      <div class="modal-head">
+        <p class="muted" style="font-size:12.5px">超级管理员安全操作</p>
+        <h3 id="rename-shop-title" style="margin-top:3px;font-size:16px;font-weight:650">修改店铺名称</h3>
+      </div>
+      <div class="modal-body">
+        <p class="muted" style="margin:0;font-size:13px;line-height:1.6">当前名称：{{ renameShop.name }}。Web 后台不限制修改次数，但每次均需验证二级密码。</p>
+        <label class="field">
+          <span>新店铺名称</span>
+          <input v-model="renameName" class="input" maxlength="20" autocomplete="off" @keyup.enter="submitRename" />
+        </label>
+        <label class="field">
+          <span>订单删除二级密码</span>
+          <input v-model="renamePassword" class="input" type="password" maxlength="64" autocomplete="current-password" placeholder="输入二级密码后确认修改" @keyup.enter="submitRename" />
+        </label>
+        <p v-if="renameError" class="notice notice-error">{{ renameError }}</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" :disabled="renaming" @click="closeRename">取消</button>
+        <button class="btn btn-primary" :disabled="renaming" @click="submitRename">{{ renaming ? '正在修改…' : '确认修改' }}</button>
+      </div>
+    </div>
   </div>
 
   <div v-if="showCreate" class="overlay" @click.self="!creating && (showCreate = false)">
@@ -266,6 +346,7 @@ onMounted(load);
   letter-spacing: 0.08em;
 }
 .table-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.rename-modal { max-width: 460px; }
 .code-box {
   width: 100%;
   border: 0;
@@ -295,6 +376,6 @@ onMounted(load);
 
 @media (max-width: 860px) {
   .shop-table-card { overflow-x: auto; }
-  .table { min-width: 760px; }
+  .table { min-width: 850px; }
 }
 </style>

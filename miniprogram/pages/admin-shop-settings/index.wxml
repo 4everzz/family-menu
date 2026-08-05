@@ -1,6 +1,18 @@
 <view class="page-shell">
   <view wx:if="{{loading}}" class="state-card"><text>正在读取店铺设置</text></view>
   <view wx:else>
+    <view class="shop-name-card">
+      <text class="section-title">店铺名称</text>
+      <text class="setting-note">当前名称：{{shopName}}</text>
+      <view wx:if="{{canRenameShop}}" class="shop-name-form">
+        <block wx:if="{{nameChangeAvailable}}">
+          <input class="shop-name-input" value="{{renameShopName}}" maxlength="20" placeholder="输入新店铺名称" bindinput="updateShopName" />
+          <button class="shop-name-button" loading="{{renamingShop}}" disabled="{{renamingShop}}" bindtap="renameShop">修改名称</button>
+        </block>
+        <button wx:else class="shop-name-button cooldown" bindtap="showNameChangeCooldown">修改名称</button>
+      </view>
+    </view>
+
     <view class="entry-card">
       <text class="section-title">点餐入口方式</text>
       <text class="setting-note">选择顾客进入当前店铺并提交订单时需要扫描的码</text>

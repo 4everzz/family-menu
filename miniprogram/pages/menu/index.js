@@ -56,7 +56,7 @@ let menuDishes = defaultDishes.map((dish) => normalizeDishSpiceConfig(dish));
 
 Page({
   data: {
-    categories: defaultCategories,
+    categories: [{ id: 'all', name: '全部' }],
     activeCategory: 'all',
     dishes: [],
     keyword: '',
@@ -183,7 +183,7 @@ Page({
     const { windowHeight, windowWidth } = wx.getSystemInfoSync();
     const rpxPerPixel = 750 / windowWidth;
     const cartReservedHeight = cartCount > 0 ? 120 : 0;
-    return Math.max(520, Math.floor(windowHeight * rpxPerPixel - 432 - cartReservedHeight));
+    return Math.max(520, Math.floor(windowHeight * rpxPerPixel - 390 - cartReservedHeight));
   },
   updateMenuHeight() {
     const menuHeight = this.getMenuHeight();
@@ -267,16 +267,26 @@ Page({
     const cloudDishes = Array.isArray(payload && payload.dishes) ? payload.dishes : [];
     const cloudCategories = Array.isArray(payload && payload.categories) ? payload.categories : [];
     const spiceCategories = cloudCategories.length ? cloudCategories : defaultCategories;
-    menuDishes = cloudDishes.filter((item) => item && item.id && item.name && item.enabled !== false).map((item) => ({
-      ...normalizeDishSpiceConfig(item, spiceCategories),
-      isSoldOut: item.manualSoldOut === true || (Number.isFinite(Number(item.stock)) && Number(item.stock) <= 0),
-    }));
     const validCategories = cloudCategories.filter((item) => item && item.id && item.name && item.id !== 'all').sort((left, right) => {
       const leftSort = Number.isInteger(left.sort) ? left.sort : Number.MAX_SAFE_INTEGER;
       const rightSort = Number.isInteger(right.sort) ? right.sort : Number.MAX_SAFE_INTEGER;
       return leftSort - rightSort || left.name.localeCompare(right.name, 'zh-CN');
     });
-    const categories = validCategories.length ? [{ id: 'all', name: '全部' }, ...validCategories] : defaultCategories;
+    const categoryOrder = new Map(validCategories.map((category, index) => [category.id, index]));
+    menuDishes = cloudDishes
+      .filter((item) => item && item.id && item.name && item.enabled !== false)
+      .map((item, sourceIndex) => ({
+        ...normalizeDishSpiceConfig(item, spiceCategories),
+        isSoldOut: item.manualSoldOut === true || (Number.isFinite(Number(item.stock)) && Number(item.stock) <= 0),
+        sourceIndex,
+      }))
+      .sort((left, right) => {
+        const leftOrder = categoryOrder.has(left.category) ? categoryOrder.get(left.category) : Number.MAX_SAFE_INTEGER;
+        const rightOrder = categoryOrder.has(right.category) ? categoryOrder.get(right.category) : Number.MAX_SAFE_INTEGER;
+        return leftOrder - rightOrder || left.sourceIndex - right.sourceIndex;
+      })
+      .map(({ sourceIndex, ...dish }) => dish);
+    const categories = [{ id: 'all', name: '全部' }, ...validCategories];
     this.appliedMenuRenderKey = renderKey;
     this.setData({ categories, activeCategory: 'all', menuScrollTop: 0, menuError: '' }, () => this.renderDishes());
     return true;

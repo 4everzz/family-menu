@@ -35,7 +35,7 @@ onMounted(load);
       <h2 class="page-title">平台经营概览</h2>
     </div>
     <div class="row">
-      <button class="btn btn-sm" @click="router.push({ name: 'orders' })">查看订单</button>
+      <button class="btn btn-sm" @click="router.push({ name: 'operations', query: { tab: 'orders' } })">查看订单</button>
       <button class="btn btn-sm" @click="load" :disabled="loading">{{ loading ? '刷新中…' : '刷新' }}</button>
     </div>
   </div>

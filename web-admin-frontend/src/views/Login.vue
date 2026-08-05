@@ -28,7 +28,7 @@ async function submit() {
   if (result.ok) {
     auth.set(result.token, result.username);
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null;
-    router.replace(redirect || { name: 'overview' });
+    router.replace(redirect || { name: 'operations', query: { tab: 'overview' } });
   } else {
     error.value = result.message || '登录失败';
   }

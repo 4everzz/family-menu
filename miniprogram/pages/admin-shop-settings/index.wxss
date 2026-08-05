@@ -1,6 +1,11 @@
 .page-shell { min-height: 100vh; padding: 28rpx 24rpx 152rpx; box-sizing: border-box; background: #FEF2F2; }
-.settings-card, .security-card, .table-card, .entry-card, .state-card { padding: 28rpx; border: 2rpx solid #FECACA; border-radius: 20rpx; background: #FFFFFF; box-shadow: 0 10rpx 24rpx rgba(127, 29, 29, .06); }
-.settings-card, .security-card, .table-card { margin-top: 24rpx; }
+.settings-card, .security-card, .table-card, .entry-card, .shop-name-card, .state-card { padding: 28rpx; border: 2rpx solid #FECACA; border-radius: 20rpx; background: #FFFFFF; box-shadow: 0 10rpx 24rpx rgba(127, 29, 29, .06); }
+.settings-card, .security-card, .table-card, .entry-card { margin-top: 24rpx; }
+.shop-name-form { display: flex; align-items: center; gap: 14rpx; margin-top: 18rpx; }
+.shop-name-input { min-width: 0; flex: 1; height: 88rpx; padding: 0 20rpx; border: 2rpx solid #FECACA; border-radius: 14rpx; background: #FFFDFD; color: #450A0A; font-size: 28rpx; box-sizing: border-box; }
+.shop-name-button { width: 176rpx; min-width: 176rpx; min-height: 88rpx; margin: 0; padding: 0 12rpx; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 25rpx; font-weight: 700; line-height: 88rpx; white-space: nowrap; box-sizing: border-box; }
+.shop-name-button::after { border: 0; }
+.shop-name-button.cooldown { width: 100%; }
 .entry-mode-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; margin-top: 20rpx; }
 .entry-mode-button { min-width: 0; min-height: 112rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0; padding: 16rpx 12rpx; border: 2rpx solid #FECACA; border-radius: 14rpx; background: #FFFDFD; color: #7F1D1D; text-align: center; box-sizing: border-box; }
 .entry-mode-button.selected { border-color: #DC2626; background: #FEE2E2; color: #991B1B; box-shadow: inset 0 0 0 2rpx rgba(220, 38, 38, .08); }

@@ -1,7 +1,6 @@
 App({
   globalData: {
     cart: [],
-    orders: [],
     menuUpdatedAt: 0,
     ordersUpdatedAt: 0,
     membersUpdatedAt: 0,
@@ -15,9 +14,10 @@ App({
         traceUser: true,
       });
     }
-    this.globalData.orders = wx.getStorageSync('family_orders') || [];
     this.globalData.currentShop = null;
     this.globalData.cart = [];
+    // 历史订单已统一从云端读取，清理旧版遗留的本地订单缓存。
+    wx.removeStorageSync('family_orders');
     wx.removeStorageSync('family_cart');
     wx.removeStorageSync('current_shop_context');
   },
@@ -25,8 +25,5 @@ App({
     // 购物车变化后必须生成新的下单请求，避免旧请求复用到新购物车。
     this.globalData.orderRequestId = '';
     wx.setStorageSync('family_cart', this.globalData.cart);
-  },
-  saveOrders() {
-    wx.setStorageSync('family_orders', this.globalData.orders);
   },
 });

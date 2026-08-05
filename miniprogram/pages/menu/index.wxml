@@ -1,33 +1,28 @@
 <view class="page-shell">
   <view wx:if="{{hasShopContext}}" class="welcome-card">
     <view class="welcome-copy">
-      <text class="eyebrow">{{shopName}}</text>
-      <text class="page-title">今天吃点什么？</text>
-      <text class="page-subtitle">当前桌号：{{tableName}}</text>
-    </view>
-    <button class="scan-mark" bindtap="scanTableCodeFromMenu">
-      <view class="scan-icon">
-        <view class="scan-corner top-left"></view>
-        <view class="scan-corner top-right"></view>
-        <view class="scan-corner bottom-left"></view>
-        <view class="scan-corner bottom-right"></view>
+      <text class="welcome-shop-name">{{shopName}}</text>
+      <view class="welcome-table-row">
+        <text class="welcome-table-label">当前桌号</text>
+        <text class="welcome-table-value">{{tableName}}</text>
       </view>
-      <text>扫码</text>
+    </view>
+    <button class="scan-mark" bindtap="scanTableCodeFromMenu" aria-label="扫码确认店铺或桌号">
+      <image class="scan-mark-image" src="/assets/scan.svg" mode="aspectFit" />
+      <text class="scan-mark-label">扫码</text>
     </button>
   </view>
 
   <view wx:if="{{!hasShopContext}}" class="entry-empty-card" style="min-height: {{menuHeight}}rpx;">
     <view class="entry-empty-icon">
-      <view class="scan-icon large">
-        <view class="scan-corner top-left"></view>
-        <view class="scan-corner top-right"></view>
-        <view class="scan-corner bottom-left"></view>
-        <view class="scan-corner bottom-right"></view>
-      </view>
+      <image class="entry-empty-scan-image" src="/assets/scan.svg" mode="aspectFit" />
     </view>
     <text class="entry-empty-title">请扫店铺码或桌码下单</text>
     <text class="entry-empty-copy">登录完成后，需要扫描当前店铺的店铺码或桌码，才能查看菜单和提交订单。</text>
-    <button class="entry-empty-button" bindtap="scanTableCodeFromMenu">扫码进入</button>
+    <button class="entry-empty-button" bindtap="scanTableCodeFromMenu" aria-label="扫码进入店铺">
+      <image class="entry-empty-button-image" src="/assets/scan-light.svg" mode="aspectFit" />
+      <text>扫码进入</text>
+    </button>
     <view class="entry-code-row">
       <input class="entry-code-input" value="{{manualEntryCode}}" maxlength="8" placeholder="也可以输入 8 位店铺码" bindinput="updateManualEntryCode" bindconfirm="submitManualEntryCode" />
       <text class="entry-code-submit" bindtap="submitManualEntryCode">进入</text>
