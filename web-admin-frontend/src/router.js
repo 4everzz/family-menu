@@ -8,17 +8,19 @@ const routes = [
     path: '/',
     component: () => import('./components/AppLayout.vue'),
     children: [
-      { path: '', redirect: '/overview' },
-      { path: 'overview', name: 'overview', component: () => import('./views/Overview.vue'), meta: { title: '跨店总览' } },
-      { path: 'orders', name: 'orders', component: () => import('./views/Orders.vue'), meta: { title: '跨店订单' } },
-      { path: 'reports', name: 'reports', component: () => import('./views/Reports.vue'), meta: { title: '经营报表' } },
-      { path: 'backups', name: 'backups', component: () => import('./views/Backups.vue'), meta: { title: '数据备份' } },
-      { path: 'shops', name: 'shops', component: () => import('./views/Shops.vue'), meta: { title: '店铺管理' } },
-      { path: 'members', name: 'members', component: () => import('./views/Members.vue'), meta: { title: '管理员授权' } },
-      { path: 'users', name: 'users', component: () => import('./views/Users.vue'), meta: { title: '用户管理' } },
+      { path: '', redirect: { name: 'operations', query: { tab: 'overview' } } },
+      { path: 'operations', name: 'operations', component: () => import('./views/Operations.vue'), meta: { title: '经营中心' } },
+      { path: 'shops', name: 'shops', component: () => import('./views/ShopManagement.vue'), meta: { title: '店铺管理' } },
+      { path: 'accounts', name: 'accounts', component: () => import('./views/Accounts.vue'), meta: { title: '账号与权限' } },
+      { path: 'overview', redirect: { name: 'operations', query: { tab: 'overview' } } },
+      { path: 'orders', redirect: { name: 'operations', query: { tab: 'orders' } } },
+      { path: 'reports', redirect: { name: 'shops', query: { tab: 'reports' } } },
+      { path: 'backups', redirect: { name: 'shops', query: { tab: 'backups' } } },
+      { path: 'members', redirect: { name: 'accounts', query: { tab: 'members' } } },
+      { path: 'users', redirect: { name: 'accounts', query: { tab: 'users' } } },
     ],
   },
-  { path: '/:pathMatch(.*)*', redirect: '/overview' },
+  { path: '/:pathMatch(.*)*', redirect: { name: 'operations', query: { tab: 'overview' } } },
 ];
 
 const router = createRouter({
@@ -31,7 +33,7 @@ router.beforeEach((to) => {
     return { name: 'login', query: to.name ? { redirect: to.fullPath } : {} };
   }
   if (to.name === 'login' && auth.isLoggedIn) {
-    return { name: 'overview' };
+    return { name: 'operations', query: { tab: 'overview' } };
   }
   return true;
 });

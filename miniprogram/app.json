@@ -1,7 +1,6 @@
 {
   "pages": [
     "pages/menu/index",
-    "pages/detail/index",
     "pages/cart/index",
     "pages/checkout/index",
     "pages/orders/index",
@@ -9,7 +8,6 @@
     "pages/history-detail/index",
     "pages/admin-menu/index",
     "pages/admin-stats/index",
-    "pages/admin-shops/index",
     "pages/admin-shop-settings/index",
     "pages/admin-shop-members/index",
     "pages/admin-dishes/index",
@@ -18,8 +16,7 @@
     "pages/admin-dish-detail/index",
     "pages/auth/index",
     "pages/profile/index",
-    "pages/profile-edit/index",
-    "pages/admin-users/index"
+    "pages/profile-edit/index"
   ],
   "window": {
     "navigationBarBackgroundColor": "#DC2626",

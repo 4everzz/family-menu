@@ -1,4 +1,5 @@
 const { ensureCurrentShop } = require('../../utils/shop-context');
+const { getCurrentShop, setCurrentShop } = require('../../utils/shop-store');
 const drawQrcode = require('./weapp-qrcode');
 
 function getChinaDateKey() {
@@ -16,6 +17,11 @@ Page({
     rotating: false,
     rotateConfirming: false,
     shopName: '',
+    renameShopName: '',
+    renamingShop: false,
+    canRenameShop: false,
+    nameChangeAvailable: false,
+    nameChangeRemainingHours: 0,
     acceptingOrders: true,
     orderEntryMode: 'store_entry',
     changingEntryMode: false,
@@ -60,6 +66,10 @@ Page({
       this.setData({
         loading: false,
         shopName: result.settings.name,
+        renameShopName: result.settings.name,
+        canRenameShop: result.settings.canRenameShop === true,
+        nameChangeAvailable: result.settings.nameChangeAvailable === true,
+        nameChangeRemainingHours: Number(result.settings.nameChangeRemainingHours) || 0,
         currentShopCode: result.settings.displayShopCode || '',
         acceptingOrders: result.settings.acceptingOrders !== false,
         orderEntryMode: result.settings.orderEntryMode === 'table_required' ? 'table_required' : 'store_entry',
@@ -71,6 +81,56 @@ Page({
       this.setData({ loading: false });
       wx.showToast({ title: error.message || '读取店铺设置失败', icon: 'none' });
     }
+  },
+  updateShopName(event) {
+    this.setData({ renameShopName: event.detail.value });
+  },
+  renameShop() {
+    const name = this.data.renameShopName.trim();
+    if (!this.data.canRenameShop || this.data.renamingShop) return;
+    if (!this.data.nameChangeAvailable) {
+      this.showNameChangeCooldown();
+      return;
+    }
+    if (!name) {
+      wx.showToast({ title: '请输入店铺名称', icon: 'none' });
+      return;
+    }
+    if (name === this.data.shopName) {
+      wx.showToast({ title: '新店名与当前名称相同', icon: 'none' });
+      return;
+    }
+    wx.showModal({
+      title: '确认修改店铺名称',
+      content: `将“${this.data.shopName}”修改为“${name}”。确认后 10 天内不能再次修改。`,
+      confirmText: '确认修改',
+      confirmColor: '#DC2626',
+      success: async (choice) => {
+        if (!choice.confirm) return;
+        this.setData({ renamingShop: true });
+        try {
+          const result = await this.callShopAdmin('renameShop', { name });
+          if (!result.ok || !result.settings) throw new Error(result.message || '修改店铺名称失败');
+          const currentShop = getCurrentShop();
+          if (currentShop) setCurrentShop({ ...currentShop, name: result.settings.name });
+          this.setData({
+            shopName: result.settings.name,
+            renameShopName: result.settings.name,
+            nameChangeAvailable: false,
+            nameChangeRemainingHours: Number(result.settings.nameChangeRemainingHours) || 10 * 24,
+          });
+          wx.showToast({ title: '店铺名称已修改', icon: 'success' });
+        } catch (error) {
+          wx.showToast({ title: error.message || '修改店铺名称失败', icon: 'none' });
+        } finally {
+          this.setData({ renamingShop: false });
+        }
+      },
+    });
+  },
+  showNameChangeCooldown() {
+    const remainingDays = Math.max(1, Math.ceil((Number(this.data.nameChangeRemainingHours) || 0) / 24));
+    wx.showToast({ title: `约 ${remainingDays} 天后可再次修改`, icon: 'none' });
   },
   toggleAcceptingOrders(event) {
     this.setData({ acceptingOrders: event.detail.value === true });

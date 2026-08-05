@@ -12,6 +12,7 @@ const ROLES = {
 const SYSTEM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SYSTEM_ID_LENGTH = 8;
 const RESET_NICKNAME_MAX_LENGTH = 12;
+const PROFILE_UPDATE_COOLDOWN = 7 * 24 * 60 * 60 * 1000;
 
 function normalizeAvatarFileId(value) {
   const avatarFileId = String(value || '').trim();
@@ -19,8 +20,18 @@ function normalizeAvatarFileId(value) {
 }
 
 function isProfileCompleted(user) {
+  if (user && user.profileResetAt) return false;
   const nickname = String(user && user.nickname || '').trim();
   return !!nickname && nickname !== '微信用户';
+}
+
+function getProfileUpdateStatus(user) {
+  if (!user || user.profileResetAt) return { available: true, remainingHours: 0 };
+  const updatedAt = user.profileUpdatedAt ? new Date(user.profileUpdatedAt).getTime() : 0;
+  if (!Number.isFinite(updatedAt) || updatedAt <= 0) return { available: true, remainingHours: 0 };
+  const remainingMs = PROFILE_UPDATE_COOLDOWN - (Date.now() - updatedAt);
+  if (remainingMs <= 0) return { available: true, remainingHours: 0 };
+  return { available: false, remainingHours: Math.ceil(remainingMs / (60 * 60 * 1000)) };
 }
 
 function normalizeNicknameForComparison(value) {
@@ -39,6 +50,7 @@ async function findNicknameRestriction(nickname) {
 }
 
 function makePublicUser(user) {
+  const profileUpdate = getProfileUpdateStatus(user);
   return {
     id: user._id,
     systemId: user.systemId || '',
@@ -46,6 +58,8 @@ function makePublicUser(user) {
     avatarFileId: normalizeAvatarFileId(user.avatarFileId),
     profileCompleted: isProfileCompleted(user),
     profileReset: !!user.profileResetAt,
+    profileChangeAvailable: profileUpdate.available,
+    profileChangeRemainingHours: profileUpdate.remainingHours,
     role: user.role,
     enabled: user.enabled !== false,
   };
@@ -180,10 +194,37 @@ async function updateProfile(openId, event) {
   if (restrictedWord) {
     return { ok: false, code: 'NICKNAME_RESTRICTED', message: '昵称包含限制词，请合理修改后再保存' };
   }
+  const currentNickname = String(user.nickname || '').trim();
+  const currentAvatarFileId = normalizeAvatarFileId(user.avatarFileId);
+  if (nickname === currentNickname && avatarFileId === currentAvatarFileId) {
+    return { ok: false, code: 'PROFILE_UNCHANGED', message: '资料未发生变化，无需重复保存' };
+  }
+  const profileUpdate = getProfileUpdateStatus(user);
+  if (!profileUpdate.available) {
+    const remainingDays = Math.max(1, Math.ceil(profileUpdate.remainingHours / 24));
+    return {
+      ok: false,
+      code: 'PROFILE_UPDATE_COOLDOWN',
+      message: `资料每 7 天只能修改一次，约 ${remainingDays} 天后可再次修改`,
+      remainingHours: profileUpdate.remainingHours,
+    };
+  }
   const userWithSystemId = await ensureSystemId(user);
-  const updatedUser = { ...userWithSystemId, nickname, avatarFileId };
+  const updatedUser = {
+    ...userWithSystemId,
+    nickname,
+    avatarFileId,
+    profileResetAt: null,
+    profileUpdatedAt: new Date(),
+  };
   await db.collection('users').doc(user._id).update({
-    data: { nickname, avatarFileId, profileResetAt: null, updatedAt: db.serverDate() },
+    data: {
+      nickname,
+      avatarFileId,
+      profileResetAt: null,
+      profileUpdatedAt: db.serverDate(),
+      updatedAt: db.serverDate(),
+    },
   });
   return { ok: true, user: await makePublicUserWithAvatar(updatedUser) };
 }

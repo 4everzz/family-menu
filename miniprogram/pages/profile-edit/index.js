@@ -8,11 +8,13 @@ Page({
     avatarUrl: '',
     avatarText: '我',
     profileReset: false,
+    profileChangeAvailable: true,
+    profileChangeRemainingDays: 0,
     imageUploading: false,
     saving: false,
   },
   async onShow() {
-    const user = await refreshCurrentUser();
+    const user = await refreshCurrentUser({ force: true });
     if (!user) {
       wx.redirectTo({ url: '/pages/auth/index' });
       return;
@@ -24,6 +26,8 @@ Page({
       avatarUrl: user.avatarUrl || '',
       avatarText: (user.nickname || '我').slice(0, 1),
       profileReset: user.profileReset === true,
+      profileChangeAvailable: user.profileReset === true || user.profileChangeAvailable !== false,
+      profileChangeRemainingDays: Math.max(1, Math.ceil((Number(user.profileChangeRemainingHours) || 0) / 24)),
     });
   },
   updateNickname(event) {
@@ -31,6 +35,7 @@ Page({
     this.setData({ nickname, avatarText: (nickname.trim() || '我').slice(0, 1) });
   },
   async chooseAvatar(event) {
+    if (!this.data.profileChangeAvailable) return;
     const filePath = event.detail && event.detail.avatarUrl;
     if (!filePath || this.data.imageUploading) return;
     const extension = (filePath.match(/\.([a-zA-Z0-9]+)$/) || [])[1] || 'jpg';
@@ -49,6 +54,10 @@ Page({
     }
   },
   async saveProfile() {
+    if (!this.data.profileChangeAvailable) {
+      wx.showToast({ title: `约 ${this.data.profileChangeRemainingDays} 天后可再次修改`, icon: 'none' });
+      return;
+    }
     const nickname = this.data.nickname.trim();
     if (!nickname) {
       wx.showToast({ title: '请填写昵称', icon: 'none' });

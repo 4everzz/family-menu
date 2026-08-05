@@ -108,6 +108,7 @@ const SYSTEM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SYSTEM_ID_LENGTH = 8;
 const RESET_NICKNAME_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const RESET_NICKNAME_NUMBERS = '23456789';
+const SHOP_NAME_MAX_LENGTH = 20;
 
 function normalizeMemberRole(role) {
   const value = String(role || '');
@@ -162,6 +163,10 @@ function createResetNickname() {
   const letter = (index) => RESET_NICKNAME_LETTERS[bytes[index] % RESET_NICKNAME_LETTERS.length];
   const number = (index) => RESET_NICKNAME_NUMBERS[bytes[index] % RESET_NICKNAME_NUMBERS.length];
   return `U${letter(0)}${letter(1)}${number(2)}${number(3)}${letter(4)}${number(5)}${letter(6)}`;
+}
+
+function normalizeShopName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, SHOP_NAME_MAX_LENGTH);
 }
 
 async function ensureUserSystemId(user) {
@@ -364,6 +369,26 @@ async function setShopEnabled(payload) {
   await db.collection('shops').doc(shop._id).update({ data: { enabled, updatedAt: db.serverDate() } });
   await bumpShopVersions(shop._id, ['settings']);
   return { ok: true, shop: { id: shop._id, enabled } };
+}
+
+async function renameShop(payload, session) {
+  const shop = await getShopById(payload.shopId);
+  if (!shop) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺不存在' };
+  const name = normalizeShopName(payload.name);
+  if (!name) return { ok: false, code: 'INVALID_SHOP_NAME', message: '请输入 1 至 20 个字符的店铺名称' };
+  if (name === String(shop.name || '').trim()) return { ok: false, code: 'SHOP_NAME_UNCHANGED', message: '新店铺名称与当前名称相同' };
+
+  const verified = await verifySecondaryPassword(payload.secondaryPassword, session);
+  if (!verified.ok) return verified;
+  const duplicate = await db.collection('shops').where({ name }).limit(1).get();
+  if (duplicate.data.some((item) => item._id !== shop._id)) {
+    return { ok: false, code: 'SHOP_NAME_EXISTS', message: '已有同名店铺，请使用不同名称' };
+  }
+  await db.collection('shops').doc(shop._id).update({
+    data: { name, nameUpdatedAt: db.serverDate(), updatedAt: db.serverDate() },
+  });
+  await bumpShopVersions(shop._id, ['settings']);
+  return { ok: true, shop: { id: shop._id, name } };
 }
 
 async function rotateShopCode(payload) {
@@ -619,6 +644,7 @@ async function resetUserProfile(payload) {
       nickname,
       avatarFileId: '',
       profileResetAt: db.serverDate(),
+      profileUpdatedAt: null,
       updatedAt: db.serverDate(),
     },
   });
@@ -1276,6 +1302,8 @@ async function handleAuthedAction(action, payload, session) {
       return createShop(payload, session);
     case 'setShopEnabled':
       return setShopEnabled(payload);
+    case 'renameShop':
+      return renameShop(payload, session);
     case 'rotateShopCode':
       return rotateShopCode(payload);
     // #11 成员授权与用户搜索

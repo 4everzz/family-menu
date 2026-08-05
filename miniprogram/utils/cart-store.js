@@ -61,8 +61,6 @@ async function submitCartOrder(remark) {
     requestId: getOrderRequestId(),
   });
   if (!result.ok || !result.order) return result;
-  app.globalData.orders.unshift(result.order);
-  app.saveOrders();
   clearCart();
   invalidateShopCache(shop.id, 'menu');
   invalidateMyOrders();

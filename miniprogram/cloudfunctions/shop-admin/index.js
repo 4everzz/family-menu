@@ -11,6 +11,8 @@ const SHOP_MANAGER_ROLES = [STORE_ADMIN, STORE_OWNER, STORE_STAFF];
 const VALID_ENTRY_MODES = ['store_entry', 'table_required'];
 const SYSTEM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const SYSTEM_ID_LENGTH = 8;
+const SHOP_NAME_MAX_LENGTH = 20;
+const SHOP_NAME_CHANGE_COOLDOWN = 10 * 24 * 60 * 60 * 1000;
 
 async function bumpShopVersions(shopId, components) {
   const version = Date.now();
@@ -118,6 +120,20 @@ function normalizeMemberRole(role) {
 function isStoreOwnerRole(role) {
   const value = String(role || '');
   return value === STORE_ADMIN || value === STORE_OWNER;
+}
+
+function normalizeShopName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, SHOP_NAME_MAX_LENGTH);
+}
+
+function getShopNameChangeStatus(shop) {
+  const updatedAt = new Date(shop && shop.nameUpdatedAt || 0).getTime();
+  const elapsed = updatedAt > 0 ? Date.now() - updatedAt : SHOP_NAME_CHANGE_COOLDOWN;
+  const remainingMilliseconds = Math.max(0, SHOP_NAME_CHANGE_COOLDOWN - elapsed);
+  return {
+    available: remainingMilliseconds === 0,
+    remainingHours: remainingMilliseconds ? Math.ceil(remainingMilliseconds / (60 * 60 * 1000)) : 0,
+  };
 }
 
 function canManageShopMembers(context) {
@@ -256,7 +272,9 @@ async function requireShopAdmin(user, event) {
   return { shopId, shop, member, user, isSuperAdmin: false };
 }
 
-function makeShopSettings(shop) {
+function makeShopSettings(shop, context) {
+  const canRenameShop = !!context && (context.isSuperAdmin || isStoreOwnerRole(context.member && context.member.role));
+  const nameChange = getShopNameChangeStatus(shop);
   return {
     id: shop._id,
     name: shop.name,
@@ -264,6 +282,45 @@ function makeShopSettings(shop) {
     acceptingOrders: shop.acceptingOrders !== false,
     closedDates: normalizeClosedDates(shop.closedDates),
     orderEntryMode: VALID_ENTRY_MODES.includes(shop.orderEntryMode) ? shop.orderEntryMode : 'store_entry',
+    canRenameShop,
+    nameChangeAvailable: canRenameShop && nameChange.available,
+    nameChangeRemainingHours: nameChange.remainingHours,
+  };
+}
+
+async function renameShop(context, event) {
+  if (!(context.isSuperAdmin || isStoreOwnerRole(context.member && context.member.role))) {
+    return { ok: false, code: 'SHOP_OWNER_REQUIRED', message: '只有一级管理员可以修改店铺名称' };
+  }
+  const name = normalizeShopName(event.name);
+  if (!name) return { ok: false, code: 'INVALID_SHOP_NAME', message: '请输入 1 至 20 个字符的店铺名称' };
+  if (name === String(context.shop.name || '').trim()) {
+    return { ok: false, code: 'SHOP_NAME_UNCHANGED', message: '新店铺名称与当前名称相同' };
+  }
+  const nameChange = getShopNameChangeStatus(context.shop);
+  if (!nameChange.available) {
+    return {
+      ok: false,
+      code: 'SHOP_NAME_COOLDOWN',
+      message: `店铺名称修改后 10 天内不能再次修改，请约 ${nameChange.remainingHours} 小时后再试`,
+      remainingHours: nameChange.remainingHours,
+    };
+  }
+  const duplicate = await db.collection('shops').where({ name }).limit(1).get();
+  if (duplicate.data.some((shop) => shop._id !== context.shopId)) {
+    return { ok: false, code: 'SHOP_NAME_EXISTS', message: '已有同名店铺，请使用不同名称' };
+  }
+  await db.collection('shops').doc(context.shopId).update({
+    data: { name, nameUpdatedAt: db.serverDate(), updatedAt: db.serverDate() },
+  });
+  await bumpShopVersions(context.shopId, ['settings']);
+  return {
+    ok: true,
+    settings: {
+      ...makeShopSettings({ ...context.shop, name, nameUpdatedAt: new Date() }, context),
+      nameChangeAvailable: false,
+      nameChangeRemainingHours: 10 * 24,
+    },
   };
 }
 
@@ -602,7 +659,8 @@ exports.main = async (event) => {
     const user = await getCurrentUser(openId);
     if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
     const context = await requireShopAdmin(user, event);
-    if (event.action === 'getShopSettings') return { ok: true, settings: makeShopSettings(context.shop) };
+    if (event.action === 'getShopSettings') return { ok: true, settings: makeShopSettings(context.shop, context) };
+    if (event.action === 'renameShop') return renameShop(context, event);
     if (event.action === 'updateOperatingRules') return updateOperatingRules(context, event);
     if (event.action === 'updateOrderEntryMode') return updateOrderEntryMode(context, event);
     if (event.action === 'rotateShopCode') return rotateShopCode(context);
