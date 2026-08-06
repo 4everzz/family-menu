@@ -4,16 +4,26 @@ Page({
   data: {
     isSubmitting: false,
   },
+  onLoad(options) {
+    const returnTo = String(options && options.returnTo || '');
+    this.returnTo = returnTo.startsWith('/pages/') ? returnTo : '';
+    this.allowIncompleteProfile = String(options && options.allowIncompleteProfile || '') === '1';
+  },
   async finishLogin(result) {
     getApp().globalData.currentUser = result.user;
     cacheCurrentUser(result.user);
     wx.showToast({ title: '登录成功', icon: 'success' });
     setTimeout(() => {
-      if (result.user.profileCompleted) {
+      if (result.user.profileCompleted || this.allowIncompleteProfile) {
+        if (this.returnTo) {
+          wx.redirectTo({ url: this.returnTo });
+          return;
+        }
         wx.navigateBack();
         return;
       }
-      wx.redirectTo({ url: '/pages/profile-edit/index' });
+      const suffix = this.returnTo ? `?returnTo=${encodeURIComponent(this.returnTo)}` : '';
+      wx.redirectTo({ url: `/pages/profile-edit/index${suffix}` });
     }, 400);
   },
   async loginWithWechat() {

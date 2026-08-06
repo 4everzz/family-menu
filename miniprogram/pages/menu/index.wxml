@@ -13,19 +13,18 @@
     </button>
   </view>
 
-  <view wx:if="{{!hasShopContext}}" class="entry-empty-card" style="min-height: {{menuHeight}}rpx;">
-    <view class="entry-empty-icon">
-      <image class="entry-empty-scan-image" src="/assets/scan.svg" mode="aspectFit" />
-    </view>
-    <text class="entry-empty-title">请扫店铺码或桌码下单</text>
-    <text class="entry-empty-copy">登录完成后，需要扫描当前店铺的店铺码或桌码，才能查看菜单和提交订单。</text>
-    <button class="entry-empty-button" bindtap="scanTableCodeFromMenu" aria-label="扫码进入店铺">
-      <image class="entry-empty-button-image" src="/assets/scan-light.svg" mode="aspectFit" />
-      <text>扫码进入</text>
-    </button>
-    <view class="entry-code-row">
-      <input class="entry-code-input" value="{{manualEntryCode}}" maxlength="8" placeholder="也可以输入 8 位店铺码" bindinput="updateManualEntryCode" bindconfirm="submitManualEntryCode" />
-      <text class="entry-code-submit" bindtap="submitManualEntryCode">进入</text>
+  <view wx:if="{{!hasShopContext}}" class="entry-empty-card {{canSelectShop ? 'with-staff-shops' : ''}}" style="height: {{menuHeight}}rpx;">
+    <view class="entry-empty-main">
+      <text class="entry-empty-title">请扫店铺码或桌码下单</text>
+      <text class="entry-empty-copy">扫描当前店铺的店铺码或桌码后即可浏览菜单和加入购物车，结算时需要登录。</text>
+      <button class="entry-empty-button" bindtap="scanTableCodeFromMenu" aria-label="扫码进入店铺">
+        <image class="entry-empty-button-image" src="/assets/scan-light.svg" mode="aspectFit" />
+        <text>扫码进入</text>
+      </button>
+      <view class="entry-code-row">
+        <input class="entry-code-input" value="{{manualEntryCode}}" maxlength="8" placeholder="也可以输入 8 位店铺码" bindinput="updateManualEntryCode" bindconfirm="submitManualEntryCode" />
+        <text class="entry-code-submit" bindtap="submitManualEntryCode">进入</text>
+      </view>
     </view>
     <view wx:if="{{entryLoading}}" class="staff-shop-loading">正在读取店铺…</view>
     <view wx:if="{{canSelectShop}}" class="staff-shop-panel">
@@ -33,13 +32,15 @@
         <text class="staff-shop-title">我的店铺</text>
         <text class="staff-shop-note">管理员可直接进入自己管理的店铺</text>
       </view>
-      <view wx:for="{{staffShops}}" wx:key="id" class="staff-shop-card" data-id="{{item.id}}" bindtap="enterStaffShop">
-        <view class="staff-shop-copy">
-          <text class="staff-shop-name">{{item.name}}</text>
-          <text class="staff-shop-role">{{item.roleText}}</text>
+      <scroll-view class="staff-shop-scroll" scroll-y>
+        <view wx:for="{{staffShops}}" wx:key="id" class="staff-shop-card" data-id="{{item.id}}" bindtap="enterStaffShop">
+          <view class="staff-shop-copy">
+            <text class="staff-shop-name">{{item.name}}</text>
+            <text class="staff-shop-role">{{item.roleText}}</text>
+          </view>
+          <text class="staff-shop-arrow">进入</text>
         </view>
-        <text class="staff-shop-arrow">进入</text>
-      </view>
+      </scroll-view>
     </view>
   </view>
 

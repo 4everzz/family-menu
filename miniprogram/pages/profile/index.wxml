@@ -38,7 +38,7 @@
       <view class="avatar">未</view>
       <view class="profile-copy">
         <text class="profile-name">需要登录</text>
-        <text class="profile-note">登录后可加购、下单和查看订单</text>
+        <text class="profile-note">登录后可结算、下单和查看订单</text>
       </view>
     </view>
     <button class="login-button" bindtap="openAuth">微信登录</button>
