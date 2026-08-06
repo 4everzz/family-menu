@@ -40,6 +40,17 @@ function normalizeShopCode(value) {
   return /^[A-Z0-9]{8}$/.test(code) ? code : '';
 }
 
+function normalizeGuestSessionId(value) {
+  const guestSessionId = String(value || '').trim();
+  return /^guest_[A-Za-z0-9_-]{12,64}$/.test(guestSessionId) ? guestSessionId : '';
+}
+
+function getSessionOwnerFilter(user, guestSessionId) {
+  const normalizedGuestSessionId = normalizeGuestSessionId(guestSessionId);
+  if (normalizedGuestSessionId) return { visitorId: normalizedGuestSessionId };
+  return user ? { userId: user._id } : null;
+}
+
 async function findUserByOpenId(openId) {
   const result = await db.collection('users').where({ openId, enabled: true }).limit(1).get();
   return result.data[0] || null;
@@ -210,7 +221,6 @@ function isShopManagerRole(role) {
 
 async function getCurrentShopSnapshot(openId, event) {
   const user = await findUserByOpenId(openId);
-  if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
   const shopId = String(event.shopId || '').trim();
   if (!shopId) return { ok: false, code: 'SHOP_REQUIRED', message: '请先进入店铺' };
 
@@ -218,17 +228,19 @@ async function getCurrentShopSnapshot(openId, event) {
   const shop = shopResult && shopResult.data;
   if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺不存在或已停用' };
 
-  const memberResult = await db.collection('shop_members')
-    .where({ shopId, userId: user._id, enabled: true }).limit(1).get();
+  const memberResult = user ? await db.collection('shop_members')
+    .where({ shopId, userId: user._id, enabled: true }).limit(1).get() : { data: [] };
   const member = memberResult.data[0] || null;
-  const role = user.role === ROLE.SUPER_ADMIN ? ROLE.SUPER_ADMIN : (member ? member.role : ROLE.CUSTOMER);
-  const isManager = user.role === ROLE.SUPER_ADMIN || isShopManagerRole(role);
+  const role = user && user.role === ROLE.SUPER_ADMIN ? ROLE.SUPER_ADMIN : (member ? member.role : ROLE.CUSTOMER);
+  const isManager = !!user && (user.role === ROLE.SUPER_ADMIN || isShopManagerRole(role));
   const entryToken = String(event.entryToken || '').trim();
 
   if (!isManager) {
     if (!entryToken) return { ok: false, code: 'ENTRY_SESSION_REQUIRED', message: '请扫描店铺码或桌码后进入' };
+    const ownerFilter = getSessionOwnerFilter(user, event.guestSessionId);
+    if (!ownerFilter) return { ok: false, code: 'ENTRY_SESSION_REQUIRED', message: '请扫描店铺码或桌码后进入' };
     const sessionResult = await db.collection('shop_entry_sessions').where({
-      userId: user._id,
+      ...ownerFilter,
       shopId,
       tokenHash: hashEntryCode(entryToken),
     }).limit(1).get();
@@ -275,7 +287,7 @@ async function rejoinShop(openId, event) {
   const shopResult = await db.collection('shops').doc(shopId).get().catch(() => null);
   const shop = shopResult && shopResult.data;
   if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺无效或已停用' };
-  const session = await createEntrySession(user, shop, null);
+  const session = await createEntrySession(user, '', shop, null);
   const role = user.role === ROLE.SUPER_ADMIN ? ROLE.SUPER_ADMIN : (member.role || ROLE.CUSTOMER);
   const isStaff = ['store_admin', 'store_owner', 'store_staff'].includes(role) || user.role === ROLE.SUPER_ADMIN;
   return {
@@ -295,13 +307,16 @@ async function rejoinShop(openId, event) {
 }
 
 
-async function createEntrySession(user, shop, table) {
+async function createEntrySession(user, guestSessionId, shop, table) {
+  const ownerFilter = getSessionOwnerFilter(user, guestSessionId);
+  if (!ownerFilter) throw new Error('访客会话无效');
   const token = createSessionToken();
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
-  await db.collection('shop_entry_sessions').where({ userId: user._id }).remove();
+  await db.collection('shop_entry_sessions').where(ownerFilter).remove();
   await db.collection('shop_entry_sessions').add({
     data: {
-      userId: user._id,
+      userId: user ? user._id : '',
+      visitorId: normalizeGuestSessionId(guestSessionId),
       shopId: shop._id,
       tableId: table ? table._id : '',
       tokenHash: hashEntryCode(token),
@@ -315,7 +330,8 @@ async function createEntrySession(user, shop, table) {
 
 async function joinWithShopCode(openId, event) {
   const user = await findUserByOpenId(openId);
-  if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+  const guestSessionId = normalizeGuestSessionId(event.guestSessionId);
+  if (!user && !guestSessionId) return { ok: false, code: 'GUEST_SESSION_REQUIRED', message: '访客会话无效，请重新打开小程序后扫码' };
   const shopCode = normalizeShopCode(event.shopCode);
   if (!shopCode) return { ok: false, code: 'INVALID_SHOP_CODE', message: '请输入 8 位店铺码' };
 
@@ -330,7 +346,7 @@ async function joinWithShopCode(openId, event) {
   if (shop.orderEntryMode === 'table_required' && !table) {
     return { ok: false, code: 'TABLE_REQUIRED', message: '请扫描本店桌码后进入点餐' };
   }
-  const session = await createEntrySession(user, shop, table);
+  const session = await createEntrySession(user, guestSessionId, shop, table);
   return {
     ok: true,
     shop: {
@@ -349,7 +365,8 @@ async function joinWithShopCode(openId, event) {
 
 async function joinWithTableCode(openId, event) {
   const user = await findUserByOpenId(openId);
-  if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
+  const guestSessionId = normalizeGuestSessionId(event.guestSessionId);
+  if (!user && !guestSessionId) return { ok: false, code: 'GUEST_SESSION_REQUIRED', message: '访客会话无效，请重新打开小程序后扫码' };
   const tableCode = normalizeShopCode(event.tableCode);
   if (!tableCode) return { ok: false, code: 'INVALID_TABLE_CODE', message: '请输入 8 位桌位码' };
 
@@ -361,7 +378,7 @@ async function joinWithTableCode(openId, event) {
   const shop = shopResult && shopResult.data;
   if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺已停用，暂时无法点餐' };
 
-  const session = await createEntrySession(user, shop, table);
+  const session = await createEntrySession(user, guestSessionId, shop, table);
   return {
     ok: true,
     shop: {

@@ -8,8 +8,7 @@ Page({
     isSubmitting: false,
     remark: '',
   },
-  async onShow() {
-    if (!(await requireLogin())) return;
+  onShow() {
     this.renderCart();
   },
   increase(event) {
@@ -39,7 +38,7 @@ Page({
   },
   async submitOrder() {
     if (this.data.isSubmitting) return;
-    if (!(await requireLogin())) return;
+    if (!(await requireLogin({ returnTo: '/pages/checkout/index', allowIncompleteProfile: true }))) return;
     this.setData({ isSubmitting: true });
     try {
       const result = await submitCartOrder(this.data.remark);

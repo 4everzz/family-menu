@@ -16,7 +16,7 @@ Page({
     this.resumeSubmit = options && options.resume === '1';
   },
   async onShow() {
-    if (!(await requireLogin())) return;
+    if (!(await requireLogin({ returnTo: '/pages/checkout/index', allowIncompleteProfile: true }))) return;
     await this.renderCheckout();
     if (this.resumeSubmit) {
       this.resumeSubmit = false;
@@ -87,7 +87,7 @@ Page({
     wx.navigateBack();
   },
   async submitOrder() {
-    if (this.data.isSubmitting || !(await requireLogin())) return;
+    if (this.data.isSubmitting || !(await requireLogin({ returnTo: '/pages/checkout/index', allowIncompleteProfile: true }))) return;
     this.setData({ isSubmitting: true });
     try {
       const result = await submitCartOrder(this.data.remark);

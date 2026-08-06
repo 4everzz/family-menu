@@ -1,5 +1,7 @@
 const { dishes: defaultDishes, categories: defaultCategories } = require('../../data/menu');
 const { requireLogin } = require('../../utils/auth-guard');
+const { refreshCurrentUser } = require('../../utils/auth-store');
+const { getGuestSessionId } = require('../../utils/guest-session');
 const { changeCartQuantity, clearCart, getCartItems, getCartSummary } = require('../../utils/cart-store');
 const { setCurrentShop, getCurrentShop, clearCurrentShop } = require('../../utils/shop-store');
 const { callAdminMenu, getCurrentShopSnapshot } = require('../../utils/shop-context');
@@ -86,11 +88,8 @@ Page({
   },
   async onShow() {
     if (this.data.entrySwitching) return;
-    const user = await requireLogin();
-    if (!user) {
-      this.resetEntryState();
-      return;
-    }
+    const user = await refreshCurrentUser();
+    if (user) getApp().globalData.currentUser = user;
     this.syncTabBar();
     var shop = getCurrentShop();
     const hasShop = hasValidShopContext(shop) && (shop.accessMode !== 'staff' || isStaffRole(shop.role));
@@ -138,6 +137,10 @@ Page({
     this.setData({ entryLoading: true });
     try {
       let shops = [];
+      if (!user) {
+        this.setData({ canSelectShop: false, staffShops: [] });
+        return;
+      }
       if (user.role === 'super_admin') {
         const response = await wx.cloud.callFunction({ name: 'shop-admin', data: { action: 'listShops' } });
         const result = response.result || {};
@@ -305,7 +308,6 @@ Page({
     this.setData({ keyword: '' }, () => this.renderDishes());
   },
   async addDish(event) {
-    if (!(await requireLogin())) return;
     const id = event.currentTarget.dataset.id;
     const dish = menuDishes.find((item) => item.id === id);
     if (!dish || dish.isSoldOut) {
@@ -337,7 +339,6 @@ Page({
     this.setData({ customRemark: event.detail.value });
   },
   async addSelectedDish() {
-    if (!(await requireLogin())) return;
     const { selectedDish, selectedSpicy, customRemark } = this.data;
     if (!selectedDish || selectedDish.isSoldOut) {
       wx.showToast({ title: '该菜品已售罄', icon: 'none' });
@@ -362,8 +363,7 @@ Page({
     app.globalData.cart.push({ ...dish, cartKey, options, quantity: 1 });
     app.saveCart();
   },
-  async openCartDrawer() {
-    if (!(await requireLogin())) return;
+  openCartDrawer() {
     this.setData({ cartDrawerOpen: true, cartRemark: getApp().globalData.checkoutRemark || this.data.cartRemark });
     this.renderCartDrawer();
   },
@@ -435,7 +435,7 @@ Page({
       const response = await Promise.race([
         wx.cloud.callFunction({
           name: 'shop-access',
-          data: { action: 'joinWithShopCode', shopCode: entryCode },
+          data: { action: 'joinWithShopCode', shopCode: entryCode, guestSessionId: getGuestSessionId() },
         }),
         timeoutPromise,
       ]);
@@ -496,10 +496,12 @@ Page({
       this.setData({ entryLoading: false, entrySwitching: false });
     });
   },
-  goCheckout() {
+  async goCheckout() {
     if (!getCartSummary().count) return;
     getApp().globalData.checkoutRemark = this.data.cartRemark;
     this.setData({ cartDrawerOpen: false });
+    const user = await requireLogin({ returnTo: '/pages/checkout/index', allowIncompleteProfile: true });
+    if (!user) return;
     wx.navigateTo({ url: '/pages/checkout/index' });
   },
   renderCartDrawer() {

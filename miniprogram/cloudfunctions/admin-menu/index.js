@@ -72,6 +72,17 @@ function normalizeOrderRequestId(value) {
   return /^[A-Za-z0-9_-]{12,64}$/.test(requestId) ? requestId : '';
 }
 
+function normalizeGuestSessionId(value) {
+  const guestSessionId = String(value || '').trim();
+  return /^guest_[A-Za-z0-9_-]{12,64}$/.test(guestSessionId) ? guestSessionId : '';
+}
+
+function getSessionOwnerFilter(user, guestSessionId) {
+  const normalizedGuestSessionId = normalizeGuestSessionId(guestSessionId);
+  if (normalizedGuestSessionId) return { visitorId: normalizedGuestSessionId };
+  return user ? { userId: user._id } : null;
+}
+
 function createOrderBusinessId() {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = crypto.randomBytes(5).toString('hex').toUpperCase();
@@ -155,12 +166,18 @@ async function getCustomerShopContext(user, event) {
     throw error;
   }
   const isViewAction = ['getCustomerMenu', 'listMyOrders', 'getMyOrder'].includes(event.action);
-  const memberResult = await db.collection('shop_members').where({ shopId, userId: user._id, enabled: true }).limit(1).get();
+  const memberResult = user ? await db.collection('shop_members').where({ shopId, userId: user._id, enabled: true }).limit(1).get() : { data: [] };
   const member = memberResult.data[0] || null;
-  const canViewWithoutEntryToken = user.role === 'super_admin' || canManageShopData(member);
+  const canViewWithoutEntryToken = !!user && (user.role === 'super_admin' || canManageShopData(member));
   if (entryToken) {
+    const ownerFilter = getSessionOwnerFilter(user, event.guestSessionId);
+    if (!ownerFilter) {
+      const error = new Error('请扫描店铺码或桌码后进入');
+      error.code = 'ENTRY_SESSION_REQUIRED';
+      throw error;
+    }
     const sessionResult = await db.collection('shop_entry_sessions').where({
-      userId: user._id,
+      ...ownerFilter,
       shopId,
       tokenHash: hashEntryToken(entryToken),
     }).limit(1).get();
@@ -710,9 +727,9 @@ exports.main = async (event) => {
   try {
     const user = await getCurrentUser(openId);
     if (event.action === 'getIdentity') return { ok: true, user: user ? { id: user._id, role: user.role } : null };
-    if (!user) return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
     const customerActions = ['createOrder', 'syncDailyInventory', 'getCustomerMenu', 'listMyOrders', 'getMyOrder'];
     if (customerActions.includes(event.action)) {
+      if (!user && event.action !== 'getCustomerMenu') return { ok: false, code: 'UNAUTHORIZED', message: '请先登录' };
       const shopContext = await getCustomerShopContext(user, event);
     if (event.action === 'createOrder') return createOrder(openId, user._id, shopContext, event);
       if (event.action === 'syncDailyInventory') return { ok: true, ...(await syncDailyInventory(shopContext.shopId)) };

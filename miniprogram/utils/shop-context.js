@@ -1,5 +1,6 @@
 const { getCurrentShop, setCurrentShop } = require('./shop-store');
 const { loadRuntimeCache } = require('./runtime-cache');
+const { getGuestSessionId } = require('./guest-session');
 
 const SHOP_SNAPSHOT_CACHE_TTL = 10 * 1000;
 
@@ -37,7 +38,7 @@ async function callAdminMenu(action, payload = {}) {
   const shop = await ensureCurrentShop();
   const response = await wx.cloud.callFunction({
     name: 'admin-menu',
-    data: { action, ...payload, shopId: shop.id, entryToken: shop.entryToken || '' },
+    data: { action, ...payload, shopId: shop.id, entryToken: shop.entryToken || '', guestSessionId: getGuestSessionId() },
   });
   return response.result || {};
 }
@@ -53,6 +54,7 @@ async function getCurrentShopSnapshot(options = {}) {
         action: 'getCurrentShopSnapshot',
         shopId: shop.id,
         entryToken: shop.entryToken || '',
+        guestSessionId: getGuestSessionId(),
       },
     });
     return response.result || {};
