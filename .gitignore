@@ -1,13 +1,4 @@
 node_modules/
 .env
-__chk_*.js
-__chk_*.py
 .DS_Store
-.firecrawl/
 miniprogram/project.private.config.json
-chk*.js
-gen_docx.py
-*.docx
-cleanup.bat
-docs/.obsidian/
-图片素材库/
