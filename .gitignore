@@ -11,3 +11,11 @@ gen_docx.py
 cleanup.bat
 docs/.obsidian/
 图片素材库/
+
+# 仅供本地 AI 协作、识图和早期原型使用，不属于运行源码
+.codex/
+AGENTS.md
+/design-system/
+/piture/
+/vision.js
+/index.html
