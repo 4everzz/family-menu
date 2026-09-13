@@ -6,3 +6,8 @@ miniprogram/project.private.config.json
 # 仅供本地参考（交接文档与开发者工具截图），不进公开仓库
 WORKBUDDY_HANDOFF.md
 docs/
+
+# 旧版小程序的内部文档：留在本地查阅，仓库只保留代码与 README
+miniprogram/USER_GUIDE.md
+miniprogram/DEPLOYMENT_AND_RECOVERY.md
+miniprogram/BACKEND_MIGRATION_READINESS.md
