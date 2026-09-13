@@ -6,7 +6,7 @@
   "scripts": {
     "dev:mp-weixin": "uni -p mp-weixin",
     "build:mp-weixin": "uni build -p mp-weixin",
-    "check": "node --check src/main.js && node --check src/services/cloud.js && node --check src/services/menu.js && node --check src/services/shop-access.js && node --check src/stores/auth.js && node --check src/stores/cart.js && node --check src/stores/shop.js && node --check src/utils/storage.js && node --check src/utils/entry-code.js && node --check src/utils/runtime-cache.js && node --check src/utils/shop-cache.js"
+    "check": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-5020420260813002",
@@ -17,6 +17,8 @@
     "@dcloudio/uni-mp-weixin": "3.0.0-5020420260813002",
     "@dcloudio/vite-plugin-uni": "3.0.0-5020420260813002",
     "sass": "1.77.8",
-    "vite": "5.2.8"
+    "typescript": "5.4.5",
+    "vite": "5.2.8",
+    "vue-tsc": "2.0.29"
   }
 }
