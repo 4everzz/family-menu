@@ -1,0 +1,37 @@
+$brand-color: #dc2626;
+$brand-dark: #991b1b;
+$page-background: #fff7ed;
+$text-color: #431407;
+$muted-color: #9a3412;
+
+page {
+  background: $page-background;
+  color: $text-color;
+  box-sizing: border-box;
+}
+
+view,
+text,
+button,
+input,
+textarea,
+image {
+  box-sizing: border-box;
+}
+
+button {
+  margin: 0;
+  padding: 0 24rpx;
+  border: 0;
+  border-radius: 16rpx;
+  line-height: 2.6;
+}
+
+button::after {
+  border: 0;
+}
+
+.page-shell {
+  min-height: 100vh;
+  padding: 24rpx;
+}

@@ -1,0 +1,19 @@
+{
+  "name": "小家今日吃什么",
+  "appid": "__UNI__FAMILYMENU",
+  "description": "小家今日吃什么 UniApp 迁移版",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "wx3179448db3b9e15a",
+    "setting": {
+      "urlCheck": true,
+      "es6": true,
+      "minified": true,
+      "postcss": true,
+      "lazyCodeLoading": "requiredComponents"
+    },
+    "usingComponents": true
+  }
+}
