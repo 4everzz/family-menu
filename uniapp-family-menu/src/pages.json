@@ -1,10 +1,12 @@
 {
   "pages": [
-    { "path": "pages/menu/index", "style": { "navigationBarTitleText": "点菜" } },
+    { "path": "pages/menu/index", "style": { "navigationBarTitleText": "菜单" } },
+    { "path": "pages/ai/index", "style": { "navigationBarTitleText": "AI 助手" } },
+    { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } },
     { "path": "pages/cart/index", "style": { "navigationBarTitleText": "购物车" } },
     { "path": "pages/checkout/index", "style": { "navigationBarTitleText": "确认订单" } },
-    { "path": "pages/orders/index", "style": { "navigationBarTitleText": "订单" } },
-    { "path": "pages/profile/index", "style": { "navigationBarTitleText": "我的" } },
+    { "path": "pages/orders/index", "style": { "navigationBarTitleText": "我的订单" } },
+    { "path": "pages/fridge/index", "style": { "navigationBarTitleText": "家庭冰箱" } },
     { "path": "pages/auth/index", "style": { "navigationBarTitleText": "登录" } }
   ],
   "tabBar": {
@@ -13,8 +15,8 @@
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [
-      { "pagePath": "pages/menu/index", "text": "点菜" },
-      { "pagePath": "pages/orders/index", "text": "订单" },
+      { "pagePath": "pages/menu/index", "text": "菜单" },
+      { "pagePath": "pages/ai/index", "text": "AI" },
       { "pagePath": "pages/profile/index", "text": "我的" }
     ]
   },
