@@ -1,5 +1,7 @@
 const { refreshCurrentUser } = require('./auth-store');
 
+let loginNavigationPending = false;
+
 async function requireLogin(options = {}) {
   const returnTo = String(options.returnTo || '').startsWith('/pages/') ? String(options.returnTo) : '';
   const allowIncompleteProfile = options.allowIncompleteProfile === true;
@@ -14,12 +16,21 @@ async function requireLogin(options = {}) {
     }
     return user;
   }
+  if (loginNavigationPending) return null;
+  loginNavigationPending = true;
   wx.showToast({ title: '请先登录', icon: 'none' });
   const query = [];
   if (returnTo) query.push(`returnTo=${encodeURIComponent(returnTo)}`);
   if (allowIncompleteProfile) query.push('allowIncompleteProfile=1');
   const suffix = query.length ? `?${query.join('&')}` : '';
-  setTimeout(() => wx.navigateTo({ url: `/pages/auth/index${suffix}` }), 200);
+  setTimeout(() => {
+    wx.navigateTo({
+      url: `/pages/auth/index${suffix}`,
+      complete: () => {
+        loginNavigationPending = false;
+      },
+    });
+  }, 200);
   return null;
 }
 

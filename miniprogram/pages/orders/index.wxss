@@ -31,3 +31,6 @@
 .empty-state { margin-top: 180rpx; display: flex; flex-direction: column; align-items: center; gap: 12rpx; color: #64748B; }
 .empty-title { color: #450A0A; font-size: 36rpx; font-weight: 700; }
 .empty-copy { font-size: 28rpx; }
+.guest-state { margin-top: 180rpx; display: flex; flex-direction: column; align-items: center; gap: 12rpx; color: #64748B; text-align: center; }
+.guest-login-button { width: 100%; max-width: 480rpx; min-width: 0; height: 92rpx; margin: 20rpx 0 0; padding: 0 24rpx; border-radius: 14rpx; background: #DC2626; color: #FFFFFF; font-size: 30rpx; font-weight: 700; line-height: 92rpx; box-sizing: border-box; }
+.guest-login-button::after { border: 0; }

@@ -3,6 +3,12 @@
     <text class="empty-copy">正在读取订单</text>
   </view>
 
+  <view wx:elif="{{isGuest}}" class="guest-state">
+    <text class="empty-title">登录后查看订单</text>
+    <text class="empty-copy">登录后可查看下单记录和订单状态</text>
+    <button class="guest-login-button" bindtap="openLogin">微信登录</button>
+  </view>
+
   <view wx:elif="{{activeOrders.length || completedOrders.length || cancelledOrders.length}}" class="order-page">
     <view wx:if="{{activeOrders.length}}" class="order-section">
       <view class="section-head">

@@ -1,4 +1,5 @@
-const { callAuth, refreshCurrentUser } = require('../../utils/auth-store');
+const { refreshCurrentUser } = require('../../utils/auth-store');
+const { requireLogin } = require('../../utils/auth-guard');
 const { getCurrentShopSnapshot } = require('../../utils/shop-context');
 
 function getShopRoleText(role) {
@@ -56,7 +57,7 @@ Page({
     });
   },
   openAuth() {
-    wx.navigateTo({ url: '/pages/auth/index' });
+    requireLogin();
   },
   openHistory() {
     wx.navigateTo({ url: '/pages/history/index' });

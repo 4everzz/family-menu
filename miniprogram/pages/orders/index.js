@@ -1,5 +1,6 @@
 const { loadMyOrders } = require('../../utils/order-store');
 const { requireLogin } = require('../../utils/auth-guard');
+const { refreshCurrentUser } = require('../../utils/auth-store');
 
 const ORDER_STEPS = ['制作中', '已完成'];
 
@@ -9,18 +10,39 @@ Page({
     completedOrders: [],
     cancelledOrders: [],
     loading: true,
+    isGuest: false,
   },
 
   async onShow() {
     this.syncTabBar();
-    if (!(await requireLogin())) return;
+    const user = await refreshCurrentUser();
+    if (!user) {
+      this.setData({
+        loading: false,
+        isGuest: true,
+        activeOrders: [],
+        completedOrders: [],
+        cancelledOrders: [],
+      });
+      return;
+    }
 
+    this.setData({ isGuest: false });
     await this.loadOrders();
   },
 
   async onPullDownRefresh() {
+    if (this.data.isGuest) {
+      wx.stopPullDownRefresh();
+      return;
+    }
     await this.loadOrders(true);
     wx.stopPullDownRefresh();
+  },
+
+  async openLogin() {
+    const user = await requireLogin();
+    if (user) await this.loadOrders();
   },
 
   async loadOrders(force = false) {

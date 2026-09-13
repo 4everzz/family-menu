@@ -307,12 +307,63 @@ async function rejoinShop(openId, event) {
 }
 
 
+/**
+ * 凭本地记住的店铺直接重新进入，不需要再扫码。
+ *
+ * 为什么需要它：顾客进店拿到的是一张 2 小时有效的临时通行证（entryToken），
+ * 过期后原本只能重新扫码。"记住上次的店铺"要成立，就必须有一次不用扫码的换票机会。
+ *
+ * 安全约束：必须查得到"这个访客/用户确实进过这家店"的历史凭据（shop_entry_sessions），
+ * 否则任何人拿一个 shopId 就能直接进店看菜单。
+ */
+async function resumeShop(openId, event) {
+  const user = await findUserByOpenId(openId);
+  const guestSessionId = normalizeGuestSessionId(event.guestSessionId);
+  const ownerFilter = getSessionOwnerFilter(user, guestSessionId);
+  if (!ownerFilter) return { ok: false, code: 'GUEST_SESSION_REQUIRED', message: '访客会话无效，请重新打开小程序后扫码' };
+
+  const shopId = String(event.shopId || '').trim();
+  if (!shopId) return { ok: false, code: 'SHOP_REQUIRED', message: '请指定店铺' };
+
+  const shopResult = await db.collection('shops').doc(shopId).get().catch(() => null);
+  const shop = shopResult && shopResult.data;
+  if (!shop || shop.enabled === false) return { ok: false, code: 'SHOP_NOT_FOUND', message: '店铺不存在或已停用' };
+
+  const historyResult = await db.collection('shop_entry_sessions').where({ ...ownerFilter, shopId }).limit(1).get();
+  if (!historyResult.data.length) return { ok: false, code: 'ENTRY_SESSION_REQUIRED', message: '请扫描店铺码后进入' };
+
+  const memberResult = user
+    ? await db.collection('shop_members').where({ shopId, userId: user._id, enabled: true }).limit(1).get()
+    : { data: [] };
+  const member = memberResult.data[0] || null;
+  const role = user && user.role === ROLE.SUPER_ADMIN ? ROLE.SUPER_ADMIN : (member ? member.role : ROLE.CUSTOMER);
+  const isStaff = !!user && (user.role === ROLE.SUPER_ADMIN || isShopManagerRole(role));
+
+  const session = await createEntrySession(user, guestSessionId, shop, null);
+  return {
+    ok: true,
+    shop: {
+      id: shop._id,
+      name: shop.name,
+      role,
+      orderEntryMode: shop.orderEntryMode,
+      tableId: '',
+      tableName: '',
+      entryToken: isStaff ? '' : session.token,
+      accessMode: isStaff ? 'staff' : 'customer',
+    },
+    expiresAt: session.expiresAt,
+  };
+}
+
+
 async function createEntrySession(user, guestSessionId, shop, table) {
   const ownerFilter = getSessionOwnerFilter(user, guestSessionId);
   if (!ownerFilter) throw new Error('访客会话无效');
   const token = createSessionToken();
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
-  await db.collection('shop_entry_sessions').where(ownerFilter).remove();
+  // 只清理"同一家店"的旧通行证：其他店铺的历史凭据要留着，resumeShop 才能凭它换票
+  await db.collection('shop_entry_sessions').where({ ...ownerFilter, shopId: shop._id }).remove();
   await db.collection('shop_entry_sessions').add({
     data: {
       userId: user ? user._id : '',
@@ -410,6 +461,7 @@ exports.main = async (event) => {
     if (event.action === 'joinWithShopCode') return await joinWithShopCode(openId, event);
     if (event.action === 'joinWithTableCode') return await joinWithTableCode(openId, event);
     if (event.action === 'rejoinShop') return await rejoinShop(openId, event);
+    if (event.action === 'resumeShop') return await resumeShop(openId, event);
     if (event.action === 'getCurrentShopSnapshot') return await getCurrentShopSnapshot(openId, event);
     if (event.action === 'getMigrationStatus') return await getMigrationStatus(openId);
     return { ok: false, code: 'UNKNOWN_ACTION', message: '未知操作' };

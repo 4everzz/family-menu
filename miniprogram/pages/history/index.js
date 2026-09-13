@@ -1,10 +1,14 @@
 const { loadMyOrders } = require('../../utils/order-store');
-const { requireLogin } = require('../../utils/auth-guard');
+const { refreshCurrentUser } = require('../../utils/auth-store');
 
 Page({
   data: { historyOrders: [], loading: true },
   async onShow() {
-    if (!(await requireLogin())) return;
+    if (!(await refreshCurrentUser())) {
+      wx.showToast({ title: '请先登录后查看历史订单', icon: 'none' });
+      wx.switchTab({ url: '/pages/profile/index' });
+      return;
+    }
 
     await this.loadHistory();
   },

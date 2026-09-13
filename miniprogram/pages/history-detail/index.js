@@ -1,10 +1,14 @@
 const { loadMyOrder } = require('../../utils/order-store');
-const { requireLogin } = require('../../utils/auth-guard');
+const { refreshCurrentUser } = require('../../utils/auth-store');
 
 Page({
   data: { order: null, loading: true },
   async onLoad(query) {
-    if (!(await requireLogin())) return;
+    if (!(await refreshCurrentUser())) {
+      wx.showToast({ title: '请先登录后查看订单详情', icon: 'none' });
+      wx.switchTab({ url: '/pages/profile/index' });
+      return;
+    }
     let order = null;
     try {
       order = await loadMyOrder(query.id);
