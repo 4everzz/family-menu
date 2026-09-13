@@ -1,0 +1,22 @@
+# 统一换行符为 LF。
+#
+# 为什么需要这个文件？
+#   Windows 上 Git 默认会把换行符转成 CRLF，而 Linux 容器里只认 LF。
+#   最典型的坑：shell 脚本（Docker entrypoint 之类）带了 CRLF，
+#   在 Linux 下会报 "bad interpreter: /bin/sh^M" 而无法执行，
+#   而且错误信息很难看出是换行符问题。
+#   这里把后端目录的文本文件统一成 LF，从源头避免这类问题。
+#
+# 说明：本文件只作用于 backend/ 目录，不影响项目里已有的前端目录。
+
+# 文本文件一律用 LF 存储和检出
+* text=auto eol=lf
+
+# 二进制文件不做换行符转换（否则文件会被破坏）
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
