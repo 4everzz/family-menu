@@ -6,6 +6,15 @@
 """
 
 from app.schemas.auth import LoginRequest, LoginResponse
+from app.schemas.space import SpaceCreateRequest, SpaceInfo, SpaceJoinRequest, SpaceMemberInfo
 from app.schemas.user import UserInfo
 
-__all__ = ["LoginRequest", "LoginResponse", "UserInfo"]
+__all__ = [
+    "LoginRequest",
+    "LoginResponse",
+    "UserInfo",
+    "SpaceCreateRequest",
+    "SpaceJoinRequest",
+    "SpaceInfo",
+    "SpaceMemberInfo",
+]

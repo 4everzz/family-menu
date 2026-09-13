@@ -1,10 +1,18 @@
 /**
- * 家庭组上下文（当前正在查看的家庭组）
+ * 家庭组上下文（当前正在查看的家庭组）。
  *
- * 这是「契约先行」的过渡实现：
- * 现在只把用户选中的家庭组记在本地缓存里，家庭组列表暂时返回空。
- * 等模块 2 接入后端家庭组接口后，只需要替换本文件的实现，页面无需改动。
+ * 为什么需要"当前家庭组"？
+ *   一个人可以创建多个家庭组，也可以加入多个家庭组（比如自己家 + 父母家）。
+ *   那么从"我的"点进冰箱时，系统必须知道现在看的是哪个家。
+ *   切换后，冰箱、菜单这些家庭共享数据都会跟着变。
+ *
+ * 缓存放什么：
+ *   只缓存家庭组的基本信息和 ID，不缓存权限判断结果。
+ *   权限永远由后端在每次请求时校验——本地缓存是可以被篡改的，不能当安全依据。
  */
+
+import { fetchMySpaces } from '../services/space';
+import type { Space } from '../services/space';
 
 /** 本地缓存键：当前选中的家庭组 */
 const CURRENT_SPACE_KEY = 'uni_family_current_space';
@@ -16,7 +24,13 @@ export interface SpaceInfo {
   /** 家庭组名称 */
   name: string;
   /** 创建者用户 ID：创建家庭组的人即该家庭的管理员 */
-  ownerId?: string;
+  ownerId?: number;
+  /** 成员数量 */
+  memberCount?: number;
+  /** 我在这个家庭组里的角色 */
+  myRole?: 'admin' | 'member';
+  /** 邀请码，仅管理员有值 */
+  inviteCode?: string | null;
 }
 
 /**
@@ -57,12 +71,34 @@ export function getCurrentSpaceName(): string {
   return getCurrentSpace()?.name || '';
 }
 
-/**
- * 读取当前用户已加入的家庭组列表
- *
- * 当前返回空数组：后端接口尚未提供。
- * 模块 2 接入 FastAPI 后，改为请求真实接口即可，调用方代码不用改。
- */
+/** 读取当前用户已加入的家庭组列表（走后端接口） */
 export async function listMySpaces(): Promise<SpaceInfo[]> {
-  return [];
+  const spaces = await fetchMySpaces();
+  // Space 与 SpaceInfo 结构一致，直接返回即可
+  return spaces as SpaceInfo[];
+}
+
+/**
+ * 拉取家庭组列表，并校正"当前家庭组"，返回最新列表。
+ *
+ * 为什么需要校正？
+ *   本地缓存是上一次操作留下的，可能已经失效——比如你被移出了那个家庭组、
+ *   或者那个家庭组已经不存在了。这时如果还拿旧 ID 去查冰箱，后端会直接拒绝。
+ *   所以每次进页面刷新列表时，顺手检查一次：
+ *     - 缓存里的家庭组还在  → 用最新的名称等信息刷新缓存；
+ *     - 不在了 / 从没选过   → 自动切到第一个；一个都没有就清空。
+ */
+export async function resolveCurrentSpace(): Promise<SpaceInfo[]> {
+  const spaces = await listMySpaces();
+
+  const currentId = getCurrentSpaceId();
+  const matched = spaces.find((item) => item.id === currentId);
+
+  if (matched) {
+    setCurrentSpace(matched);
+    return spaces;
+  }
+
+  setCurrentSpace(spaces[0] ?? null);
+  return spaces;
 }

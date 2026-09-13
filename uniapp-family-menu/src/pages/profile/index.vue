@@ -32,45 +32,37 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
-import { getCurrentSpaceName, listMySpaces, setCurrentSpace } from '../../utils/space-context';
+import { getCurrentSpaceName, resolveCurrentSpace } from '../../utils/space-context';
+import { hasValidToken } from '../../utils/token';
 
 const spaceName = ref('');
 
-/** 刷新页面上显示的家庭组名称 */
-function refresh() {
+/**
+ * 刷新页面上显示的家庭组名称。
+ *
+ * 先用本地缓存立刻显示（页面不会空着），再去后端拉一次最新列表并校正：
+ * 万一"当前家庭"已经失效（比如被移出），这里会自动切到另一个可用的家庭组。
+ */
+async function refresh() {
   spaceName.value = getCurrentSpaceName();
+
+  // 还没登录过就不主动请求，避免每次进「我的」都触发一次登录
+  if (!hasValidToken()) return;
+
+  try {
+    await resolveCurrentSpace();
+    spaceName.value = getCurrentSpaceName();
+  } catch (error) {
+    // 拉取失败（例如后端没启动）时保留缓存里的名字，不打断页面浏览
+  }
 }
 
-/**
- * 切换家庭组
- * 切换后冰箱等家庭共享数据会跟随「当前家庭」变化。
- */
-async function onSwitchSpace() {
-  const spaces = await listMySpaces();
-
-  if (!spaces.length) {
-    uni.showModal({
-      title: '还没有家庭组',
-      content: '家庭组功能正在开发中。接入后你可以创建自己的家庭组，也可以加入家人的家庭组。',
-      showCancel: false,
-      confirmText: '知道了',
-    });
-    return;
-  }
-
-  uni.showActionSheet({
-    itemList: spaces.map((item) => item.name),
-    success: (result) => {
-      const target = spaces[result.tapIndex];
-      if (!target) return;
-      setCurrentSpace(target);
-      refresh();
-      uni.showToast({ title: `已切换到 ${target.name}`, icon: 'none' });
-    },
-  });
+/** 进入家庭组页面：在那里切换、创建、加入 */
+function onSwitchSpace() {
+  uni.navigateTo({ url: '/pages/space/index' });
 }
 
 /** 家庭冰箱：家庭共享功能，按当前家庭组展示 */

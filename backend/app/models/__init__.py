@@ -6,6 +6,7 @@ Alembic 自动生成迁移时是通过 Base.metadata 发现表的，
 """
 
 from app.models.base import Base
+from app.models.space import ROLE_ADMIN, ROLE_MEMBER, Space, SpaceMember
 from app.models.user import User
 
-__all__ = ["Base", "User"]
+__all__ = ["Base", "User", "Space", "SpaceMember", "ROLE_ADMIN", "ROLE_MEMBER"]

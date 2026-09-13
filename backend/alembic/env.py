@@ -31,7 +31,7 @@ from app.models.base import Base  # noqa: E402
 
 # 关键：导入所有模型，让它们注册到 Base.metadata 上。
 # 新增模型文件后，记得在这里补一行导入，否则迁移会漏表。
-from app.models import user  # noqa: E402,F401
+from app.models import space, user  # noqa: E402,F401
 
 # Alembic 自带的日志配置（读取 alembic.ini 里的 [loggers] 段）
 config = context.config

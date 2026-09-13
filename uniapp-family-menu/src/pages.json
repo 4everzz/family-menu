@@ -7,6 +7,7 @@
     { "path": "pages/checkout/index", "style": { "navigationBarTitleText": "确认订单" } },
     { "path": "pages/orders/index", "style": { "navigationBarTitleText": "我的订单" } },
     { "path": "pages/fridge/index", "style": { "navigationBarTitleText": "家庭冰箱" } },
+    { "path": "pages/space/index", "style": { "navigationBarTitleText": "家庭组" } },
     { "path": "pages/auth/index", "style": { "navigationBarTitleText": "登录" } }
   ],
   "tabBar": {

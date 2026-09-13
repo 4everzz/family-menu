@@ -4,6 +4,7 @@
 好处是：将来如果换数据库、或者给查询加缓存，改动都集中在这里，不影响业务逻辑。
 """
 
+from app.repositories.space_repo import SpaceRepository
 from app.repositories.user_repo import UserRepository
 
-__all__ = ["UserRepository"]
+__all__ = ["SpaceRepository", "UserRepository"]
