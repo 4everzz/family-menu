@@ -53,6 +53,19 @@ export class ApiError extends Error {
 export interface RequestOptions {
   /** 接口路径，例如 /spaces */
   url: string;
+  /**
+   * HTTP 方法。
+   *
+   * ⚠️ 这里刻意没有 PATCH，不是漏写。
+   * 微信小程序的 wx.request，官方 method 合法值只有：
+   *   OPTIONS / GET / HEAD / POST / PUT / DELETE / TRACE / CONNECT
+   * ——**没有 PATCH**，写了也发不出去（不是报错，是静默走不到你想要的分支）。
+   *
+   * 所以后端虽然按标准语义用 PATCH 做部分更新，也额外开放了一个行为完全一致的
+   * POST 入口专供小程序（见 app/api/v1/recipes.py）。
+   * 把这个类型补上 'PATCH' 就等于给后来的人埋一个"编译能过、运行时必挂"的坑，
+   * 因此宁可让它在类型层面就用不了。
+   */
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   data?: Record<string, unknown>;
   /** 是否携带登录令牌，默认携带；登录接口本身传 false */

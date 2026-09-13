@@ -1,60 +1,432 @@
 <template>
   <view class="menu-page">
-    <view v-if="!shopStore.hasShop" class="page-shell entry-page">
-      <view class="entry-card">
-        <text class="entry-title">请扫店铺码或桌码下单</text>
-        <text class="entry-copy">扫码或输入 8 位数字码后即可浏览菜单和加入购物车，结算时再登录。</text>
-        <button class="scan-button" :loading="entryLoading" :disabled="entryLoading" @click="scanEntry">扫码进入</button>
-        <view class="entry-code-row"><input v-model="manualCode" class="entry-code-input" maxlength="8" placeholder="输入 8 位店铺码或桌码" @confirm="submitCode" /><button class="entry-code-submit" :disabled="entryLoading" @click="submitCode">进入</button></view>
+    <!-- 当前家庭组：菜谱是按家庭组共享的，所以先把「现在看的是哪个家」摆出来 -->
+    <view class="space-card" @click="goSpace">
+      <view class="space-main">
+        <text class="space-label">当前家庭</text>
+        <text class="space-name">{{ spaceName || '未加入家庭组' }}</text>
       </view>
+      <text class="space-action">切换</text>
     </view>
-    <view v-else class="menu-shell">
-      <view class="welcome-card"><view class="welcome-copy"><text class="shop-name">{{ shopStore.context?.shopName }}</text><text class="table-name">当前桌号：{{ shopStore.context?.tableName || '暂未扫码' }}</text></view><button class="scan-mark" :disabled="entryLoading" @click="scanEntry">扫码</button></view>
+
+    <view v-if="loading" class="tip">正在读取菜谱…</view>
+
+    <view v-else-if="errorMessage" class="error-card">
+      <text class="error-text">{{ errorMessage }}</text>
+      <text class="error-hint">
+        菜谱功能需要后端处于启动状态；在微信开发者工具里还需勾选「不校验合法域名」。
+      </text>
+      <view class="retry-btn" @click="load">重试</view>
+    </view>
+
+    <view v-else-if="!spaceId" class="empty-card">
+      <text class="empty-title">还没有家庭组</text>
+      <text class="empty-copy">菜谱是全家共享的。先创建一个家庭组，或让家人把邀请码发给你。</text>
+      <view class="empty-btn" @click="goSpace">去创建 / 加入</view>
+    </view>
+
+    <template v-else>
+      <view class="search-row">
+        <input
+          v-model="keyword"
+          class="search-input"
+          placeholder="搜索菜名或做法"
+          placeholder-class="search-placeholder"
+          confirm-type="search"
+        />
+        <text v-if="keyword" class="clear-search" @click="keyword = ''">清除</text>
+      </view>
+
       <view class="menu-layout">
-        <scroll-view class="category-sidebar" scroll-y><button v-for="category in categories" :key="category.id" class="category-button" :class="{ active: activeCategory === category.id }" @click="activeCategory = category.id">{{ category.name }}</button></scroll-view>
-        <scroll-view class="dish-area" scroll-y><view class="search-row"><input v-model="keyword" class="search-input" placeholder="搜索菜品" confirm-type="search" /><text v-if="keyword" class="clear-search" @click="keyword = ''">清除</text></view><view class="section-head"><text>今日菜单</text><text>{{ filteredDishes.length }} 道菜</text></view><view v-if="loading && !dishes.length" class="content-state">正在读取菜单</view><view v-else-if="filteredDishes.length" class="dish-list"><view v-for="dish in filteredDishes" :key="dish.id" class="dish-card" @click="openDish(dish)"><view class="dish-image" :style="{ background: dish.color || '#fed7aa' }"><image v-if="dish.imageUrl" :src="dish.imageUrl" mode="aspectFill" /><text v-else>{{ dish.emoji || '🍽️' }}</text></view><view class="dish-copy"><text class="dish-name">{{ dish.name }}</text><text class="dish-desc">{{ dish.description || dish.detail || '现做菜品' }}</text><text class="dish-price">¥{{ dish.price }}</text></view><view class="dish-action" @click.stop><text v-if="dish.isSoldOut" class="soldout">已售罄</text><view v-else class="quick-stepper"><button v-if="dish.quantity" class="round-button secondary" @click="decreaseDish(dish)">−</button><text v-if="dish.quantity" class="quantity">{{ dish.quantity }}</text><button class="round-button" @click="startAdd(dish)">+</button></view></view></view></view><view v-else class="content-state">{{ loadError || '没有找到相关菜品' }}</view><view class="bottom-space" :class="{ 'with-cart': cartStore.count }" /></scroll-view>
+        <!-- 分类侧栏：条目 = 全部 + 这个家的分类，顺序完全照用后端 -->
+        <scroll-view class="category-sidebar" scroll-y>
+          <view
+            class="category-button"
+            :class="{ active: activeCategoryId === '' }"
+            @click="activeCategoryId = ''"
+          >
+            <text class="category-name">全部</text>
+            <text class="category-count">{{ recipes.length }}</text>
+          </view>
+          <view
+            v-for="item in categories"
+            :key="item.id"
+            class="category-button"
+            :class="{ active: activeCategoryId === item.id }"
+            @click="activeCategoryId = item.id"
+          >
+            <text class="category-name">{{ item.name }}</text>
+            <text class="category-count">{{ item.recipeCount }}</text>
+          </view>
+        </scroll-view>
+
+        <scroll-view class="recipe-area" scroll-y>
+          <view class="section-head">
+            <text class="section-title">{{ activeCategoryName }}</text>
+            <text class="section-count">{{ filtered.length }} 道菜</text>
+          </view>
+
+          <view v-if="filtered.length" class="recipe-list">
+            <view v-for="item in filtered" :key="item.id" class="recipe-card" @click="openDetail(item)">
+              <view class="recipe-thumb" :style="{ background: colorOf(item.categoryId) }">
+                {{ emojiOf(item.categoryId) }}
+              </view>
+              <view class="recipe-copy">
+                <text class="recipe-name">{{ item.name }}</text>
+                <text class="recipe-desc">{{ item.description || '还没写做法' }}</text>
+                <text class="recipe-meta">{{ metaText(item) }}</text>
+              </view>
+              <text class="recipe-arrow">›</text>
+            </view>
+          </view>
+
+          <view v-else class="content-state">
+            <template v-if="recipes.length">没有找到相关菜谱</template>
+            <template v-else-if="!categories.length">
+              这个家还没有分类。先去「我的 → 菜单管理 → 分类管理」建一个，才能添加菜谱。
+            </template>
+            <template v-else>这个家还没有菜谱。</template>
+          </view>
+
+          <view class="bottom-space" />
+        </scroll-view>
       </view>
-      <view v-if="cartStore.count" class="cart-bar"><view class="cart-summary" @click="openCart"><text>已选 {{ cartStore.count }} 道</text><text class="cart-total">¥{{ cartStore.total.toFixed(2) }}</text></view><button class="checkout-button" @click="checkout">选好了</button></view>
-    </view>
-    <view v-if="selectedDish" class="modal-mask" @click="selectedDish = null"><view class="dish-modal" @click.stop><view class="modal-head"><view><text class="modal-name">{{ selectedDish.name }}</text><text class="modal-price">¥{{ selectedDish.price }}</text></view><button class="close-button" @click="selectedDish = null">×</button></view><view v-if="selectedDish.spiceOptions?.length" class="option-section"><text class="option-label">辣度</text><view class="options"><button v-for="level in selectedDish.spiceOptions" :key="level" class="option-button" :class="{ selected: selectedSpice === level }" @click="selectedSpice = level">{{ level }}</button></view></view><view class="option-section"><text class="option-label">备注</text><textarea v-model="customRemark" class="remark-input" maxlength="40" placeholder="例如：不要香菜、打包" /></view><button class="add-to-cart" @click="confirmAdd">加入购物车</button></view></view>
+    </template>
   </view>
 </template>
 
-<script setup>
-import { computed, ref } from 'vue';
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app';
-import { useShopStore } from '../../stores/shop';
-import { useCartStore } from '../../stores/cart';
-import { joinWithShopCode, getCurrentShopSnapshot } from '../../services/shop-access';
-import { getCustomerMenu } from '../../services/menu';
-import { getGuestSessionId, parseEntryCode } from '../../utils/entry-code';
-import { isCacheCurrent, readShopCache, refreshDishImageUrls, writeShopCache } from '../../utils/shop-cache';
-import { showError } from '../../utils/format';
+<script setup lang="ts">
+/**
+ * 菜单页 = 家庭菜谱库（**纯浏览**）。
+ *
+ * 改造说明：
+ *   这个页面原本是「商家点餐页」的骨架——必须先扫码进店、看某家店卖什么、加购物车结算。
+ *   按产品定位（个人生活工作台），菜单应该是「我当前这个家庭组共享的菜」，
+ *   所以扫码进店那道门被整个去掉了，改为直接读当前家庭组的菜谱。
+ *
+ *   后来又把编辑能力从这里拿走了：
+ *   翻菜谱是每天都要做的事，改菜谱一个月未必有一次，而且删除是不可逆的。
+ *   两者混在一起，翻的时候手滑就会进表单甚至误删。
+ *   所以现在这里只读——点卡片进的是只读详情页；
+ *   增删改统一收在「我的 → 菜单管理」里。
+ *
+ *   旧的商家代码（stores/shop.js、services/menu.js、shop-access.js）仍然保留在项目里，
+ *   只是这个页面不再使用它们。删代码风险大于收益，先留着。
+ */
 
-const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'];
-const shopStore = useShopStore();
-const cartStore = useCartStore();
-const loading = ref(false); const entryLoading = ref(false); const loadError = ref(''); const manualCode = ref('');
-const dishes = ref([]); const categories = ref([{ id: 'all', name: '全部' }]); const activeCategory = ref('all'); const keyword = ref('');
-const selectedDish = ref(null); const selectedSpice = ref(''); const customRemark = ref(''); let latestRequest = 0;
-const filteredDishes = computed(() => { const search = keyword.value.trim(); return dishes.value.filter((dish) => (activeCategory.value === 'all' || dish.category === activeCategory.value) && (!search || dish.name.includes(search) || String(dish.description || '').includes(search))); });
-function getContextPayload() { return { shopId: shopStore.shopId, entryToken: shopStore.context?.entryToken || '', guestSessionId: getGuestSessionId() }; }
-function getDishQuantity(id) { return cartStore.items.filter((item) => item.id === id).reduce((sum, item) => sum + Number(item.quantity || 0), 0); }
-function refreshQuantities() { dishes.value = dishes.value.map((dish) => ({ ...dish, quantity: getDishQuantity(dish.id) })); }
-function normalizeMenu(payload) { const source = Array.isArray(payload?.categories) ? payload.categories : []; const ordered = source.filter((item) => item?.id && item?.name && item.id !== 'all').sort((a, b) => Number(a.sort ?? Number.MAX_SAFE_INTEGER) - Number(b.sort ?? Number.MAX_SAFE_INTEGER)); const order = new Map(ordered.map((item, index) => [item.id, index])); const categoryMap = new Map(ordered.map((item) => [item.id, item])); categories.value = [{ id: 'all', name: '全部' }, ...ordered]; dishes.value = (Array.isArray(payload?.dishes) ? payload.dishes : []).filter((item) => item?.id && item?.name && item.enabled !== false).map((item, index) => { const legacySpicy = ['川菜', '湘菜'].includes(categoryMap.get(item.category)?.name); const spiceOptions = Array.isArray(item.spiceOptions) ? SPICE_LEVELS.filter((level) => item.spiceOptions.includes(level)) : (legacySpicy ? SPICE_LEVELS : []); return { ...item, spiceOptions, isSoldOut: item.manualSoldOut === true || (Number.isFinite(Number(item.stock)) && Number(item.stock) <= 0), sourceIndex: index, quantity: getDishQuantity(item.id) }; }).sort((a, b) => (order.get(a.category) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.category) ?? Number.MAX_SAFE_INTEGER) || a.sourceIndex - b.sourceIndex).map(({ sourceIndex, ...dish }) => dish); }
-async function loadMenu(force = false) { if (!shopStore.hasShop) return false; const requestId = ++latestRequest; loading.value = true; loadError.value = ''; const cached = readShopCache(shopStore.shopId, 'menu'); try { if (cached?.data && !force) normalizeMenu({ ...cached.data, dishes: await refreshDishImageUrls(cached.data.dishes) }); const snapshot = await getCurrentShopSnapshot(getContextPayload()); if (!snapshot?.ok || !snapshot.access) throw new Error(snapshot?.message || '店铺状态读取失败'); let payload; if (!force && isCacheCurrent(cached, snapshot.access?.versions?.menu)) payload = { ...cached.data, dishes: await refreshDishImageUrls(cached.data.dishes) }; else { const result = await getCustomerMenu(getContextPayload()); if (!result?.ok) throw new Error(result?.message || '菜单读取失败'); writeShopCache(shopStore.shopId, 'menu', snapshot.access?.versions?.menu, { dishes: result.dishes || [], categories: result.categories || [] }); payload = { dishes: await refreshDishImageUrls(result.dishes || []), categories: result.categories || [] }; } if (requestId === latestRequest) normalizeMenu(payload); return true; } catch (error) { if (cached?.data && requestId === latestRequest) { normalizeMenu({ ...cached.data, dishes: await refreshDishImageUrls(cached.data.dishes) }); uni.showToast({ title: '网络异常，暂显示最近菜单', icon: 'none' }); return true; } if (requestId === latestRequest) loadError.value = error.message || '暂时无法读取菜单'; return false; } finally { if (requestId === latestRequest) loading.value = false; } }
-async function enterByCode(value) { const code = parseEntryCode(value); if (!code) return showError('请输入或扫描 8 位店铺码、桌码'); entryLoading.value = true; uni.showLoading({ title: '进入店铺' }); try { const result = await joinWithShopCode(code, { guestSessionId: getGuestSessionId() }); if (!result?.ok || !result.shop || !shopStore.setContext(result.shop)) throw new Error(result?.message || '进入店铺失败'); manualCode.value = ''; dishes.value = []; const loaded = await loadMenu(true); if (!loaded) showError('已进入店铺，但菜单暂时无法读取，请稍后重试'); else uni.showToast({ title: `已进入${shopStore.context.tableName || '店铺'}`, icon: 'success' }); } catch (error) { showError(error.message || '进入店铺失败'); } finally { uni.hideLoading(); entryLoading.value = false; } }
-function submitCode() { enterByCode(manualCode.value); }
-function scanEntry() { if (entryLoading.value) return; uni.scanCode({ success: (result) => enterByCode(result.result || result.path || ''), fail: () => uni.showToast({ title: '未完成扫码', icon: 'none' }) }); }
-function startAdd(dish) { if (dish.isSoldOut) return; if (dish.spiceOptions?.length) return openDish(dish); cartStore.add(dish, []); refreshQuantities(); uni.showToast({ title: '已加入购物车', icon: 'success' }); }
-function openDish(dish) { if (!dish.isSoldOut) { selectedDish.value = dish; selectedSpice.value = dish.defaultSpice || ''; customRemark.value = ''; } }
-function confirmAdd() { const options = selectedSpice.value ? [selectedSpice.value] : []; if (customRemark.value.trim()) options.push(`备注：${customRemark.value.trim()}`); cartStore.add(selectedDish.value, options); selectedDish.value = null; refreshQuantities(); uni.showToast({ title: '已加入购物车', icon: 'success' }); }
-function decreaseDish(dish) { const items = cartStore.items.filter((item) => item.id === dish.id); const latest = items[items.length - 1]; if (latest) cartStore.changeQuantity(latest.cartKey, -1); refreshQuantities(); }
-function openCart() { uni.navigateTo({ url: '/pages/cart/index' }); }
-function checkout() { uni.navigateTo({ url: '/pages/checkout/index' }); }
-onShow(async () => { if (shopStore.hasShop && !dishes.value.length) await loadMenu(); }); onPullDownRefresh(async () => { await loadMenu(true); uni.stopPullDownRefresh(); });
+import { computed, ref } from 'vue';
+import { onShow } from '@dcloudio/uni-app';
+import { ensureLogin } from '../../services/auth-api';
+import type { Category } from '../../services/category';
+import { fetchRecipes } from '../../services/recipe';
+import type { Recipe } from '../../services/recipe';
+import { categoryColor, categoryEmoji } from '../../utils/category-visual';
+import { getCurrentSpaceId, getCurrentSpaceName, resolveCurrentSpace } from '../../utils/space-context';
+
+const spaceId = ref('');
+const spaceName = ref('');
+const categories = ref<Category[]>([]);
+const recipes = ref<Recipe[]>([]);
+/** 当前选中的分类 ID。空字符串代表「全部」，不是后端给的真实分类 */
+const activeCategoryId = ref('');
+const keyword = ref('');
+const loading = ref(true);
+const errorMessage = ref('');
+/** 是否已成功加载过一次：用来区分「首次进入显示加载中」和「从别处回来时静默刷新」 */
+const loadedOnce = ref(false);
+
+const colorOf = categoryColor;
+const emojiOf = categoryEmoji;
+
+/** 当前分类的名字，显示在右侧列表的标题上 */
+const activeCategoryName = computed(() => {
+  if (!activeCategoryId.value) return '全部';
+  return categories.value.find((item) => item.id === activeCategoryId.value)?.name || '全部';
+});
+
+/** 关键词匹配：菜名或做法里出现就算命中 */
+function matchKeyword(item: Recipe, search: string): boolean {
+  if (!search) return true;
+  return item.name.includes(search) || item.description.includes(search);
+}
+
+/** 当前该显示哪些菜：分类 + 关键词两层过滤（纯本地，输入即时响应） */
+const filtered = computed(() =>
+  recipes.value.filter(
+    (item) =>
+      (!activeCategoryId.value || item.categoryId === activeCategoryId.value) &&
+      matchKeyword(item, keyword.value.trim()),
+  ),
+);
+
+/** 卡片底部那行小字：分类 + 谁加的（后端查不到昵称时就只显示分类） */
+function metaText(item: Recipe): string {
+  return item.createdByName ? `${item.categoryName} · ${item.createdByName} 加的` : item.categoryName;
+}
+
+/**
+ * 加载菜谱。
+ *
+ * 每次进入页面都会重新拉一次，因为可能在别处改了数据（比如刚从菜品管理页返回）。
+ * 第二次起不显示「加载中」，直接用旧内容顶着，拉回来再替换——避免页面闪一下。
+ */
+async function load(): Promise<void> {
+  loading.value = !loadedOnce.value;
+  errorMessage.value = '';
+  try {
+    // 先确保登录态：首次进入或令牌过期时会自动静默登录
+    await ensureLogin();
+    // 校正「当前家庭」：缓存里的家庭组可能已经不存在了（被解散、自己被移出），
+    // 这里会自动回退到另一个可用的家庭组，或者清空
+    await resolveCurrentSpace();
+    spaceId.value = getCurrentSpaceId();
+    spaceName.value = getCurrentSpaceName();
+
+    // 一个家庭组都没有：不请求菜谱，让页面显示引导
+    if (!spaceId.value) {
+      recipes.value = [];
+      categories.value = [];
+      return;
+    }
+
+    const list = await fetchRecipes(spaceId.value);
+    categories.value = list.categories;
+    recipes.value = list.recipes;
+    loadedOnce.value = true;
+
+    // 当前选中的分类如果已经不在清单里了（比如在「分类管理」里把它删了），回到「全部」——
+    // 否则用户会停在一个人永远看不到菜的标签上，还以为菜全丢了
+    if (
+      activeCategoryId.value &&
+      !list.categories.some((item) => item.id === activeCategoryId.value)
+    ) {
+      activeCategoryId.value = '';
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '读取菜谱失败，请稍后重试';
+  } finally {
+    loading.value = false;
+  }
+}
+
+/** 去家庭组页面：切换、创建、加入都在那里 */
+function goSpace(): void {
+  uni.navigateTo({ url: '/pages/space/index' });
+}
+
+/** 打开菜谱详情（只读）。要改的话去「我的 → 菜单管理 → 菜品管理」 */
+function openDetail(item: Recipe): void {
+  uni.navigateTo({ url: `/pages/recipe/detail?id=${item.id}` });
+}
+
+onShow(load);
 </script>
 
 <style scoped>
-.menu-shell { min-height: 100vh; padding: 24rpx 24rpx calc(184rpx + env(safe-area-inset-bottom)); box-sizing: border-box; }.entry-page { display: flex; align-items: center; min-height: 100vh; padding: 32rpx; }.entry-card { width: 100%; display: flex; flex-direction: column; gap: 22rpx; padding: 48rpx 32rpx; border: 2rpx solid #fecaca; border-radius: 24rpx; background: #fff; box-shadow: 0 10rpx 24rpx rgba(127, 29, 29, .07); }.entry-title { color: #450a0a; font-size: 38rpx; font-weight: 800; text-align: center; }.entry-copy { color: #7c2d12; font-size: 26rpx; line-height: 1.65; text-align: center; }.scan-button { width: 100%; min-width: 0; height: 96rpx; margin: 8rpx 0 0; padding: 0; border-radius: 16rpx; background: #dc2626; color: #fff; font-size: 30rpx; font-weight: 700; line-height: 96rpx; }.entry-code-row { display: flex; gap: 12rpx; width: 100%; }.entry-code-input { min-width: 0; flex: 1; height: 84rpx; padding: 0 18rpx; border: 2rpx solid #fecaca; border-radius: 14rpx; color: #450a0a; background: #fffafa; font-size: 26rpx; }.entry-code-submit { width: 120rpx; min-width: 120rpx; height: 84rpx; margin: 0; padding: 0; border-radius: 14rpx; background: #fee2e2; color: #b91c1c; font-size: 28rpx; font-weight: 700; line-height: 84rpx; }.welcome-card { display: flex; align-items: center; gap: 20rpx; min-height: 156rpx; padding: 22rpx 24rpx; border: 2rpx solid #fecaca; border-radius: 18rpx; background: #fff; box-shadow: 0 6rpx 16rpx rgba(127, 29, 29, .06); }.welcome-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 12rpx; }.shop-name { overflow: hidden; color: #450a0a; font-size: 36rpx; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }.table-name { overflow: hidden; color: #b91c1c; font-size: 26rpx; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }.scan-mark { width: 116rpx; min-width: 116rpx; height: 96rpx; margin: 0; padding: 0; border: 2rpx solid #fecaca; border-radius: 14rpx; background: #fff7f7; color: #991b1b; font-size: 28rpx; font-weight: 700; line-height: 92rpx; }.menu-layout { display: flex; height: calc(100vh - 370rpx); min-height: 720rpx; margin-top: 18rpx; overflow: hidden; border: 2rpx solid #fee2e2; border-radius: 18rpx; background: #fff; }.category-sidebar { width: 166rpx; flex: 0 0 166rpx; padding: 12rpx 10rpx; background: #fff7f7; box-sizing: border-box; }.category-button { width: 100%; min-width: 0; min-height: 82rpx; margin: 0 0 12rpx; padding: 10rpx 8rpx; border-radius: 12rpx; background: transparent; color: #7c2d12; font-size: 25rpx; line-height: 1.4; white-space: normal; }.category-button.active { background: #dc2626; color: #fff; font-weight: 700; }.dish-area { min-width: 0; flex: 1; padding: 18rpx; box-sizing: border-box; }.search-row { display: flex; align-items: center; gap: 12rpx; padding-bottom: 16rpx; border-bottom: 2rpx solid #fef2f2; }.search-input { min-width: 0; flex: 1; height: 70rpx; padding: 0 16rpx; border: 2rpx solid #fee2e2; border-radius: 12rpx; background: #fffafa; color: #450a0a; font-size: 25rpx; }.clear-search { color: #b91c1c; font-size: 24rpx; white-space: nowrap; }.section-head { display: flex; justify-content: space-between; padding: 18rpx 4rpx 10rpx; color: #7c2d12; font-size: 24rpx; }.section-head text:first-child { color: #450a0a; font-size: 30rpx; font-weight: 700; }.dish-list { display: flex; flex-direction: column; gap: 14rpx; }.dish-card { display: flex; align-items: center; gap: 14rpx; min-height: 132rpx; padding: 14rpx 0; border-bottom: 2rpx solid #fef2f2; }.dish-image { width: 104rpx; height: 104rpx; flex: 0 0 104rpx; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 14rpx; font-size: 42rpx; }.dish-image image { width: 100%; height: 100%; }.dish-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5rpx; }.dish-name { overflow: hidden; color: #450a0a; font-size: 28rpx; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }.dish-desc { overflow: hidden; color: #78716c; font-size: 21rpx; text-overflow: ellipsis; white-space: nowrap; }.dish-price { color: #dc2626; font-size: 27rpx; font-weight: 700; }.dish-action { flex: 0 0 auto; }.quick-stepper { display: flex; align-items: center; gap: 10rpx; }.round-button { width: 58rpx; min-width: 58rpx; height: 58rpx; margin: 0; padding: 0; border-radius: 29rpx; background: #dc2626; color: #fff; font-size: 34rpx; font-weight: 700; line-height: 54rpx; }.round-button.secondary { background: #fee2e2; color: #b91c1c; }.quantity { min-width: 24rpx; color: #b91c1c; font-size: 26rpx; font-weight: 700; text-align: center; }.soldout { color: #78716c; font-size: 24rpx; }.content-state { padding: 110rpx 18rpx; color: #78716c; font-size: 26rpx; text-align: center; }.bottom-space { height: 12rpx; }.bottom-space.with-cart { height: 130rpx; }.cart-bar { position: fixed; right: 24rpx; bottom: calc(148rpx + env(safe-area-inset-bottom)); left: 24rpx; z-index: 10; display: flex; height: 96rpx; overflow: hidden; border-radius: 48rpx; background: #1c1917; color: #fff; box-shadow: 0 12rpx 28rpx rgba(69, 10, 10, .2); }.cart-summary { min-width: 0; flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 12rpx; padding: 0 26rpx; font-size: 25rpx; }.cart-total { font-size: 34rpx; font-weight: 700; }.checkout-button { width: 164rpx; min-width: 164rpx; height: 96rpx; margin: 0; padding: 0; border-radius: 0; background: #dc2626; color: #fff; font-size: 30rpx; font-weight: 700; line-height: 96rpx; }.modal-mask { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); background: rgba(28, 25, 23, .48); box-sizing: border-box; }.dish-modal { width: 100%; padding: 28rpx; border-radius: 24rpx; background: #fff; box-shadow: 0 16rpx 40rpx rgba(28, 25, 23, .22); }.modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20rpx; }.modal-name { display: block; color: #450a0a; font-size: 36rpx; font-weight: 700; }.modal-price { display: block; margin-top: 8rpx; color: #dc2626; font-size: 30rpx; font-weight: 700; }.close-button { width: 60rpx; min-width: 60rpx; height: 60rpx; margin: 0; padding: 0; border-radius: 30rpx; background: #fee2e2; color: #b91c1c; font-size: 38rpx; line-height: 56rpx; }.option-section { margin-top: 22rpx; padding-top: 20rpx; border-top: 2rpx solid #fef2f2; }.option-label { display: block; margin-bottom: 12rpx; color: #450a0a; font-size: 27rpx; font-weight: 700; }.options { display: flex; flex-wrap: wrap; gap: 12rpx; }.option-button { width: calc(50% - 6rpx); min-width: 0; height: 66rpx; margin: 0; padding: 0 8rpx; border: 2rpx solid #fecaca; border-radius: 12rpx; background: #fff; color: #7c2d12; font-size: 25rpx; line-height: 62rpx; }.option-button.selected { border-color: #dc2626; background: #fee2e2; color: #b91c1c; font-weight: 700; }.remark-input { width: 100%; height: 76rpx; padding: 12rpx; border: 2rpx solid #fecaca; border-radius: 12rpx; color: #450a0a; font-size: 24rpx; box-sizing: border-box; }.add-to-cart { width: 100%; min-width: 0; height: 88rpx; margin-top: 24rpx; padding: 0; border-radius: 16rpx; background: #dc2626; color: #fff; font-size: 30rpx; font-weight: 700; line-height: 88rpx; }
+/* 整页用 flex 纵向布局：这样中间的滚动区能自己撑满剩余高度，
+   不用去硬算 calc(100vh - 多少 rpx)，换个机型也不会歪 */
+.menu-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: var(--s-4) var(--s-3) 0;
+  box-sizing: border-box;
+}
+
+.space-card {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: 120rpx;
+  padding: var(--s-2) var(--s-3);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-card);
+}
+.space-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: var(--s-1); }
+.space-label { color: var(--c-text-2); font-size: 23rpx; }
+.space-name {
+  overflow: hidden;
+  color: var(--c-text);
+  font-size: 32rpx;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 「切换」做成药丸形的小按钮：它是个可点的入口，必须看得出能点 */
+.space-action {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 64rpx;
+  padding: 0 var(--s-3);
+  border: 2rpx solid var(--c-border-strong);
+  border-radius: var(--r-pill);
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+  font-size: 25rpx;
+}
+
+.tip { display: block; margin-top: var(--s-5); color: var(--c-text-3); font-size: 24rpx; text-align: center; }
+
+.error-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding: var(--s-4) var(--s-3);
+  border: 2rpx solid #f7c1c1;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+}
+.error-text { color: var(--c-danger); font-size: 27rpx; font-weight: 500; }
+.error-hint { color: var(--c-text-2); font-size: 23rpx; line-height: 1.6; }
+.retry-btn {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  height: 72rpx;
+  padding: 0 var(--s-4);
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 25rpx;
+}
+
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding: var(--s-5) var(--s-3);
+  border: 2rpx dashed var(--c-border-strong);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+}
+.empty-title { color: var(--c-text); font-size: 30rpx; font-weight: 500; }
+.empty-copy { color: var(--c-text-2); font-size: 24rpx; line-height: 1.65; }
+.empty-btn {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  height: 80rpx;
+  margin-top: var(--s-1);
+  padding: 0 var(--s-4);
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 500;
+}
+
+.search-row { position: relative; flex: 0 0 auto; margin-top: var(--s-3); }
+.search-input {
+  height: var(--touch-min);
+  padding: 0 120rpx 0 var(--s-3);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 27rpx;
+  box-sizing: border-box;
+}
+:deep(.search-placeholder) { color: var(--c-text-3); }
+.clear-search {
+  position: absolute;
+  right: var(--s-3);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  height: 64rpx;
+  padding: 0 var(--s-1);
+  color: var(--c-primary);
+  font-size: 24rpx;
+}
+
+/* 左右分栏：左边分类固定宽度，右边菜谱列表吃掉剩余空间 */
+.menu-layout { display: flex; gap: var(--s-2); flex: 1; min-height: 0; margin-top: var(--s-3); }
+.category-sidebar { flex: 0 0 176rpx; width: 176rpx; height: 100%; }
+.category-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-1);
+  min-height: var(--touch-min);
+  margin-bottom: var(--s-1);
+  padding: 0 var(--s-2);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+}
+/* 选中态：底色 + 边框 + 文字一起变，三重强调。
+   在小屏上单靠换个浅底色，用户不容易看出当前选的是哪个 */
+.category-button.active {
+  border-color: var(--c-primary);
+  background: var(--c-primary-bg);
+}
+.category-name { color: var(--c-text-2); font-size: 25rpx; }
+.category-button.active .category-name { color: var(--c-primary); font-weight: 500; }
+.category-count { color: var(--c-text-3); font-size: 21rpx; }
+.category-button.active .category-count { color: var(--c-primary); }
+
+.recipe-area { flex: 1; min-width: 0; height: 100%; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; padding: 4rpx 4rpx var(--s-2); }
+.section-title { color: var(--c-text); font-size: 27rpx; font-weight: 500; }
+.section-count { color: var(--c-text-3); font-size: 22rpx; }
+
+.recipe-card {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 136rpx;
+  margin-bottom: var(--s-2);
+  padding: var(--s-2);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-card);
+}
+.recipe-thumb {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: var(--r-sm);
+  font-size: 44rpx;
+  line-height: 1;
+}
+.recipe-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
+.recipe-name {
+  overflow: hidden;
+  color: var(--c-text);
+  font-size: 29rpx;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recipe-desc {
+  overflow: hidden;
+  color: var(--c-text-2);
+  font-size: 23rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recipe-meta { color: var(--c-text-3); font-size: 21rpx; }
+.recipe-arrow { flex: 0 0 auto; color: var(--c-text-3); font-size: 36rpx; line-height: 1; }
+
+.content-state {
+  padding: 60rpx var(--s-3);
+  color: var(--c-text-2);
+  font-size: 24rpx;
+  line-height: 1.7;
+  text-align: center;
+}
+/* 给底部 tabBar 留出空间，不然最后一张卡片会被盖住 */
+.bottom-space { height: 120rpx; }
 </style>

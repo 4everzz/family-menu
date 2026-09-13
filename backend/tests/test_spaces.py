@@ -11,27 +11,7 @@
 （随机用户会累积在开发库里，属于可接受的本地测试残留。）
 """
 
-from uuid import uuid4
-
 from httpx import AsyncClient
-
-from app.core.config import settings
-
-
-async def _login_as(client: AsyncClient, monkeypatch, prefix: str) -> tuple[str, int]:
-    """以某个临时用户身份登录，返回 (访问令牌, 用户 ID)。
-
-    开发模式下后端会用固定的 openid 建用户，所以这里临时改掉那个值，
-    就能造出"不同的用户"，进而测试多用户协作与权限边界。
-    """
-    monkeypatch.setattr(settings, "auth_dev_mode", True)
-    monkeypatch.setattr(settings, "auth_dev_openid", f"test_{prefix}_{uuid4().hex[:8]}")
-
-    response = await client.post("/api/v1/auth/login", json={"code": "test-code"})
-    assert response.status_code == 200, response.text
-
-    data = response.json()["data"]
-    return data["token"], data["user"]["id"]
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -39,9 +19,9 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_create_space_makes_creator_admin(client: AsyncClient, monkeypatch) -> None:
+async def test_create_space_makes_creator_admin(client: AsyncClient, login_as) -> None:
     """创建家庭组：创建者角色是管理员，成员数 1，并且拿到邀请码。"""
-    token, user_id = await _login_as(client, monkeypatch, "creator")
+    token, user_id = await login_as("creator")
 
     response = await client.post("/api/v1/spaces", json={"name": "张家"}, headers=_auth(token))
 
@@ -53,9 +33,9 @@ async def test_create_space_makes_creator_admin(client: AsyncClient, monkeypatch
     assert data["invite_code"] and len(data["invite_code"]) == 8
 
 
-async def test_created_space_appears_in_my_list(client: AsyncClient, monkeypatch) -> None:
+async def test_created_space_appears_in_my_list(client: AsyncClient, login_as) -> None:
     """创建后的家庭组要出现在"我的家庭组"列表里。"""
-    token, _ = await _login_as(client, monkeypatch, "lister")
+    token, _ = await login_as("lister")
     await client.post("/api/v1/spaces", json={"name": "我的家"}, headers=_auth(token))
 
     response = await client.get("/api/v1/spaces", headers=_auth(token))
@@ -65,13 +45,13 @@ async def test_created_space_appears_in_my_list(client: AsyncClient, monkeypatch
     assert "我的家" in names
 
 
-async def test_join_by_invite_code(client: AsyncClient, monkeypatch) -> None:
+async def test_join_by_invite_code(client: AsyncClient, login_as) -> None:
     """家人凭邀请码加入：角色是普通成员，成员数变成 2。"""
-    owner_token, _ = await _login_as(client, monkeypatch, "owner")
+    owner_token, _ = await login_as("owner")
     created = await client.post("/api/v1/spaces", json={"name": "父母家"}, headers=_auth(owner_token))
     space = created.json()["data"]
 
-    member_token, _ = await _login_as(client, monkeypatch, "joiner")
+    member_token, _ = await login_as("joiner")
     response = await client.post(
         "/api/v1/spaces/join",
         json={"invite_code": space["invite_code"]},
@@ -85,13 +65,13 @@ async def test_join_by_invite_code(client: AsyncClient, monkeypatch) -> None:
     assert data["member_count"] == 2
 
 
-async def test_join_is_case_insensitive(client: AsyncClient, monkeypatch) -> None:
+async def test_join_is_case_insensitive(client: AsyncClient, login_as) -> None:
     """邀请码小写也能加入——家人手抄时很容易写成小写。"""
-    owner_token, _ = await _login_as(client, monkeypatch, "case-owner")
+    owner_token, _ = await login_as("case-owner")
     created = await client.post("/api/v1/spaces", json={"name": "小写测试"}, headers=_auth(owner_token))
     invite_code = created.json()["data"]["invite_code"]
 
-    member_token, _ = await _login_as(client, monkeypatch, "case-joiner")
+    member_token, _ = await login_as("case-joiner")
     response = await client.post(
         "/api/v1/spaces/join",
         json={"invite_code": invite_code.lower()},
@@ -101,17 +81,17 @@ async def test_join_is_case_insensitive(client: AsyncClient, monkeypatch) -> Non
     assert response.status_code == 200, response.text
 
 
-async def test_member_cannot_see_invite_code(client: AsyncClient, monkeypatch) -> None:
+async def test_member_cannot_see_invite_code(client: AsyncClient, login_as) -> None:
     """普通成员看不到邀请码。
 
     这是安全边界测试：邀请码由后端控制，不是靠前端把字段藏起来，
     所以普通成员直接调接口也只能拿到 null。
     """
-    owner_token, _ = await _login_as(client, monkeypatch, "invite-owner")
+    owner_token, _ = await login_as("invite-owner")
     created = await client.post("/api/v1/spaces", json={"name": "邀请码测试"}, headers=_auth(owner_token))
     space = created.json()["data"]
 
-    member_token, _ = await _login_as(client, monkeypatch, "invite-member")
+    member_token, _ = await login_as("invite-member")
     await client.post("/api/v1/spaces/join", json={"invite_code": space["invite_code"]}, headers=_auth(member_token))
 
     response = await client.get("/api/v1/spaces", headers=_auth(member_token))
@@ -121,13 +101,13 @@ async def test_member_cannot_see_invite_code(client: AsyncClient, monkeypatch) -
     assert joined["invite_code"] is None
 
 
-async def test_join_twice_is_rejected(client: AsyncClient, monkeypatch) -> None:
+async def test_join_twice_is_rejected(client: AsyncClient, login_as) -> None:
     """重复加入同一个家庭组要被拒绝，且提示可读。"""
-    owner_token, _ = await _login_as(client, monkeypatch, "dup-owner")
+    owner_token, _ = await login_as("dup-owner")
     created = await client.post("/api/v1/spaces", json={"name": "重复加入测试"}, headers=_auth(owner_token))
     invite_code = created.json()["data"]["invite_code"]
 
-    member_token, _ = await _login_as(client, monkeypatch, "dup-member")
+    member_token, _ = await login_as("dup-member")
     headers = _auth(member_token)
     first = await client.post("/api/v1/spaces/join", json={"invite_code": invite_code}, headers=headers)
     second = await client.post("/api/v1/spaces/join", json={"invite_code": invite_code}, headers=headers)
@@ -137,9 +117,9 @@ async def test_join_twice_is_rejected(client: AsyncClient, monkeypatch) -> None:
     assert "已经" in second.json()["message"]
 
 
-async def test_join_with_invalid_code_returns_404(client: AsyncClient, monkeypatch) -> None:
+async def test_join_with_invalid_code_returns_404(client: AsyncClient, login_as) -> None:
     """邀请码无效时返回 404，且不透露"是哪个环节错了"。"""
-    token, _ = await _login_as(client, monkeypatch, "bad-code")
+    token, _ = await login_as("bad-code")
 
     response = await client.post("/api/v1/spaces/join", json={"invite_code": "ZZZZZZZZ"}, headers=_auth(token))
 
@@ -147,17 +127,17 @@ async def test_join_with_invalid_code_returns_404(client: AsyncClient, monkeypat
     assert response.json()["code"] == 1004
 
 
-async def test_non_member_cannot_read_space(client: AsyncClient, monkeypatch) -> None:
+async def test_non_member_cannot_read_space(client: AsyncClient, login_as) -> None:
     """不是家庭成员的人，读详情和成员列表都必须被拒绝。
 
     这条是防越权的核心：只要有人能拿到别人的 space_id（ID 是自增的，很容易猜），
     就必须保证他读不到别人家的数据。
     """
-    owner_token, _ = await _login_as(client, monkeypatch, "priv-owner")
+    owner_token, _ = await login_as("priv-owner")
     created = await client.post("/api/v1/spaces", json={"name": "私密家庭"}, headers=_auth(owner_token))
     space_id = created.json()["data"]["id"]
 
-    stranger_token, _ = await _login_as(client, monkeypatch, "stranger")
+    stranger_token, _ = await login_as("stranger")
     headers = _auth(stranger_token)
 
     detail = await client.get(f"/api/v1/spaces/{space_id}", headers=headers)
@@ -167,13 +147,13 @@ async def test_non_member_cannot_read_space(client: AsyncClient, monkeypatch) ->
     assert members.status_code == 403
 
 
-async def test_members_list_contains_both_users(client: AsyncClient, monkeypatch) -> None:
+async def test_members_list_contains_both_users(client: AsyncClient, login_as) -> None:
     """成员列表要能列出双方，并正确标出谁是创建者。"""
-    owner_token, owner_id = await _login_as(client, monkeypatch, "member-list-owner")
+    owner_token, owner_id = await login_as("member-list-owner")
     created = await client.post("/api/v1/spaces", json={"name": "成员列表测试"}, headers=_auth(owner_token))
     space = created.json()["data"]
 
-    member_token, member_id = await _login_as(client, monkeypatch, "member-list-user")
+    member_token, member_id = await login_as("member-list-user")
     await client.post("/api/v1/spaces/join", json={"invite_code": space["invite_code"]}, headers=_auth(member_token))
 
     response = await client.get(f"/api/v1/spaces/{space['id']}/members", headers=_auth(member_token))
@@ -193,9 +173,9 @@ async def test_create_space_without_token_returns_401(client: AsyncClient) -> No
     assert response.status_code == 401
 
 
-async def test_create_space_with_blank_name_returns_400(client: AsyncClient, monkeypatch) -> None:
+async def test_create_space_with_blank_name_returns_400(client: AsyncClient, login_as) -> None:
     """名称全是空格时，不能建成一个没有名字的家庭组。"""
-    token, _ = await _login_as(client, monkeypatch, "blank-name")
+    token, _ = await login_as("blank-name")
 
     response = await client.post("/api/v1/spaces", json={"name": "   "}, headers=_auth(token))
 

@@ -18,7 +18,7 @@
     <view v-else-if="!shopStore.hasShop" class="state-card">
       <text class="state-icon">📱</text>
       <text class="state-title">请先进入店铺</text>
-      <text class="state-copy">扫描店铺码或桌码后，才能查看对应店铺的订单。</text>
+      <text class="state-copy">扫描店铺码后，才能查看对应店铺的订单。</text>
       <button class="primary-button" @click="goMenu">去扫码进入</button>
     </view>
 

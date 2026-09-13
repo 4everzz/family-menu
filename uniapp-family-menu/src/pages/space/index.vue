@@ -10,7 +10,9 @@
 
     <view v-else-if="errorMessage" class="error-card">
       <text class="error-text">{{ errorMessage }}</text>
-      <text class="error-hint">家庭组功能需要后端处于启动状态；在微信开发者工具里还需勾选「不校验合法域名」。</text>
+      <text class="error-hint">
+        家庭组功能需要后端处于启动状态；在微信开发者工具里还需勾选「不校验合法域名」。
+      </text>
       <view class="retry-btn" @click="load">重试</view>
     </view>
 
@@ -32,7 +34,7 @@
           <text v-if="item.id === currentId" class="badge">当前</text>
         </view>
 
-        <!-- 邀请码只有管理员看得到，这是后端控制的，普通成员这里不会有这一行 -->
+        <!-- 邀请码只有创建人看得到，这是后端控制的，普通成员这里不会有这一行 -->
         <view v-if="item.inviteCode" class="invite-row" @click.stop="copyCode(item.inviteCode)">
           <text class="invite-label">邀请码</text>
           <text class="invite-code">{{ item.inviteCode }}</text>
@@ -51,7 +53,13 @@
           <text class="action-sign">{{ creating ? '收起' : '展开' }}</text>
         </view>
         <view v-if="creating" class="action-body">
-          <input v-model="createName" class="field" placeholder="给家庭组起个名字，例如「张家」" maxlength="32" />
+          <input
+            v-model="createName"
+            class="field"
+            placeholder="给家庭组起个名字，例如「张家」"
+            placeholder-class="field-placeholder"
+            maxlength="32"
+          />
           <view class="submit-btn" :class="{ disabled: createDisabled }" @click="submitCreate">创建</view>
         </view>
       </view>
@@ -62,12 +70,18 @@
           <text class="action-sign">{{ joining ? '收起' : '展开' }}</text>
         </view>
         <view v-if="joining" class="action-body">
-          <input v-model="joinCode" class="field" placeholder="输入家人分享的 8 位邀请码" maxlength="16" />
+          <input
+            v-model="joinCode"
+            class="field"
+            placeholder="输入家人分享的 8 位邀请码"
+            placeholder-class="field-placeholder"
+            maxlength="16"
+          />
           <view class="submit-btn" :class="{ disabled: joinDisabled }" @click="submitJoin">加入</view>
         </view>
       </view>
 
-      <text class="page-note">创建家庭组的人即管理员，可以看到邀请码；组内所有成员都能点菜、记录冰箱。</text>
+      <text class="page-note">创建家庭组的人即「创建人」，可以看到邀请码；组内所有成员都能查看菜谱、记录冰箱。</text>
     </template>
   </view>
 </template>
@@ -101,9 +115,17 @@ const pending = ref(false);
 const createDisabled = computed(() => pending.value || !createName.value.trim());
 const joinDisabled = computed(() => pending.value || !joinCode.value.trim());
 
-/** 列表里那行小字：我的角色和成员数 */
+/**
+ * 列表里那行小字：我的身份和成员数。
+ *
+ * 界面上刻意说「创建人」而不是「管理员」：
+ * 后端存的角色标识还是 admin（改字段成本高、没必要），
+ * 但产品上不做"管理员"这套角色体系——只区分「创建人」和「普通成员」。
+ * 创建人比别人多出来的只是"能看到邀请码"这类管理权限，
+ * 菜单本身谁都能改（见后端 RecipeService 的权限说明）。
+ */
 function roleText(item: SpaceInfo): string {
-  const role = item.myRole === 'admin' ? '管理员' : '成员';
+  const role = item.myRole === 'admin' ? '创建人' : '成员';
   return `${role} · ${item.memberCount ?? 1} 人`;
 }
 
@@ -193,37 +215,164 @@ onShow(load);
 </script>
 
 <style scoped>
-.space-page { min-height: 100vh; padding: 28rpx 24rpx calc(48rpx + env(safe-area-inset-bottom)); box-sizing: border-box; }
-.current-card { display: flex; flex-direction: column; gap: 10rpx; padding: 30rpx 26rpx; border: 2rpx solid #fecaca; border-radius: 22rpx; background: #fff; box-shadow: 0 8rpx 20rpx rgba(69, 10, 10, .05); }
-.current-label { color: #78716c; font-size: 23rpx; }
-.current-name { color: #450a0a; font-size: 34rpx; font-weight: 800; }
-.tip { display: block; margin-top: 40rpx; color: #a8a29e; font-size: 24rpx; text-align: center; }
-.error-card { display: flex; flex-direction: column; gap: 14rpx; margin-top: 28rpx; padding: 30rpx 26rpx; border: 2rpx solid #fecaca; border-radius: 20rpx; background: #fff; }
-.error-text { color: #b91c1c; font-size: 27rpx; font-weight: 700; }
-.error-hint { color: #78716c; font-size: 23rpx; line-height: 1.6; }
-.retry-btn { align-self: flex-start; padding: 14rpx 32rpx; border-radius: 999rpx; background: #dc2626; color: #fff; font-size: 25rpx; font-weight: 700; }
-.group-title { display: block; margin: 34rpx 0 16rpx; color: #78716c; font-size: 23rpx; }
-.space-item { display: flex; flex-direction: column; gap: 18rpx; margin-bottom: 18rpx; padding: 26rpx; border: 2rpx solid #fee2e2; border-radius: 20rpx; background: #fff; box-shadow: 0 8rpx 18rpx rgba(69, 10, 10, .04); }
-.space-item.selected { border-color: #dc2626; background: #fff7ed; }
-.space-row { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
-.space-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 8rpx; }
-.space-name { color: #450a0a; font-size: 30rpx; font-weight: 700; }
-.space-meta { color: #78716c; font-size: 23rpx; }
-.badge { flex: 0 0 auto; padding: 8rpx 18rpx; border-radius: 999rpx; background: #dc2626; color: #fff; font-size: 22rpx; font-weight: 700; }
-.invite-row { display: flex; align-items: center; gap: 14rpx; padding: 16rpx 20rpx; border-radius: 14rpx; background: #fff7ed; }
-.invite-label { color: #7c2d12; font-size: 23rpx; }
-.invite-code { flex: 1; color: #450a0a; font-size: 27rpx; font-weight: 800; letter-spacing: 2rpx; }
-.invite-action { color: #b91c1c; font-size: 23rpx; font-weight: 700; }
-.empty-card { display: flex; flex-direction: column; gap: 12rpx; margin-top: 20rpx; padding: 40rpx 30rpx; border: 2rpx dashed #fecaca; border-radius: 20rpx; background: #fff; }
-.empty-title { color: #450a0a; font-size: 29rpx; font-weight: 700; }
-.empty-copy { color: #78716c; font-size: 24rpx; line-height: 1.6; }
-.action-card { margin-top: 18rpx; border: 2rpx solid #fee2e2; border-radius: 20rpx; background: #fff; overflow: hidden; }
-.action-head { display: flex; align-items: center; justify-content: space-between; padding: 26rpx; }
-.action-name { color: #450a0a; font-size: 28rpx; font-weight: 700; }
-.action-sign { color: #b91c1c; font-size: 23rpx; font-weight: 700; }
-.action-body { display: flex; flex-direction: column; gap: 18rpx; padding: 0 26rpx 26rpx; }
-.field { height: 84rpx; padding: 0 22rpx; border: 2rpx solid #fee2e2; border-radius: 16rpx; background: #fff7ed; color: #431407; font-size: 27rpx; }
-.submit-btn { display: flex; align-items: center; justify-content: center; height: 84rpx; border-radius: 16rpx; background: #dc2626; color: #fff; font-size: 28rpx; font-weight: 700; }
-.submit-btn.disabled { background: #f5c4b3; }
-.page-note { display: block; margin-top: 34rpx; color: #a8a29e; font-size: 22rpx; line-height: 1.6; text-align: center; }
+.space-page {
+  min-height: 100vh;
+  padding: var(--s-4) var(--s-3) calc(var(--s-6) + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.current-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-3);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-card);
+}
+.current-label { color: var(--c-text-2); font-size: 23rpx; }
+.current-name { color: var(--c-text); font-size: 34rpx; font-weight: 500; }
+
+.tip { display: block; margin-top: var(--s-5); color: var(--c-text-3); font-size: 24rpx; text-align: center; }
+
+.error-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding: var(--s-4) var(--s-3);
+  border: 2rpx solid #f7c1c1;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+}
+.error-text { color: var(--c-danger); font-size: 27rpx; font-weight: 500; }
+.error-hint { color: var(--c-text-2); font-size: 23rpx; line-height: 1.6; }
+.retry-btn {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  height: 72rpx;
+  padding: 0 var(--s-4);
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 25rpx;
+}
+
+.group-title { display: block; margin: var(--s-4) 0 var(--s-2); color: var(--c-text-2); font-size: 23rpx; }
+
+.space-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+  padding: var(--s-3);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-card);
+}
+/* 选中态用主色描边 + 极浅底色，不用整块变色：
+   整块变红会让"当前家庭"这条在列表里过于抢眼，反而干扰扫读 */
+.space-item.selected { border-color: var(--c-primary); background: var(--c-primary-bg); }
+.space-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); }
+.space-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: var(--s-1); }
+.space-name { color: var(--c-text); font-size: 30rpx; font-weight: 500; }
+.space-meta { color: var(--c-text-2); font-size: 23rpx; }
+.badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 48rpx;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 22rpx;
+}
+
+/* 整行可点（复制邀请码），高度给到 88rpx 以上，避免在手机上点不中 */
+.invite-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--touch-min);
+  padding: 0 var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--c-muted);
+}
+.invite-label { color: var(--c-text-2); font-size: 23rpx; }
+.invite-code {
+  flex: 1;
+  color: var(--c-text);
+  font-size: 28rpx;
+  font-weight: 500;
+  letter-spacing: 2rpx;
+}
+.invite-action { color: var(--c-primary); font-size: 23rpx; font-weight: 500; }
+
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  margin-top: var(--s-2);
+  padding: var(--s-5) var(--s-3);
+  border: 2rpx dashed var(--c-border-strong);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+}
+.empty-title { color: var(--c-text); font-size: 29rpx; font-weight: 500; }
+.empty-copy { color: var(--c-text-2); font-size: 24rpx; line-height: 1.65; }
+
+.action-card {
+  margin-top: var(--s-2);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 104rpx;
+  padding: 0 var(--s-3);
+}
+.action-name { color: var(--c-text); font-size: 28rpx; font-weight: 500; }
+.action-sign { color: var(--c-primary); font-size: 23rpx; }
+.action-body { display: flex; flex-direction: column; gap: var(--s-2); padding: 0 var(--s-3) var(--s-3); }
+.field {
+  height: var(--touch-min);
+  padding: 0 var(--s-3);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-muted);
+  color: var(--c-text);
+  font-size: 27rpx;
+  box-sizing: border-box;
+}
+:deep(.field-placeholder) { color: var(--c-text-3); }
+.submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--touch-min);
+  border-radius: var(--r-md);
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 500;
+}
+.submit-btn.disabled { background: #ddc4b8; }
+
+.page-note {
+  display: block;
+  margin-top: var(--s-4);
+  color: var(--c-text-3);
+  font-size: 22rpx;
+  line-height: 1.7;
+  text-align: center;
+}
 </style>

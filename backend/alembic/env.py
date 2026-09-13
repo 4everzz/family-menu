@@ -29,9 +29,13 @@ if str(BACKEND_DIR) not in sys.path:
 from app.core.config import settings  # noqa: E402
 from app.models.base import Base  # noqa: E402
 
-# 关键：导入所有模型，让它们注册到 Base.metadata 上。
-# 新增模型文件后，记得在这里补一行导入，否则迁移会漏表。
-from app.models import space, user  # noqa: E402,F401
+# 关键：导入所有模型，让它们注册到 Base.metadata 上，Alembic 才知道有哪些表。
+#
+# 注意：显式列出来只是"看得见"的保险，真正兜底的是 app/models/__init__.py
+# 里的统一导出——导入包时它会连带导入所有模型文件。
+# 但两边都要顾：新增模型时请同时更新 app/models/__init__.py 和这一行，
+# 少一处都可能让 autogenerate 静默漏表（不报错，只是生成的迁移少一张表）。
+from app.models import recipe, recipe_category, space, user  # noqa: E402,F401
 
 # Alembic 自带的日志配置（读取 alembic.ini 里的 [loggers] 段）
 config = context.config

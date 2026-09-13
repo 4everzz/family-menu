@@ -6,10 +6,14 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, health, spaces, users
+from app.api.v1 import auth, categories, health, recipes, spaces, users
 
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(spaces.router)
+# 分类路由要挂在菜谱路由之前吗？不必要——两者的路径前缀不同
+# （/spaces/{id}/categories 与 /spaces/{id}/recipes），不会互相遮挡。
+api_router.include_router(categories.router)
+api_router.include_router(recipes.router)

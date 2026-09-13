@@ -8,23 +8,42 @@
     { "path": "pages/orders/index", "style": { "navigationBarTitleText": "我的订单" } },
     { "path": "pages/fridge/index", "style": { "navigationBarTitleText": "家庭冰箱" } },
     { "path": "pages/space/index", "style": { "navigationBarTitleText": "家庭组" } },
+    { "path": "pages/recipe/detail", "style": { "navigationBarTitleText": "菜谱" } },
+    { "path": "pages/recipe/edit", "style": { "navigationBarTitleText": "菜谱" } },
+    { "path": "pages/manage/category", "style": { "navigationBarTitleText": "分类管理" } },
+    { "path": "pages/manage/recipe", "style": { "navigationBarTitleText": "菜品管理" } },
     { "path": "pages/auth/index", "style": { "navigationBarTitleText": "登录" } }
   ],
   "tabBar": {
-    "color": "#9a3412",
-    "selectedColor": "#dc2626",
-    "backgroundColor": "#ffffff",
+    "color": "#78716C",
+    "selectedColor": "#9A3412",
+    "backgroundColor": "#FFFFFF",
     "borderStyle": "white",
     "list": [
-      { "pagePath": "pages/menu/index", "text": "菜单" },
-      { "pagePath": "pages/ai/index", "text": "AI" },
-      { "pagePath": "pages/profile/index", "text": "我的" }
+      {
+        "pagePath": "pages/menu/index",
+        "text": "菜单",
+        "iconPath": "static/tabbar/menu.png",
+        "selectedIconPath": "static/tabbar/menu-active.png"
+      },
+      {
+        "pagePath": "pages/ai/index",
+        "text": "AI",
+        "iconPath": "static/tabbar/ai.png",
+        "selectedIconPath": "static/tabbar/ai-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "static/tabbar/profile.png",
+        "selectedIconPath": "static/tabbar/profile-active.png"
+      }
     ]
   },
   "globalStyle": {
-    "navigationBarBackgroundColor": "#dc2626",
+    "navigationBarBackgroundColor": "#9A3412",
     "navigationBarTextStyle": "white",
-    "backgroundColor": "#fff7ed",
+    "backgroundColor": "#FFFBEB",
     "backgroundTextStyle": "dark"
   }
 }
