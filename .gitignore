@@ -2,3 +2,7 @@ node_modules/
 .env
 .DS_Store
 miniprogram/project.private.config.json
+
+# 仅供本地参考（交接文档与开发者工具截图），不进公开仓库
+WORKBUDDY_HANDOFF.md
+docs/
