@@ -48,12 +48,36 @@ def _to_space_info(space: Space, my_role: str, member_count: int) -> SpaceInfo:
 async def list_spaces(current_user: CurrentUser, session: DbSession) -> dict:
     """列出我创建和加入的全部家庭组。
 
-    一个人可以有多个家庭组（比如自己家 + 父母家），
-    所以前端需要提供"切换当前家庭组"的能力。
+    返回里每条都带 my_role：
+    **admin = "我创建的"，member = "我加入的"**——
+    前端就靠这个字段把列表分成两组，不用自己再判断归属。
+    （创建人一定是 admin，加入的人一定是 member，所以这个字段足以区分。）
     """
     service = _build_service(session)
     rows = await service.list_my_spaces(current_user)
     return success([_to_space_info(space, role, count).model_dump() for space, role, count in rows])
+
+
+@router.get("/spaces/quota", summary="我的家庭组额度")
+async def get_space_quota(current_user: CurrentUser, session: DbSession) -> dict:
+    """返回"我还能建几个、还能加几个"。
+
+    前端据此在用户动手之前就说清还能不能建／加，
+    而不是等他填完名字才被拒绝——那种体验最差。
+
+    ⚠️ 路由顺序很重要：这条必须写在 `/spaces/{space_id}` **之前**，
+    否则 "quota" 会被当成 space_id 去解析，直接报 422。
+    """
+    service = _build_service(session)
+    quota, owned, joined = await service.get_quota_usage(current_user)
+    return success(
+        {
+            "max_owned": quota.max_owned,
+            "max_joined": quota.max_joined,
+            "owned": owned,
+            "joined": joined,
+        }
+    )
 
 
 @router.post("/spaces", summary="创建家庭组")
@@ -102,3 +126,48 @@ async def list_space_members(space_id: int, current_user: CurrentUser, session: 
             for member, user in rows
         ]
     )
+
+
+@router.post("/spaces/{space_id}/leave", summary="退出家庭组")
+async def leave_space(space_id: int, current_user: CurrentUser, session: DbSession) -> dict:
+    """退出家庭组。
+
+    创建人不能直接退出——他走了这个组就没人管了，而"转让创建人"功能暂不做，
+    所以要求创建人走「解散」这条路。规则在 Service 层，这里只负责翻译成响应。
+    """
+    service = _build_service(session)
+    await service.leave_space(current_user, space_id)
+    await session.commit()
+    return success(message="已退出")
+
+
+@router.delete("/spaces/{space_id}/members/{user_id}", summary="移除家庭成员")
+async def remove_space_member(
+    space_id: int,
+    user_id: int,
+    current_user: CurrentUser,
+    session: DbSession,
+) -> dict:
+    """把某个成员移出家庭组。只有创建人能操作，且不能移除自己。
+
+    路径里带上被移除者的 user_id，而不是"移除某个成员记录"——
+    语义更清楚，而且天然要求调用方明确指定"移除谁"，
+    比传一个成员记录 ID 更难被猜出来利用。
+    """
+    service = _build_service(session)
+    await service.remove_member(current_user, space_id, user_id)
+    await session.commit()
+    return success(message="已移除")
+
+
+@router.delete("/spaces/{space_id}", summary="解散家庭组")
+async def dissolve_space(space_id: int, current_user: CurrentUser, session: DbSession) -> dict:
+    """解散整个家庭组。只有创建人能操作。
+
+    ⚠️ **不可逆**：这个家庭的成员关系、菜谱、菜谱分类会一起消失
+    （由数据库外键级联完成）。前端必须做二次确认。
+    """
+    service = _build_service(session)
+    await service.dissolve_space(current_user, space_id)
+    await session.commit()
+    return success(message="已解散")

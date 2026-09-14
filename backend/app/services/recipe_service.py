@@ -1,19 +1,24 @@
 """家庭菜谱业务规则。
 
-权限口径（本版本刻意从简，理由写在下面）：
-    任何家庭成员都能新增、修改、删除本家的菜谱。
-    "创建人"只在解散家庭组、移除成员这类管理动作上才是特殊身份，菜单本身不设门槛。
+权限口径（用户定的规则）：
+    **只有创建人能改菜单**——新增、修改、删除菜谱，以及分类的增删改，都归创建人。
+    普通成员只能浏览（列表、详情、搜索、筛选）。
+    创建人专属权力一共三项：改菜单、解散家庭组、移除成员。
+
+为什么是"创建人专属"而不是"谁都能改"？
+    这是个产品决策，不是技术决策。理由很实在：菜谱是这个家共享的资料，
+    谁都能改就意味着任何人都能改名、清空、删掉别人记的菜——一次误操作代价不可逆。
+    收成一个人管，责任清楚，误操作面也小。
+    （早期版本曾经放开给所有成员，后来按用户的要求收紧了。）
 
 为什么不做"只能改自己加的"？
-    那样编辑和删除两个接口都要多一层"这条菜是谁加的"的判断，还要给创建人开例外分支，
-    测试用例会从几组涨到十几组——多出来的分支就是多出来的出 bug 的地方，
-    而且是那种平时看不出来、上线才炸的。
-    更麻烦的是前端也得做一模一样的判断（编辑按钮该不该显示），
-    前后端两处规则只要有一点不一致，用户就会遇到"点了保存才被拒绝"这种最难查的体验问题。
-    现在把 created_by 老老实实存下来，将来真要收紧，加一个判断就行，不用改表。
+    那需要给创建人开例外分支，前端也得做一模一样的判断（按钮该不该显示），
+    前后端两处规则只要有一点不一致，用户就会遇到"点了保存才被拒绝"这种最难查的问题。
+    创建人一个角色判断就够了。
 
 两条安全原则：
-    1. "是不是这个家庭组的成员"必须由后端查数据库判断，统一走 SpaceService.ensure_member。
+    1. "是不是这个家庭组的成员""是不是创建人"必须由后端查数据库判断，
+       统一走 SpaceService.ensure_member / ensure_owner。
        前端把按钮藏起来只是体验优化，别人完全可以绕开界面直接调接口。
     2. 用户选的分类必须**属于这个家庭组**（由 CategoryService 校验）。
        分类 ID 是自增的、可猜的，不校验归属就能把菜挂到别人家的分类上，
@@ -93,11 +98,11 @@ class RecipeService:
         description: str | None,
         image_url: str | None,
     ) -> tuple[Recipe, str, str]:
-        """新增菜谱。返回 (菜谱, 添加者昵称, 分类名)。
+        """新增菜谱（仅创建人）。返回 (菜谱, 添加者昵称, 分类名)。
 
         昵称直接用手上这个用户，不用再查库；分类名从校验那一步顺手拿到。
         """
-        await self.space_service.ensure_member(space_id, user.id)
+        await self.space_service.ensure_owner(space_id, user.id)
         category = await self.category_service.ensure_category_in_space(
             space_id, self._normalize_category_id(category_id)
         )
@@ -119,12 +124,12 @@ class RecipeService:
         recipe_id: int,
         changes: dict,
     ) -> tuple[Recipe, str, str]:
-        """部分更新菜谱。
+        """部分更新菜谱（仅创建人）。
 
         changes 只包含请求体里真正出现过的字段（接口层用 exclude_unset 取出来），
         所以这里逐个 "if 键在不在" 地判断，没传的字段一律不碰。
         """
-        await self.space_service.ensure_member(space_id, user.id)
+        await self.space_service.ensure_owner(space_id, user.id)
         recipe, nickname, category_name = await self._get_owned_recipe(space_id, recipe_id)
 
         values: dict = {}
@@ -153,8 +158,8 @@ class RecipeService:
         return recipe, nickname, category_name
 
     async def delete_recipe(self, user: User, space_id: int, recipe_id: int) -> None:
-        """删除菜谱。"""
-        await self.space_service.ensure_member(space_id, user.id)
+        """删除菜谱（仅创建人）。"""
+        await self.space_service.ensure_owner(space_id, user.id)
         recipe, _, _ = await self._get_owned_recipe(space_id, recipe_id)
         await self.repo.delete(recipe)
 

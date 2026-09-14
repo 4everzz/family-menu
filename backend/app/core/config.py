@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     auth_dev_mode: bool = False
     auth_dev_openid: str = "dev_openid_0001"
 
+    # ==================== 家庭组额度 ====================
+    # 一个人最多能拥有几个家庭组（"我创建的"）／最多能加入几个（"我加入的"）。
+    #
+    # 为什么放在配置里、而不是写死在业务代码里？
+    #   因为这两个数会变——用户已经说了以后要开会员，会员加次数。
+    #   放配置里改一次 .env 就生效；将来接会员时，只需改
+    #   app/services/space_quota.py 里那一个函数，业务代码完全不动。
+    max_owned_spaces: int = 2
+    max_joined_spaces: int = 2
+
     # ==================== 派生属性 ====================
     @property
     def is_prod(self) -> bool:

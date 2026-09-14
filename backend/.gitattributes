@@ -12,6 +12,11 @@
 # 文本文件一律用 LF 存储和检出
 * text=auto eol=lf
 
+# 例外：Windows 批处理必须 CRLF。
+# cmd 读取 .bat 时对换行敏感——LF 会让 if (...) 这类跨行判断失效，
+# 症状是"双击了、窗口开了、但服务没起来"，极难排查。
+*.bat text eol=crlf
+
 # 二进制文件不做换行符转换（否则文件会被破坏）
 *.png  binary
 *.jpg  binary

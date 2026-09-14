@@ -236,31 +236,56 @@ async def test_list_shows_who_added_each_recipe(client: AsyncClient, login_as) -
     这条验证 repository 里那次 join 是选对了行——
     否则前端会把"爸加的菜"显示成"妈加的"。
 
+    ⚠️ 菜单写操作现在**只有创建人能做**，所以同一个家里不可能出现两个作者。
+    要区分"join 有没有选对行"，就造两个家、两个创建人：
+    甲建 A 家、乙建 B 家，然后互相加入（这样甲能同时看到两份列表），
+    各自在自己建的家里加一道菜。甲读 A 家应看到自己的 ID、读 B 家应看到乙的 ID——
+    join 要是选错了行，这两条就会串。
+
     说明：开发模式下用户都是自动注册的，昵称都是同一个默认值，
     所以昵称本身区分不出是谁；能真正区分的是 created_by 这个用户 ID，
     因此这里重点断言 ID 对得上，昵称只断言"有值"。
     """
-    owner_token, owner_id = await login_as("author-owner")
-    space = await _create_space(client, owner_token)
+    token_a, id_a = await login_as("author-a")
+    space_a = await _create_space(client, token_a)
 
-    member_token, member_id = await login_as("author-member")
-    await client.post(
+    token_b, id_b = await login_as("author-b")
+    space_b = await _create_space(client, token_b)
+
+    # 互相加入：让甲同时是 A 家（自己建的）和 B 家（乙建的）的成员
+    joined_b = await client.post(
         "/api/v1/spaces/join",
-        json={"invite_code": space["invite_code"]},
-        headers=_auth(member_token),
+        json={"invite_code": space_b["invite_code"]},
+        headers=_auth(token_a),
     )
+    assert joined_b.status_code == 200, joined_b.text
+    joined_a = await client.post(
+        "/api/v1/spaces/join",
+        json={"invite_code": space_a["invite_code"]},
+        headers=_auth(token_b),
+    )
+    assert joined_a.status_code == 200, joined_a.text
 
-    await _add_recipe(client, owner_token, space["id"], name="红烧肉")
-    await _add_recipe(client, member_token, space["id"], name="拍黄瓜", category="凉菜")
+    # 各自只在自己建的家里加菜
+    await _add_recipe(client, token_a, space_a["id"], name="红烧肉")
+    await _add_recipe(client, token_b, space_b["id"], name="拍黄瓜", category="凉菜")
 
-    response = await client.get(f"/api/v1/spaces/{space['id']}/recipes", headers=_auth(owner_token))
+    listing_a = await client.get(f"/api/v1/spaces/{space_a['id']}/recipes", headers=_auth(token_a))
+    listing_b = await client.get(f"/api/v1/spaces/{space_b['id']}/recipes", headers=_auth(token_a))
 
-    assert response.status_code == 200, response.text
-    by_name = {item["name"]: item for item in response.json()["data"]["recipes"]}
-    assert by_name["红烧肉"]["created_by"] == owner_id
-    assert by_name["拍黄瓜"]["created_by"] == member_id
-    assert by_name["红烧肉"]["created_by_nickname"]
-    assert by_name["拍黄瓜"]["created_by_nickname"]
+    assert listing_a.status_code == 200, listing_a.text
+    assert listing_b.status_code == 200, listing_b.text
+
+    item_a = listing_a.json()["data"]["recipes"][0]
+    item_b = listing_b.json()["data"]["recipes"][0]
+
+    assert item_a["name"] == "红烧肉"
+    assert item_a["created_by"] == id_a
+    assert item_a["created_by_nickname"]
+
+    assert item_b["name"] == "拍黄瓜"
+    assert item_b["created_by"] == id_b
+    assert item_b["created_by_nickname"]
 
 
 # ==================== 筛选与搜索 ====================

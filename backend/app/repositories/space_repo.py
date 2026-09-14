@@ -86,6 +86,29 @@ class SpaceRepository:
         result = await self.session.execute(stmt)
         return int(result.scalar_one())
 
+    # ---- 额度用量：同一个"我参加了几个家"，要按两种口径分开数 ----
+    #
+    # 为什么不能只数成员表？
+    #   因为创建人也会在成员表里有一行，只数成员表会把"自己建的家"
+    #   也算成"加入的"，额度就平白少一个位置。
+    #   所以"我创建的"看 owner_id，"我加入的"= 成员表里那些 owner 不是我的。
+
+    async def count_owned_by_user(self, user_id: int) -> int:
+        """统计这个用户**创建**的家庭组数量（额度里的"我创建的"）。"""
+        stmt = select(func.count(Space.id)).where(Space.owner_id == user_id)
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def count_joined_by_user(self, user_id: int) -> int:
+        """统计这个用户**以成员身份加入**的家庭组数量（不含自己创建的）。"""
+        stmt = (
+            select(func.count(SpaceMember.id))
+            .join(Space, Space.id == SpaceMember.space_id)
+            .where(SpaceMember.user_id == user_id, Space.owner_id != user_id)
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
+
     async def list_members(self, space_id: int) -> list[tuple[SpaceMember, User]]:
         """列出家庭组的全部成员及其用户信息。
 
@@ -100,3 +123,26 @@ class SpaceRepository:
         )
         result = await self.session.execute(stmt)
         return [(row[0], row[1]) for row in result.all()]
+
+    async def delete_member(self, member: SpaceMember) -> None:
+        """删除一条成员记录。
+
+        「退出家庭组」和「移除成员」共用这一个方法：
+        它们在数据库层面做的事完全一样，区别只在"谁有权删谁"——
+        那属于业务规则，放在 Service 层判断。
+        """
+        await self.session.delete(member)
+        await self.session.flush()
+
+    async def delete_space(self, space: Space) -> None:
+        """删除家庭组（解散）。
+
+        成员记录、菜谱、菜谱分类都会跟着被清理——**不是这里逐张表去删的**，
+        而是数据库上的外键规则（ON DELETE CASCADE）自动完成的。
+        这样写的好处：将来再加"属于家庭组"的新表，只要外键写对了，
+        解散时就会一起清理，不会留下孤儿数据。
+        （注意菜谱表的 created_by 指向 users 用的是 RESTRICT，
+         那是防"删用户把全家的菜带走"，和这里删家庭组不冲突。）
+        """
+        await self.session.delete(space)
+        await self.session.flush()

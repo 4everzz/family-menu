@@ -1,8 +1,8 @@
 """菜谱分类业务规则。
 
 权限口径和菜谱模块完全一致：
-    任何家庭成员都能新增、改名、删除本家的分类。
-    校验统一走 SpaceService.ensure_member，不在这里再写一遍"查成员表"。
+    **只有创建人能改菜单**——新增、改名、删除分类都归创建人，普通成员只能浏览。
+    校验统一走 SpaceService.ensure_owner，不在这里再写一遍"查成员表 + 比 owner_id"。
 
 一条安全原则（和菜谱模块同一个道理）：
     分类 ID 是数据库自增的，很容易被猜到。
@@ -56,8 +56,8 @@ class CategoryService:
     # ==================== 写操作 ====================
 
     async def create_category(self, user: User, space_id: int, name: str) -> RecipeCategory:
-        """新增一个分类，排在最末尾。"""
-        await self.space_service.ensure_member(space_id, user.id)
+        """新增一个分类，排在最末尾（仅创建人）。"""
+        await self.space_service.ensure_owner(space_id, user.id)
         cleaned = self._normalize_name(name)
 
         # 先查一次重名，目的是给出友好提示（"已经有一个叫「早餐」的分类了"）。
@@ -83,13 +83,13 @@ class CategoryService:
         category_id: int,
         name: str,
     ) -> RecipeCategory:
-        """给分类改名。
+        """给分类改名（仅创建人）。
 
         改名的成本很低——菜谱是通过 category_id 关联分类的，
         所以这里改一行，所有挂在这个分类下的菜自动跟着显示新名字，不用去动菜谱表。
         这正是当初选择"外键关联"而不是"在菜谱里存分类名"的原因。
         """
-        await self.space_service.ensure_member(space_id, user.id)
+        await self.space_service.ensure_owner(space_id, user.id)
         category = await self.ensure_category_in_space(space_id, category_id)
         cleaned = self._normalize_name(name)
 
@@ -109,8 +109,8 @@ class CategoryService:
             raise BusinessError(f"已经有一个叫「{cleaned}」的分类了") from error
 
     async def delete_category(self, user: User, space_id: int, category_id: int) -> None:
-        """删除分类。分类下还有菜时拒绝删除。"""
-        await self.space_service.ensure_member(space_id, user.id)
+        """删除分类（仅创建人）。分类下还有菜时拒绝删除。"""
+        await self.space_service.ensure_owner(space_id, user.id)
         category = await self.ensure_category_in_space(space_id, category_id)
 
         recipe_count = await self.repo.count_recipes(category_id)
