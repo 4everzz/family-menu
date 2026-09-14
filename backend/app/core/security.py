@@ -14,19 +14,22 @@ import jwt
 from app.core.config import settings
 
 
-def create_access_token(user_id: int, openid: str) -> str:
+def create_access_token(user_id: int) -> str:
     """签发访问令牌。
 
     参数：
         user_id：用户主键，放入标准字段 sub（令牌主体）
-        openid：微信用户标识，便于后端审计时直接看出是谁
     返回：
         编码后的令牌字符串
+
+    为什么令牌里不再放 openid、用户名这些身份信息？
+        令牌是"谁拿到谁就能用"的凭证，前端存在本地，内容也只是 base64 编码、并非加密，
+        任何人解开都能看到。既然鉴定用过一次 sub（查数据库）就够了，
+        就不要再往里塞身份细节——少一个字段就少一分泄露面。
     """
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": str(user_id),
-        "openid": openid,
         "iat": now,  # 签发时间
         "exp": now + timedelta(minutes=settings.jwt_expire_minutes),  # 过期时间
     }

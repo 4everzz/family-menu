@@ -7,6 +7,7 @@ Alembic 自动生成迁移时是通过 Base.metadata 发现表的，
 
 from app.models.base import Base
 from app.models.favorite import FavoritePartition, RecipeFavorite
+from app.models.fridge_item import FridgeItem
 from app.models.recipe import Recipe
 from app.models.recipe_category import (
     DEFAULT_CATEGORY_NAME,
@@ -15,17 +16,24 @@ from app.models.recipe_category import (
     RecipeCategory,
 )
 from app.models.space import ROLE_ADMIN, ROLE_MEMBER, Space, SpaceMember
-from app.models.user import User
+from app.models.user import DEFAULT_NICKNAME, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, User
+from app.models.user_identity import PROVIDER_WX_MP, UserIdentity
 
 __all__ = [
     "Base",
     "User",
+    "UserIdentity",
+    "PROVIDER_WX_MP",
+    "DEFAULT_NICKNAME",
+    "USERNAME_MIN_LENGTH",
+    "USERNAME_MAX_LENGTH",
     "Space",
     "SpaceMember",
     "ROLE_ADMIN",
     "ROLE_MEMBER",
     "Recipe",
     "RecipeCategory",
+    "FridgeItem",
     "FavoritePartition",
     "RecipeFavorite",
     "DEFAULT_CATEGORY_NAMES",

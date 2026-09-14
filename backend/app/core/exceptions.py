@@ -76,9 +76,19 @@ def register_exception_handlers(app: FastAPI) -> None:
         """参数校验失败：把 Pydantic 的错误信息转成前端能直接展示的文案。"""
         errors = exc.errors()
         first = errors[0] if errors else {}
-        # loc 形如 ('body', 'code')，去掉 body 后拼成 "code"
+
+        # loc 形如 ('body', 'code')，去掉 body 后拼成 "code"。
+        # 注意模型级校验（例如"密码不能与用户名相同"）没有字段路径，loc 只剩 ('body',)，
+        # 拼出来会是空字符串——这时不能硬塞一个字段名，否则提示会变成
+        # "参数不合法： Value error, ..." 这种半截话。
         location = ".".join(str(part) for part in first.get("loc", []) if part != "body")
-        message = f"参数不合法：{location} {first.get('msg', '')}".strip()
+
+        # Pydantic 会给自定义校验器抛出的消息自动加上 "Value error, " 前缀，
+        # 那是给开发者看的；这些文案会原样显示给用户，所以要去掉。
+        detail = str(first.get("msg", "")).removeprefix("Value error, ").strip()
+
+        prefix = f"参数不合法：{location} " if location else "参数不合法："
+        message = f"{prefix}{detail}".strip()
         logger.info("参数校验失败 | %s %s | %s", request.method, request.url.path, message)
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

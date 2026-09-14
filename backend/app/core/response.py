@@ -24,6 +24,8 @@ CODE_ACCOUNT_DISABLED = 1005  # 账号被停用
 CODE_WX_NOT_CONFIGURED = 1006  # 服务端未配置微信密钥
 CODE_WX_UNAVAILABLE = 1007     # 微信服务不可用
 CODE_WX_LOGIN_FAILED = 1008    # 微信返回登录失败
+CODE_USERNAME_TAKEN = 1009     # 用户名已被占用
+CODE_BAD_CREDENTIALS = 1010    # 用户名或密码不正确（故意不区分是哪一个错）
 CODE_SERVER_ERROR = 5000  # 未预期的服务端错误
 
 
