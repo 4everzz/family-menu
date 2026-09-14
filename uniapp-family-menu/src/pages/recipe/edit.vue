@@ -28,6 +28,7 @@
               :key="item.id"
               class="category-chip"
               :class="{ active: form.categoryId === item.id }"
+              hover-class="tap"
               @click="form.categoryId = item.id"
             >
               {{ item.name }}
@@ -40,7 +41,7 @@
 
         <view class="field-group">
           <view class="field-head">
-            <text class="field-label">做法 / 说明</text>
+            <text class="field-label">简介</text>
             <text class="field-count">{{ form.description.length }} / 2000</text>
           </view>
           <textarea
@@ -48,7 +49,7 @@
             class="field-textarea"
             :class="{ focused: focusedField === 'description' }"
             maxlength="2000"
-            placeholder="想怎么写都行，比如「鸡蛋先炒散盛出，番茄去皮再下锅」"
+            placeholder="一句话介绍这道菜，比如「油炸，外酥里嫩，约 20 分钟」"
             placeholder-class="field-placeholder"
             @focus="focusedField = 'description'"
             @blur="focusedField = ''"
@@ -56,12 +57,12 @@
         </view>
       </view>
 
-      <view class="save-btn" :class="{ disabled: !canSave }" @click="submit">
+      <view class="save-btn" :class="{ disabled: !canSave }" hover-class="tap" @click="submit">
         {{ pending ? '正在保存…' : isEdit ? '保存修改' : '加进菜谱' }}
       </view>
 
       <!-- 删除放在这个页面里，列表页的卡片上不放开删的入口，少一次误触 -->
-      <view v-if="isEdit" class="delete-btn" @click="confirmDelete">删除这道菜</view>
+      <view v-if="isEdit" class="delete-btn" hover-class="tap" @click="confirmDelete">删除这道菜</view>
 
       <text v-if="metaLine" class="page-note">{{ metaLine }}</text>
     </template>
@@ -93,6 +94,7 @@ import { fetchCategories } from '../../services/category';
 import { createRecipe, deleteRecipe, fetchRecipe, updateRecipe } from '../../services/recipe';
 import { getCurrentSpaceId } from '../../utils/space-context';
 import { showError } from '../../utils/format';
+import { DANGER } from '../../utils/theme';
 
 const spaceId = ref('');
 const recipeId = ref('');
@@ -194,7 +196,7 @@ function confirmDelete(): void {
     title: '删除这道菜',
     content: `确定要把「${form.name}」从家庭菜谱里删掉吗？删除后无法恢复。`,
     confirmText: '删除',
-    confirmColor: '#dc2626',
+    confirmColor: DANGER,
     success: async (result) => {
       if (!result.confirm) return;
       pending.value = true;
@@ -311,14 +313,14 @@ onLoad((options) => {
   font-size: 30rpx;
   font-weight: 500;
 }
-.save-btn.disabled { background: #ddc4b8; }
+.save-btn.disabled { background: var(--c-disabled); }
 .delete-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 96rpx;
   margin-top: var(--s-3);
-  border: 2rpx solid #f7c1c1;
+  border: 2rpx solid var(--c-danger-border);
   border-radius: var(--r-md);
   background: var(--c-surface);
   color: var(--c-danger);

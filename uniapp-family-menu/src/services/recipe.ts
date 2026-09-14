@@ -67,7 +67,7 @@ export interface Recipe {
   categoryId: string;
   /** 所属分类名，列表和详情直接显示，不用再查一次分类清单 */
   categoryName: string;
-  /** 做法 / 说明，后端没填时统一给空字符串，页面不用判 null */
+  /** 简介，后端没填时统一给空字符串，页面不用判 null */
   description: string;
   /** 图片地址，第一版不做图片上传，基本为空 */
   imageUrl: string;
@@ -178,7 +178,7 @@ export async function createRecipe(spaceId: string, input: RecipeInput): Promise
  * 修改菜谱（部分更新）。
  *
  * 只把传进来的字段发给后端，没传的字段后端会保持原值。
- * 注意"没传"和"传了空字符串"是两种意图：前者保持原值，后者会清空做法。
+ * 注意"没传"和"传了空字符串"是两种意图：前者保持原值，后者会清空简介。
  */
 export async function updateRecipe(
   spaceId: string,

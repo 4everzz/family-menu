@@ -8,6 +8,7 @@
     { "path": "pages/orders/index", "style": { "navigationBarTitleText": "我的订单" } },
     { "path": "pages/fridge/index", "style": { "navigationBarTitleText": "家庭冰箱" } },
     { "path": "pages/space/index", "style": { "navigationBarTitleText": "家庭组" } },
+    { "path": "pages/settings/index", "style": { "navigationBarTitleText": "设置" } },
     { "path": "pages/recipe/detail", "style": { "navigationBarTitleText": "菜谱" } },
     { "path": "pages/recipe/edit", "style": { "navigationBarTitleText": "菜谱" } },
     { "path": "pages/manage/category", "style": { "navigationBarTitleText": "分类管理" } },

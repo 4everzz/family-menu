@@ -9,7 +9,7 @@
 
     <view v-else-if="errorMessage" class="error-card">
       <text class="error-text">{{ errorMessage }}</text>
-      <view class="retry-btn" @click="load">重试</view>
+      <view class="retry-btn" hover-class="tap" @click="load">重试</view>
     </view>
 
     <template v-else>
@@ -20,6 +20,7 @@
           <view
             class="filter-chip"
             :class="{ active: activeCategoryId === '' }"
+            hover-class="tap"
             @click="activeCategoryId = ''"
           >
             全部 {{ recipes.length }}
@@ -29,6 +30,7 @@
             :key="item.id"
             class="filter-chip"
             :class="{ active: activeCategoryId === item.id }"
+            hover-class="tap"
             @click="activeCategoryId = item.id"
           >
             {{ item.name }} {{ item.recipeCount }}
@@ -37,15 +39,12 @@
       </scroll-view>
 
       <view v-if="filtered.length" class="list">
-        <view v-for="item in filtered" :key="item.id" class="row" @click="edit(item)">
-          <view class="row-icon" :style="{ background: colorOf(item.categoryId) }">
-            {{ emojiOf(item.categoryId) }}
-          </view>
+        <view v-for="item in filtered" :key="item.id" class="row" hover-class="tap" @click="edit(item)">
           <view class="row-main">
             <text class="row-name">{{ item.name }}</text>
             <text class="row-meta">{{ item.categoryName }}</text>
           </view>
-          <view class="row-delete" @click.stop="remove(item)">删除</view>
+          <view class="row-delete" hover-class="tap" @click.stop="remove(item)">删除</view>
         </view>
       </view>
 
@@ -55,7 +54,7 @@
         </text>
       </view>
 
-      <view class="add-btn" @click="add">+ 新增菜品</view>
+      <view class="add-btn" hover-class="tap" @click="add">+ 新增菜品</view>
     </template>
   </view>
 </template>
@@ -77,9 +76,9 @@ import { ensureLogin } from '../../services/auth-api';
 import type { Category } from '../../services/category';
 import { fetchRecipes, deleteRecipe } from '../../services/recipe';
 import type { Recipe } from '../../services/recipe';
-import { categoryColor, categoryEmoji } from '../../utils/category-visual';
-import { getCurrentSpaceId } from '../../utils/space-context';
 import { showError } from '../../utils/format';
+import { DANGER } from '../../utils/theme';
+import { getCurrentSpaceId } from '../../utils/space-context';
 
 const spaceId = ref('');
 const categories = ref<Category[]>([]);
@@ -90,8 +89,6 @@ const pending = ref(false);
 /** 当前筛选的分类 ID，空字符串表示"全部" */
 const activeCategoryId = ref('');
 
-const colorOf = categoryColor;
-const emojiOf = categoryEmoji;
 
 const filtered = computed(() =>
   activeCategoryId.value
@@ -145,7 +142,7 @@ function remove(item: Recipe): void {
     title: '删除这道菜',
     content: `确定要把「${item.name}」从家庭菜谱里删掉吗？删除后无法恢复。`,
     confirmText: '删除',
-    confirmColor: '#dc2626',
+    confirmColor: DANGER,
     success: async (result) => {
       if (!result.confirm) return;
       pending.value = true;
@@ -187,7 +184,7 @@ onShow(() => {
   flex-direction: column;
   gap: var(--s-2);
   padding: var(--s-4) var(--s-3);
-  border: 2rpx solid #f7c1c1;
+  border: 2rpx solid var(--c-danger-border);
   border-radius: var(--r-lg);
   background: var(--c-surface);
 }
@@ -241,17 +238,6 @@ onShow(() => {
   border-bottom: 2rpx solid var(--c-border);
 }
 .row:last-child { border-bottom: none; }
-.row-icon {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 84rpx;
-  height: 84rpx;
-  border-radius: var(--r-sm);
-  font-size: 40rpx;
-  line-height: 1;
-}
 .row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .row-name {
   overflow: hidden;
@@ -271,7 +257,7 @@ onShow(() => {
   min-width: 96rpx;
   height: var(--touch-min);
   padding: 0 var(--s-2);
-  border: 2rpx solid #f7c1c1;
+  border: 2rpx solid var(--c-danger-border);
   border-radius: var(--r-sm);
   background: var(--c-surface);
   color: var(--c-danger);

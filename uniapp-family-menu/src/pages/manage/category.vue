@@ -12,25 +12,24 @@
 
     <view v-else-if="errorMessage" class="error-card">
       <text class="error-text">{{ errorMessage }}</text>
-      <view class="retry-btn" @click="load">重试</view>
+      <view class="retry-btn" hover-class="tap" @click="load">重试</view>
     </view>
 
     <template v-else>
       <view class="list">
         <view v-for="item in categories" :key="item.id" class="row">
-          <view class="row-icon" :style="{ background: colorOf(item.id) }">{{ emojiOf(item.id) }}</view>
           <view class="row-main">
             <text class="row-name">{{ item.name }}</text>
             <text class="row-meta">{{ item.recipeCount }} 道菜</text>
           </view>
           <view class="row-actions">
-            <view class="action" @click="rename(item)">改名</view>
-            <view class="action danger" @click="remove(item)">删除</view>
+            <view class="action" hover-class="tap" @click="rename(item)">改名</view>
+            <view class="action danger" hover-class="tap" @click="remove(item)">删除</view>
           </view>
         </view>
       </view>
 
-      <view class="add-btn" @click="add">+ 新增分类</view>
+      <view class="add-btn" hover-class="tap" @click="add">+ 新增分类</view>
 
       <text class="page-note">分类下还有菜的时候不能删除——先把那些菜改到别的分类，再来删。</text>
     </template>
@@ -55,9 +54,9 @@ import { onShow } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
 import type { Category } from '../../services/category';
 import { createCategory, deleteCategory, fetchCategories, renameCategory } from '../../services/category';
-import { categoryColor, categoryEmoji } from '../../utils/category-visual';
 import { getCurrentSpaceId } from '../../utils/space-context';
 import { showError } from '../../utils/format';
+import { DANGER } from '../../utils/theme';
 
 const spaceId = ref('');
 const categories = ref<Category[]>([]);
@@ -65,9 +64,6 @@ const loading = ref(true);
 const errorMessage = ref('');
 /** 操作进行中标记：防止连点重复提交 */
 const pending = ref(false);
-
-const colorOf = categoryColor;
-const emojiOf = categoryEmoji;
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -178,7 +174,7 @@ function remove(item: Category): void {
     title: '删除分类',
     content: `确定要删除「${item.name}」吗？这个分类下目前没有菜谱。`,
     confirmText: '删除',
-    confirmColor: '#dc2626',
+    confirmColor: DANGER,
     success: async (result) => {
       if (!result.confirm) return;
       pending.value = true;
@@ -221,7 +217,7 @@ onShow(() => {
   flex-direction: column;
   gap: var(--s-2);
   padding: var(--s-4) var(--s-3);
-  border: 2rpx solid #f7c1c1;
+  border: 2rpx solid var(--c-danger-border);
   border-radius: var(--r-lg);
   background: var(--c-surface);
 }
@@ -254,17 +250,6 @@ onShow(() => {
   border-bottom: 2rpx solid var(--c-border);
 }
 .row:last-child { border-bottom: none; }
-.row-icon {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 76rpx;
-  height: 76rpx;
-  border-radius: var(--r-sm);
-  font-size: 36rpx;
-  line-height: 1;
-}
 .row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .row-name {
   overflow: hidden;
@@ -291,7 +276,7 @@ onShow(() => {
   color: var(--c-text-2);
   font-size: 25rpx;
 }
-.action.danger { border-color: #f7c1c1; color: var(--c-danger); }
+.action.danger { border-color: var(--c-danger-border); color: var(--c-danger); }
 
 .add-btn {
   display: flex;

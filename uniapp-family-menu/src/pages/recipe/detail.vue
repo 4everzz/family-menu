@@ -4,13 +4,12 @@
 
     <view v-else-if="errorMessage" class="error-card">
       <text class="error-text">{{ errorMessage }}</text>
-      <view class="retry-btn" @click="load">重试</view>
+      <view class="retry-btn" hover-class="tap" @click="load">重试</view>
     </view>
 
     <template v-else>
-      <!-- 头部：菜品占位图 + 菜名 + 分类标签 -->
+      <!-- 头部：菜名 + 分类标签（不做占位图，分类只留文字） -->
       <view class="hero">
-        <view class="hero-thumb" :style="{ background: thumbColor }">{{ thumbEmoji }}</view>
         <view class="hero-copy">
           <text class="hero-name">{{ recipe.name }}</text>
           <view class="hero-tags">
@@ -20,9 +19,9 @@
       </view>
 
       <view class="block">
-        <text class="block-title">做法</text>
+        <text class="block-title">简介</text>
         <text v-if="recipe.description" class="block-body">{{ recipe.description }}</text>
-        <text v-else class="block-empty">还没有写做法。想补充的话，去「我的 → 菜单管理 → 菜品管理」编辑。</text>
+        <text v-else class="block-empty">还没有写简介。菜谱内容由创建人维护，可以提醒他来补充。</text>
       </view>
 
       <text v-if="metaLine" class="page-note">{{ metaLine }}</text>
@@ -52,7 +51,6 @@ import { onLoad } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
 import { fetchRecipe } from '../../services/recipe';
 import type { Recipe } from '../../services/recipe';
-import { categoryColor, categoryEmoji } from '../../utils/category-visual';
 import { getCurrentSpaceId } from '../../utils/space-context';
 
 const spaceId = ref('');
@@ -75,8 +73,6 @@ const recipe = ref<Recipe>({
   updatedAt: '',
 });
 
-const thumbColor = computed(() => categoryColor(recipe.value.categoryId));
-const thumbEmoji = computed(() => categoryEmoji(recipe.value.categoryId));
 
 /**
  * 把后端返回的时间转成「2026年9月14日」这种好读的格式。
@@ -135,7 +131,7 @@ onLoad((options) => {
   gap: var(--s-2);
   margin-top: var(--s-4);
   padding: var(--s-4) var(--s-3);
-  border: 2rpx solid #f7c1c1;
+  border: 2rpx solid var(--c-danger-border);
   border-radius: var(--r-lg);
   background: var(--c-surface);
 }
@@ -163,17 +159,6 @@ onLoad((options) => {
   background: var(--c-surface);
   box-shadow: var(--shadow-card);
 }
-.hero-thumb {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 140rpx;
-  height: 140rpx;
-  border-radius: var(--r-md);
-  font-size: 64rpx;
-  line-height: 1;
-}
 .hero-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: var(--s-2); }
 .hero-name {
   color: var(--c-text);
@@ -194,7 +179,7 @@ onLoad((options) => {
   font-size: 23rpx;
 }
 
-/* 做法区块：正文部分行高放宽到 1.8，做法通常要一行行照着做，太挤看着累 */
+/* 简介区块：正文部分行高放宽到 1.8，读起来不挤 */
 .block {
   display: flex;
   flex-direction: column;

@@ -8,7 +8,9 @@
     </view>
 
     <view class="state-card">
-      <view class="state-icon">🧊</view>
+      <view class="state-icon">
+        <image class="state-icon-img" src="/static/icons/container.png" mode="aspectFit" />
+      </view>
       <text class="state-title">家庭冰箱正在施工</text>
       <text class="state-copy">接入后可以记录家里现在有哪些食材，用来挑选今天做什么菜。</text>
       <view class="state-note">
@@ -23,7 +25,7 @@ import { ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { getCurrentSpaceName } from '../../utils/space-context';
 
-// 冰箱属于当前家庭组：在「我的」页面切换家庭后，这里显示的家庭会同步变化
+// 冰箱属于当前家庭组：在「我的 → 设置 → 切换家庭」里换家后，这里显示的家庭会同步变化
 const spaceName = ref('');
 
 onShow(() => {
@@ -81,10 +83,10 @@ onShow(() => {
   width: 140rpx;
   height: 140rpx;
   border-radius: var(--r-lg);
-  background: #e8efe9;
-  font-size: 64rpx;
+  background: var(--c-tint-sage);
   line-height: 1;
 }
+.state-icon-img { width: 72rpx; height: 72rpx; }
 .state-title { color: var(--c-text); font-size: 34rpx; font-weight: 500; }
 .state-copy { color: var(--c-text-2); font-size: 25rpx; line-height: 1.7; }
 .state-note {

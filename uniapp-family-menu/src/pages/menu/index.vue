@@ -1,12 +1,21 @@
 <template>
   <view class="menu-page">
-    <!-- 当前家庭组：菜谱是按家庭组共享的，所以先把「现在看的是哪个家」摆出来 -->
-    <view class="space-card" @click="goSpace">
-      <view class="space-main">
-        <text class="space-label">当前家庭</text>
-        <text class="space-name">{{ spaceName || '未加入家庭组' }}</text>
-      </view>
-      <text class="space-action">切换</text>
+    <!--
+      页头：**家庭名就是这一页的标题**。
+      菜单页展示的是"这个家的菜谱"，所以"在看哪个家"应该是页面的身份，
+      而不是一块孤零零的卡片——之前那张卡只有一个名字，
+      外框和阴影把一句话包成了相框，还白占了第一屏近 120rpx。
+
+      只显示，**不提供切换**：切换属于配置类动作，统一收在「我的 → 设置」里。
+
+      右侧只放分类数、不放菜数：菜数在下面的列表头上已经有了，
+      但那个数字的含义不同（是"当前筛选下有几道"），两个菜数并排容易看混。
+    -->
+    <view class="page-head">
+      <text class="page-title">{{ spaceName || '未加入家庭组' }}</text>
+      <text v-if="spaceId && categories.length" class="page-subtitle">
+        {{ categories.length }} 个分类
+      </text>
     </view>
 
     <view v-if="loading" class="tip">正在读取菜谱…</view>
@@ -16,13 +25,15 @@
       <text class="error-hint">
         菜谱功能需要后端处于启动状态；在微信开发者工具里还需勾选「不校验合法域名」。
       </text>
-      <view class="retry-btn" @click="load">重试</view>
+      <view class="retry-btn" hover-class="tap" @click="load">重试</view>
     </view>
 
     <view v-else-if="!spaceId" class="empty-card">
       <text class="empty-title">还没有家庭组</text>
-      <text class="empty-copy">菜谱是全家共享的。先创建一个家庭组，或让家人把邀请码发给你。</text>
-      <view class="empty-btn" @click="goSpace">去创建 / 加入</view>
+      <text class="empty-copy">
+        菜谱是全家共享的。去「我的 → 设置 → 切换家庭」创建一个家庭组，或让家人把邀请码发给你。
+      </text>
+      <view class="empty-btn" hover-class="tap" @click="goSettings">前往设置</view>
     </view>
 
     <template v-else>
@@ -30,11 +41,11 @@
         <input
           v-model="keyword"
           class="search-input"
-          placeholder="搜索菜名或做法"
+          placeholder="搜索菜名或简介"
           placeholder-class="search-placeholder"
           confirm-type="search"
         />
-        <text v-if="keyword" class="clear-search" @click="keyword = ''">清除</text>
+        <text v-if="keyword" class="clear-search" hover-class="tap" @click="keyword = ''">清除</text>
       </view>
 
       <view class="menu-layout">
@@ -43,6 +54,7 @@
           <view
             class="category-button"
             :class="{ active: activeCategoryId === '' }"
+            hover-class="tap"
             @click="activeCategoryId = ''"
           >
             <text class="category-name">全部</text>
@@ -53,6 +65,7 @@
             :key="item.id"
             class="category-button"
             :class="{ active: activeCategoryId === item.id }"
+            hover-class="tap"
             @click="activeCategoryId = item.id"
           >
             <text class="category-name">{{ item.name }}</text>
@@ -67,13 +80,10 @@
           </view>
 
           <view v-if="filtered.length" class="recipe-list">
-            <view v-for="item in filtered" :key="item.id" class="recipe-card" @click="openDetail(item)">
-              <view class="recipe-thumb" :style="{ background: colorOf(item.categoryId) }">
-                {{ emojiOf(item.categoryId) }}
-              </view>
+            <view v-for="item in filtered" :key="item.id" class="recipe-card" hover-class="tap" @click="openDetail(item)">
               <view class="recipe-copy">
                 <text class="recipe-name">{{ item.name }}</text>
-                <text class="recipe-desc">{{ item.description || '还没写做法' }}</text>
+                <text class="recipe-desc">{{ item.description || '还没写简介' }}</text>
                 <text class="recipe-meta">{{ metaText(item) }}</text>
               </view>
               <text class="recipe-arrow">›</text>
@@ -120,7 +130,6 @@ import { ensureLogin } from '../../services/auth-api';
 import type { Category } from '../../services/category';
 import { fetchRecipes } from '../../services/recipe';
 import type { Recipe } from '../../services/recipe';
-import { categoryColor, categoryEmoji } from '../../utils/category-visual';
 import { getCurrentSpaceId, getCurrentSpaceName, resolveCurrentSpace } from '../../utils/space-context';
 
 const spaceId = ref('');
@@ -135,8 +144,6 @@ const errorMessage = ref('');
 /** 是否已成功加载过一次：用来区分「首次进入显示加载中」和「从别处回来时静默刷新」 */
 const loadedOnce = ref(false);
 
-const colorOf = categoryColor;
-const emojiOf = categoryEmoji;
 
 /** 当前分类的名字，显示在右侧列表的标题上 */
 const activeCategoryName = computed(() => {
@@ -144,7 +151,7 @@ const activeCategoryName = computed(() => {
   return categories.value.find((item) => item.id === activeCategoryId.value)?.name || '全部';
 });
 
-/** 关键词匹配：菜名或做法里出现就算命中 */
+/** 关键词匹配：菜名或简介里出现就算命中 */
 function matchKeyword(item: Recipe, search: string): boolean {
   if (!search) return true;
   return item.name.includes(search) || item.description.includes(search);
@@ -209,9 +216,15 @@ async function load(): Promise<void> {
   }
 }
 
-/** 去家庭组页面：切换、创建、加入都在那里 */
-function goSpace(): void {
-  uni.navigateTo({ url: '/pages/space/index' });
+/**
+ * 去设置页。
+ *
+ * 菜单页刻意不提供"切换家庭"入口——那是配置类动作，统一收在设置里。
+ * 这里唯一需要它的地方是"一个家庭组都没有"时的引导：
+ * 那时用户需要一条通往"创建 / 加入"的路，否则页面就成了死胡同。
+ */
+function goSettings(): void {
+  uni.navigateTo({ url: '/pages/settings/index' });
 }
 
 /** 打开菜谱详情（只读）。要改的话去「我的 → 菜单管理 → 菜品管理」 */
@@ -233,42 +246,26 @@ onShow(load);
   box-sizing: border-box;
 }
 
-.space-card {
+/* 页头：标题 + 右侧分类数。刻意不加边框和底——它是"页面身份"，
+   不是一张卡片；套上框反而又变回那个占位块了 */
+.page-head {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--s-3);
-  min-height: 120rpx;
-  padding: var(--s-2) var(--s-3);
-  border: 2rpx solid var(--c-border);
-  border-radius: var(--r-lg);
-  background: var(--c-surface);
-  box-shadow: var(--shadow-card);
+  /* 不加左右内边距：要和下面的搜索框、卡片严格左边对齐。
+     标题只要比它们多缩进一点，边缘就会看出错位 */
 }
-.space-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: var(--s-1); }
-.space-label { color: var(--c-text-2); font-size: 23rpx; }
-.space-name {
+.page-title {
   overflow: hidden;
   color: var(--c-text);
-  font-size: 32rpx;
+  font-size: 40rpx;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 「切换」做成药丸形的小按钮：它是个可点的入口，必须看得出能点 */
-.space-action {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  height: 64rpx;
-  padding: 0 var(--s-3);
-  border: 2rpx solid var(--c-border-strong);
-  border-radius: var(--r-pill);
-  background: var(--c-primary-bg);
-  color: var(--c-primary);
-  font-size: 25rpx;
-}
+.page-subtitle { flex: 0 0 auto; color: var(--c-text-2); font-size: 23rpx; }
 
 .tip { display: block; margin-top: var(--s-5); color: var(--c-text-3); font-size: 24rpx; text-align: center; }
 
@@ -278,7 +275,7 @@ onShow(load);
   gap: var(--s-2);
   margin-top: var(--s-4);
   padding: var(--s-4) var(--s-3);
-  border: 2rpx solid #f7c1c1;
+  border: 2rpx solid var(--c-danger-border);
   border-radius: var(--r-lg);
   background: var(--c-surface);
 }
@@ -341,7 +338,7 @@ onShow(load);
   transform: translateY(-50%);
   display: flex;
   align-items: center;
-  height: 64rpx;
+  height: var(--touch-min);
   padding: 0 var(--s-1);
   color: var(--c-primary);
   font-size: 24rpx;
@@ -389,17 +386,6 @@ onShow(load);
   border-radius: var(--r-md);
   background: var(--c-surface);
   box-shadow: var(--shadow-card);
-}
-.recipe-thumb {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: var(--r-sm);
-  font-size: 44rpx;
-  line-height: 1;
 }
 .recipe-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .recipe-name {
