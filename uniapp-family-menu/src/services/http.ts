@@ -20,7 +20,23 @@
 import { clearToken, getToken } from '../utils/token';
 
 /** 后端接口前缀。改地址只改这一行 */
-const BASE_URL = 'http://127.0.0.1:8000/api/v1';
+export const BASE_URL = 'http://127.0.0.1:8000/api/v1';
+
+/** 后端服务根地址（不含 /api/v1）。由 BASE_URL 推导，保证地址仍然只有一处 */
+export const API_ORIGIN = BASE_URL.replace(/\/api\/v1$/, '');
+
+/**
+ * 把后端返回的**相对文件路径**（如 /uploads/2026/09/xx.png）拼成可直接显示的完整地址。
+ *
+ * 为什么存相对路径：将来打包 App 要换域名（wx.cloud.callContainer 不可用），
+ * 只改 BASE_URL 一处，数据库里的存量数据完全不用动。
+ * 小程序的 <image> 需要完整地址，所以显示前必须过这一步。
+ */
+export function resolveFileUrl(path: string | null | undefined): string {
+  if (!path) return '';
+  if (/^https?:\/\//.test(path)) return path; // 已经是完整地址（比如历史数据）就不动
+  return `${API_ORIGIN}${path}`;
+}
 
 /** 后端统一返回格式：{ code, message, data } */
 export interface ApiResponse<T> {

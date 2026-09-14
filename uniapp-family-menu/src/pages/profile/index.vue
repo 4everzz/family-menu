@@ -50,6 +50,17 @@
     <view class="group">
       <text class="group-title">其他</text>
       <view class="entry-group">
+        <view class="entry-item" hover-class="tap" @click="goFavorites">
+          <view class="entry-icon" :style="{ background: 'var(--c-tint-clay)' }">
+            <image class="entry-icon-img" src="/static/icons/star.png" mode="aspectFit" />
+          </view>
+          <view class="entry-main">
+            <text class="entry-name">我的收藏</text>
+            <text class="entry-desc">你收藏的菜谱，只有自己能看到</text>
+          </view>
+          <text class="entry-arrow">›</text>
+        </view>
+
         <view class="entry-item" hover-class="tap" @click="goFridge">
           <view class="entry-icon" :style="{ background: 'var(--c-tint-sage)' }">
             <image class="entry-icon-img" src="/static/icons/container.png" mode="aspectFit" />
@@ -148,6 +159,11 @@ function goCategoryManage() {
 /** 菜品管理：增删改菜谱 */
 function goRecipeManage() {
   uni.navigateTo({ url: '/pages/manage/recipe' });
+}
+
+/** 我的收藏：个人私有域——同一家人各自收藏各自的，互相看不见 */
+function goFavorites() {
+  uni.navigateTo({ url: '/pages/favorites/index' });
 }
 
 /** 家庭冰箱：家庭共享功能，按当前家庭组展示 */

@@ -13,6 +13,7 @@
     { "path": "pages/recipe/edit", "style": { "navigationBarTitleText": "菜谱" } },
     { "path": "pages/manage/category", "style": { "navigationBarTitleText": "分类管理" } },
     { "path": "pages/manage/recipe", "style": { "navigationBarTitleText": "菜品管理" } },
+    { "path": "pages/favorites/index", "style": { "navigationBarTitleText": "我的收藏" } },
     { "path": "pages/auth/index", "style": { "navigationBarTitleText": "登录" } }
   ],
   "tabBar": {

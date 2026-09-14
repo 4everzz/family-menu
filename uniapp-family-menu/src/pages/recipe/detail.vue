@@ -8,8 +8,14 @@
     </view>
 
     <template v-else>
-      <!-- 头部：菜名 + 分类标签（不做占位图，分类只留文字） -->
+      <!-- 头部：菜品图片（有才显示）+ 菜名 + 分类标签 -->
       <view class="hero">
+        <image
+          v-if="recipe.imageUrl"
+          class="hero-image"
+          :src="resolveFileUrl(recipe.imageUrl)"
+          mode="aspectFill"
+        />
         <view class="hero-copy">
           <text class="hero-name">{{ recipe.name }}</text>
           <view class="hero-tags">
@@ -49,6 +55,7 @@
 import { computed, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
+import { resolveFileUrl } from '../../services/http';
 import { fetchRecipe } from '../../services/recipe';
 import type { Recipe } from '../../services/recipe';
 import { getCurrentSpaceId } from '../../utils/space-context';
@@ -149,6 +156,14 @@ onLoad((options) => {
 }
 
 /* 头部：占位图 + 菜名，做成一张主卡片，视觉重心在这里 */
+/* 有图片时铺在头部：宽度撑满、高度固定，aspectFill 裁切避免变形 */
+.hero-image {
+  width: 100%;
+  height: 320rpx;
+  border-radius: var(--r-lg);
+  border: 2rpx solid var(--c-border);
+  background: var(--c-muted);
+}
 .hero {
   display: flex;
   align-items: center;

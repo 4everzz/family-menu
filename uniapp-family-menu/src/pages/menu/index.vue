@@ -81,10 +81,28 @@
 
           <view v-if="filtered.length" class="recipe-list">
             <view v-for="item in filtered" :key="item.id" class="recipe-card" hover-class="tap" @click="openDetail(item)">
+              <!-- 有图的菜显示缩略图；没图的就纯文字，不留空占位（和分类色块一个道理） -->
+              <image
+                v-if="item.imageUrl"
+                class="recipe-photo"
+                :src="resolveFileUrl(item.imageUrl)"
+                mode="aspectFill"
+              />
               <view class="recipe-copy">
                 <text class="recipe-name">{{ item.name }}</text>
                 <text class="recipe-desc">{{ item.description || '还没写简介' }}</text>
                 <text class="recipe-meta">{{ metaText(item) }}</text>
+              </view>
+              <!--
+                收藏星标：点一下收藏进默认栏，再点一下取消。
+                @click.stop 是关键——不然点星星会同时把卡片点开，跳去详情页。
+              -->
+              <view class="fav-star" hover-class="tap" @click.stop="toggleFavorite(item)">
+                <image
+                  class="fav-star-img"
+                  :src="favoritedIds.has(item.id) ? '/static/icons/star-active.png' : '/static/icons/star.png'"
+                  mode="aspectFit"
+                />
               </view>
               <text class="recipe-arrow">›</text>
             </view>
@@ -128,14 +146,19 @@ import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
 import type { Category } from '../../services/category';
+import { favoriteRecipe, fetchFavoritedIds, unfavoriteRecipe } from '../../services/favorite';
+import { resolveFileUrl } from '../../services/http';
 import { fetchRecipes } from '../../services/recipe';
 import type { Recipe } from '../../services/recipe';
+import { showError } from '../../utils/format';
 import { getCurrentSpaceId, getCurrentSpaceName, resolveCurrentSpace } from '../../utils/space-context';
 
 const spaceId = ref('');
 const spaceName = ref('');
 const categories = ref<Category[]>([]);
 const recipes = ref<Recipe[]>([]);
+/** 我在这个家里已收藏的菜谱 ID。Set 只为 O(1) 判断"这颗星亮不亮" */
+const favoritedIds = ref<Set<string>>(new Set());
 /** 当前选中的分类 ID。空字符串代表「全部」，不是后端给的真实分类 */
 const activeCategoryId = ref('');
 const keyword = ref('');
@@ -199,6 +222,8 @@ async function load(): Promise<void> {
     const list = await fetchRecipes(spaceId.value);
     categories.value = list.categories;
     recipes.value = list.recipes;
+    // 星标状态单独查：收藏是个人私有域，跟菜谱列表是两回事
+    favoritedIds.value = await fetchFavoritedIds(spaceId.value);
     loadedOnce.value = true;
 
     // 当前选中的分类如果已经不在清单里了（比如在「分类管理」里把它删了），回到「全部」——
@@ -230,6 +255,29 @@ function goSettings(): void {
 /** 打开菜谱详情（只读）。要改的话去「我的 → 菜单管理 → 菜品管理」 */
 function openDetail(item: Recipe): void {
   uni.navigateTo({ url: `/pages/recipe/detail?id=${item.id}` });
+}
+
+/**
+ * 收藏 / 取消收藏（收藏进「默认收藏夹」）。
+ *
+ * 改完 Set 之后**整体换一个新 Set**，而不是只调 add/delete：
+ * Vue 3 的响应式虽然能追踪 Set，但整只替换最稳，不会出现"星星不亮"的诡异问题。
+ * 换分区不在这里做——收藏页里有「移动」入口，菜单页只负责最快的那一步。
+ */
+async function toggleFavorite(item: Recipe): Promise<void> {
+  try {
+    if (favoritedIds.value.has(item.id)) {
+      await unfavoriteRecipe(item.id);
+      favoritedIds.value = new Set([...favoritedIds.value].filter((id) => id !== item.id));
+      uni.showToast({ title: '已取消收藏', icon: 'none' });
+    } else {
+      await favoriteRecipe(item.id, null);
+      favoritedIds.value = new Set([...favoritedIds.value, item.id]);
+      uni.showToast({ title: '已收藏到「默认收藏夹」', icon: 'none' });
+    }
+  } catch (error) {
+    showError(error);
+  }
 }
 
 onShow(load);
@@ -405,6 +453,29 @@ onShow(load);
 }
 .recipe-meta { color: var(--c-text-3); font-size: 21rpx; }
 .recipe-arrow { flex: 0 0 auto; color: var(--c-text-3); font-size: 36rpx; line-height: 1; }
+
+/* 有图的菜显示 96rpx 缩略图，位置就是当年分类色块的位置 */
+.recipe-photo {
+  flex: 0 0 auto;
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: var(--r-sm);
+  border: 2rpx solid var(--c-border);
+  background: var(--c-muted);
+}
+
+/* 收藏星标：做成一个 88rpx 的命中区（手指大小），图形本身只有 40rpx——
+   星星那么小的图标，命中区不放大根本点不准 */
+.fav-star {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  margin-right: calc(-1 * var(--s-2));
+}
+.fav-star-img { width: 40rpx; height: 40rpx; }
 
 .content-state {
   padding: 60rpx var(--s-3);

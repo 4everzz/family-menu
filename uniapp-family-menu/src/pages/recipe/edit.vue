@@ -19,7 +19,7 @@
         </view>
 
         <view class="field-group">
-          <text class="field-label">归到哪一类</text>
+          <text class="field-label">归到哪一类（必选）</text>
           <!-- 分类清单完全来自后端，前端不硬编码。
                用户可以自己增删改分类，所以这里必须是动态的。 -->
           <view v-if="categories.length" class="category-picker">
@@ -54,6 +54,18 @@
             @focus="focusedField = 'description'"
             @blur="focusedField = ''"
           />
+        </view>
+        <!-- 菜品图片：可选。上传成功后存的是相对路径，显示时用 resolveFileUrl 拼完整地址 -->
+        <view class="field-group">
+          <text class="field-label">菜品图片（可选）</text>
+          <view v-if="form.imageUrl" class="image-preview">
+            <image class="image-preview-img" :src="resolveFileUrl(form.imageUrl)" mode="aspectFill" />
+            <text class="image-remove" hover-class="tap" @click="removeImage">移除图片</text>
+          </view>
+          <view v-else class="image-pick" hover-class="tap" @click="pickImage">
+            <text class="image-pick-sign">＋</text>
+            <text class="image-pick-hint">{{ uploading ? '正在上传…' : '从相册选一张' }}</text>
+          </view>
         </view>
       </view>
 
@@ -91,6 +103,8 @@ import { onLoad } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
 import type { Category } from '../../services/category';
 import { fetchCategories } from '../../services/category';
+import { resolveFileUrl } from '../../services/http';
+import { uploadImage, chooseImageFromAlbum } from '../../services/upload';
 import { createRecipe, deleteRecipe, fetchRecipe, updateRecipe } from '../../services/recipe';
 import { getCurrentSpaceId } from '../../utils/space-context';
 import { showError } from '../../utils/format';
@@ -109,22 +123,12 @@ const metaLine = ref('');
 
 /** 表单内容。用 reactive 而不是四个 ref，改起来更整齐 */
 const form = reactive({ name: '', categoryId: '', description: '', imageUrl: '' });
+/** 图片正在上传中：此时禁用再选，避免同一张图传两次 */
+const uploading = ref(false);
 
 const isEdit = computed(() => !!recipeId.value);
 /** 菜名必填、分类必选（后端也校验，这里只是避免白跑一次请求） */
 const canSave = computed(() => !pending.value && !!form.name.trim() && !!form.categoryId);
-
-/**
- * 新增时默认选中哪个分类。
- *
- * 优先用后端标记的 is_default（目前是「热菜」），拿不到就退化成第一个。
- * 为什么不在这里写死「热菜」这个字符串：用户可以给分类改名，
- * 硬编码的话改完名这个默认值就悄悄失效了——不报错，只是每次加菜都要手动改一下分类。
- */
-function pickDefaultCategoryId(): string {
-  const preferred = categories.value.find((item) => item.isDefault);
-  return preferred?.id || categories.value[0]?.id || '';
-}
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -150,7 +154,9 @@ async function load(): Promise<void> {
       metaLine.value = recipe.createdByName ? `由 ${recipe.createdByName} 添加` : '';
       uni.setNavigationBarTitle({ title: '编辑菜谱' });
     } else {
-      form.categoryId = pickDefaultCategoryId();
+      // 不预选分类（用户拍板）：让用户自己点，而不是替他做主塞进「热菜」。
+      // 每道菜必须属于一个分类（数据库约束），所以保存按钮在选好之前是置灰的。
+      form.categoryId = '';
       uni.setNavigationBarTitle({ title: '新增菜谱' });
     }
   } catch (error) {
@@ -158,6 +164,39 @@ async function load(): Promise<void> {
   } finally {
     loading.value = false;
   }
+}
+
+/**
+ * 选图并上传。选完立刻传（而不是等保存时一起传），原因有二：
+ *   1. 上传失败能当场告诉用户，不用等到"点保存"才发现图传不上去；
+ *   2. 保存接口只收 image_url 字符串，把"传文件"和"存表单"两件事彻底分开。
+ */
+function pickImage(): void {
+  if (uploading.value) return;
+  chooseImageFromAlbum()
+    .then(async (filePath) => {
+      uploading.value = true;
+      try {
+        const data = await uploadImage(filePath);
+        form.imageUrl = data.url;
+        uni.showToast({ title: '图片已上传', icon: 'none' });
+      } catch (error) {
+        showError(error);
+      } finally {
+        uploading.value = false;
+      }
+    })
+    .catch((error) => {
+      // 用户在选图界面点取消也会走到这里，不打扰
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('cancel')) return;
+      showError(error);
+    });
+}
+
+/** 移除已选图片：只清掉表单里的地址，保存后才真正不再关联 */
+function removeImage(): void {
+  form.imageUrl = '';
 }
 
 async function submit(): Promise<void> {
@@ -328,4 +367,23 @@ onLoad((options) => {
   font-weight: 500;
 }
 .page-note { display: block; margin-top: var(--s-4); color: var(--c-text-3); font-size: 22rpx; text-align: center; }
+
+/* 图片选择区：虚线框表达"可以放东西进来"，比一个光秃秃的按钮直观 */
+.image-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-1);
+  min-height: 200rpx;
+  border: 2rpx dashed var(--c-border-strong);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+}
+.image-pick-sign { color: var(--c-text-3); font-size: 52rpx; line-height: 1; }
+.image-pick-hint { color: var(--c-text-2); font-size: 23rpx; }
+
+.image-preview { display: flex; align-items: flex-end; gap: var(--s-3); }
+.image-preview-img { width: 200rpx; height: 200rpx; border-radius: var(--r-md); border: 2rpx solid var(--c-border); background: var(--c-muted); }
+.image-remove { padding: 30rpx var(--s-2); margin: -30rpx calc(-1 * var(--s-2)); color: var(--c-danger); font-size: 23rpx; }
 </style>
