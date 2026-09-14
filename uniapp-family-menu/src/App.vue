@@ -1,15 +1,28 @@
 <script setup lang="ts">
+/**
+ * App 入口。
+ *
+ * ⚠️ 这里**刻意不做**启动登录（改造前这里有一句静默登录，已删除）。
+ *    原因：启动阶段页面栈还没建立，此时调 navigateTo 跳登录页，各端表现不一致。
+ *    改由**需要数据的页面**在取数前调 ensureLogin() 来引导登录（见 services/auth-api.ts）：
+ *    页面已经在了，跳转可靠，也不会出现"App 刚打开就被弹去登录页"的突兀感。
+ *
+ * ⚠️ 这个 script 块本身不能删：Vue 的单文件组件要求至少有 <template> 或 <script> 之一，
+ *    只剩 <style> 会直接编译失败（At least one <template> or <script> is required）。
+ *    删启动逻辑时如果连整块一起删掉，就会踩这个坑。
+ */
+
 import { onLaunch } from '@dcloudio/uni-app';
-import { initCloud } from './services/cloud';
-import { ensureLogin } from './services/auth-api';
+import { setCurrentSpace } from './utils/space-context';
+import { hasValidToken } from './utils/token';
 
 onLaunch(() => {
-  initCloud();
-
-  // 静默登录：wx.login 不需要用户点授权，用户完全无感知。
-  // 启动阶段刻意不弹任何错误提示——后端没启动或网络不通时也要能正常进入应用，
-  // 真正用到家庭组功能时，那个页面会给出明确的说明和处理办法。
-  ensureLogin().catch(() => undefined);
+  // 本机没有有效令牌时，顺手清掉残留的"当前家庭"缓存。
+  // 不清的话，「设置」页会先用缓存里的家庭名把界面填上、昵称却显示"未登录"，
+  // 看起来像登到了别人家里。
+  if (!hasValidToken()) {
+    setCurrentSpace(null);
+  }
 });
 </script>
 
@@ -18,7 +31,9 @@ onLaunch(() => {
  * 全局样式只放两件事：设计令牌（CSS 变量）+ 页面级默认值。
  * 具体组件的样式一律写在各自页面的 <style scoped> 里，避免这里变成一锅杂烩。
  *
- * 为什么要用 CSS 变量而不是各页面各写各的十六进制色值？
+ * 启动逻辑在文件顶部的 <script setup> 里，不在这里。
+ *
+ * 为什么下面的配色要用 CSS 变量而不是各页面各写各的十六进制色值？
  *   之前每个页面都直接写 #dc2626、#fee2e2、#450a0a 这些值，一共十几个页面。
  *   结果是同一个"品牌红"在不同页面深浅不一，改一次颜色要全文搜索替换，
  *   而且一定会漏掉几处——页面之间因此看起来"不是一套东西"。
@@ -36,12 +51,17 @@ page {
   --c-primary-dark: #7c2d12; /* 主色的深一档：按下态 */
   --c-primary-weak: #c2410c; /* 主色的浅一档：次级强调 */
   --c-primary-bg: #fef6f2; /* 主色的极浅底：选中项背景 */
+  --c-primary-border: #f0d9cd; /* 主色的浅描边：提醒卡片边界 */
 
   /* ---------- 语义色 ---------- */
   --c-accent: #059669; /* 正向状态：成功、已完成 */
   --c-accent-bg: #ecfdf5;
   --c-danger: #dc2626; /* 危险动作：删除、解散 */
   --c-danger-bg: #fef2f2;
+  --c-danger-text: #b91c1c; /* 危险文字：删除按钮、已过期标签（配 --c-danger-bg 底） */
+  --c-warn: #d97706; /* 提醒色：临期（还没过期，但快了） */
+  --c-warn-bg: #fff8eb; /* 提醒浅底 */
+  --c-warn-text: #b45309; /* 提醒文字（配 --c-warn-bg 底） */
 
   /* ---------- 表面与描边 ---------- */
   --c-bg: #fffbeb; /* 页面底：暖白，不是纯白，长时间看不刺眼 */
@@ -84,9 +104,11 @@ page {
   --c-tint-sand: #f6ebe3; /* 暖沙：编辑、录入 */
   --c-tint-stone: #efeae6; /* 中性：设置、受限 */
   --c-tint-sage: #e8efe9; /* 灰绿：冰箱、库存 */
+  --c-sage-text: #4d7c0f; /* 灰绿文字：冰箱分类/存放标签（配 --c-tint-sage 底） */
 
   /* ---------- 状态色 ---------- */
   --c-danger-border: #f7c1c1; /* 错误卡片描边：比 --c-danger 浅得多，只用于边界 */
+  --c-warn-border: #f3d29a; /* 提醒卡片描边：比 --c-warn 浅得多，只用于边界 */
   --c-disabled: #ddc4b8; /* 主按钮的禁用态底色 */
 
   /* ---------- 触摸目标 ---------- */

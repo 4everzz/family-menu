@@ -5,11 +5,10 @@
       <text class="group-title">账号</text>
       <view class="entry-group">
         <view class="identity">
-          <image v-if="avatarUrl" class="avatar-img" :src="avatarUrl" mode="aspectFill" />
-          <view v-else class="avatar-fallback">{{ avatarText }}</view>
+          <image class="avatar-img" :src="avatarUrl || DEFAULT_AVATAR_URL" mode="aspectFill" />
           <view class="identity-main">
             <text class="identity-name">{{ nickname || '未登录' }}</text>
-            <text class="identity-desc">微信身份，登录状态由本机保存</text>
+            <text class="identity-desc">{{ identityDesc }}</text>
           </view>
         </view>
       </view>
@@ -34,8 +33,8 @@
       <view class="entry-group">
         <view class="entry-item" hover-class="tap" @click="switchAccount">
           <view class="entry-main">
-            <text class="entry-name danger-text">切换账号</text>
-            <text class="entry-desc">清除本机登录状态后重新登录</text>
+            <text class="entry-name danger-text">退出登录</text>
+            <text class="entry-desc">清除本机登录状态，回到登录页</text>
           </view>
         </view>
       </view>
@@ -58,20 +57,25 @@
 
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
-import { fetchCurrentUser } from '../../services/user';
-import { ensureLogin } from '../../services/auth-api';
+import { DEFAULT_AVATAR_URL, fetchCurrentUser } from '../../services/user';
+import { LOGIN_PATH } from '../../services/auth-api';
 import { clearToken, hasValidToken } from '../../utils/token';
-import { PRIMARY } from '../../utils/theme';
+import { DANGER } from '../../utils/theme';
 import { getCurrentSpaceName, resolveCurrentSpace, setCurrentSpace } from '../../utils/space-context';
 
 const nickname = ref('');
+const username = ref('');
 const avatarUrl = ref('');
 const spaceName = ref('');
 /** 防止连点导致重复弹窗/重复请求 */
 const pending = ref(false);
 
-/** 没有头像时用昵称首字当占位，比一个空白圆好看，也比放通用图轻 */
-const avatarText = computed(() => (nickname.value || '微').slice(0, 1));
+/** 身份卡片的副标题：把"有没有登录、用的是哪个用户名"说清楚 */
+const identityDesc = computed(() => {
+  if (!hasValidToken()) return '还没有登录';
+  // 改造前用微信登录的老账号还没有用户名，如实说明，别留一片空白
+  return username.value ? `@${username.value}` : '微信登录的账号，还没有用户名';
+});
 
 async function refresh(): Promise<void> {
   // 先用本地缓存把界面填上，避免进页面先空一下
@@ -82,6 +86,7 @@ async function refresh(): Promise<void> {
   try {
     const user = await fetchCurrentUser();
     nickname.value = user.nickname;
+    username.value = user.username;
     avatarUrl.value = user.avatarUrl;
   } catch (error) {
     // 读取失败（例如后端没启动）不打断页面，保留默认文案
@@ -101,45 +106,38 @@ function goSpace(): void {
 }
 
 /**
- * 切换账号。
+ * 退出登录。
  *
- * ⚠️ 这里必须说实话：**微信小程序的身份由微信账号决定**，没有"在小程序内换个人"这回事。
- * 所以这个动作的真实语义是——清掉本机保存的登录状态，然后重新登录一次。
- * 如果你的微信账号没变，登录后还是同一个人；要换成别人，得先在微信里切换账号。
- * 确认文案里把这一点讲清楚，免得用户以为点一下就能变成另一个人。
+ * 令牌是"这台设备上的登录凭证"，清掉它 = 这台设备上不再有人登录。
+ * 两样东西必须一起清：
+ *   · 令牌本身；
+ *   · 家庭组缓存——否则下一个人登录后还带着上一个人的"当前家庭"，
+ *     界面上会先闪出别人的家庭名，看着像串号（数据本身取不到，因为后端按令牌校验，
+ *     但显示出来会让人以为泄露了）。
+ *
+ * 退出后用 reLaunch 而不是 navigateTo：语义上这是"换一个会话重新开始"，
+ * 让页面栈整个清空比往上面再压一页更干净——否则用户按返回还能退回刚退出的界面。
  */
 function switchAccount(): void {
   if (pending.value) return;
   uni.showModal({
-    title: '切换账号',
-    content:
-      '小程序里的身份由你的微信账号决定。这里会清除本机保存的登录状态（含当前家庭组）并重新登录；如果微信账号没变，登录后仍是同一个人。要换成别人，请先在微信里切换账号。',
-    confirmText: '继续',
-    confirmColor: PRIMARY,
-    success: async (res) => {
+    title: '退出登录',
+    content: '会清除本机保存的登录状态（含当前家庭组），之后需要重新输入用户名和密码。',
+    confirmText: '退出',
+    confirmColor: DANGER,
+    success: (res) => {
       if (!res.confirm) return;
       pending.value = true;
-      uni.showLoading({ title: '正在重新登录' });
-      try {
-        clearToken();
-        // 家庭缓存必须一起清：否则换了账号还带着上一个人的"当前家庭"，会请求到别人的数据
-        setCurrentSpace(null);
-        spaceName.value = '';
-        nickname.value = '';
-        avatarUrl.value = '';
 
-        await ensureLogin();
-        await refresh();
-        uni.showToast({ title: '已重新登录', icon: 'none' });
-      } catch (error) {
-        uni.showToast({
-          title: error instanceof Error ? error.message : '重新登录失败，请稍后重试',
-          icon: 'none',
-        });
-      } finally {
-        uni.hideLoading();
-        pending.value = false;
-      }
+      clearToken();
+      setCurrentSpace(null);
+      spaceName.value = '';
+      nickname.value = '';
+      username.value = '';
+      avatarUrl.value = '';
+
+      pending.value = false;
+      uni.reLaunch({ url: LOGIN_PATH });
     },
   });
 }
@@ -178,21 +176,15 @@ onShow(refresh);
   min-height: 136rpx;
   padding: var(--s-2) var(--s-3);
 }
-.avatar-img,
-.avatar-fallback {
+/* 头像是圆形：裁切交给容器，用户以后换成方图也能自动裁圆。
+   没设头像时后端给的是空值，前端统一兜到默认占位图（见 services/user.ts），
+   所以这里不需要"没有图就显示文字"的分支。 */
+.avatar-img {
   flex: 0 0 auto;
   width: 88rpx;
   height: 88rpx;
   border-radius: 50%;
-}
-.avatar-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--c-primary-bg);
-  color: var(--c-primary);
-  font-size: 36rpx;
-  font-weight: 500;
+  background: var(--c-muted);
 }
 .identity-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .identity-name {

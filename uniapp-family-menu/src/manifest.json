@@ -15,5 +15,29 @@
       "lazyCodeLoading": "requiredComponents"
     },
     "usingComponents": true
-  }
+  },
+  "app-plus": {
+    "usingComponents": true,
+    "nwid": "",
+    "appid": "__UNI__FAMILYMENU",
+    "name": "小家今日吃什么",
+    "version": "1.0.0",
+    "modules": {
+      "Camera": {},
+      "Gallery": {}
+    },
+    "distribute": {
+      "android": {
+        "permissions": [
+          "<uses-permission android:name=\"android.permission.CAMERA\"/>",
+          "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>",
+          "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>",
+          "<uses-feature android:name=\"android.hardware.camera\"/>",
+          "<uses-feature android:name=\"android.hardware.camera.autofocus\"/>"
+        ]
+      },
+      "sdkConfigs": {}
+    }
+  },
+  "vueVersion": "3"
 }

@@ -1,6 +1,20 @@
 <template>
   <view class="profile-page">
     <!--
+      用户信息卡片：一眼看清"现在是谁在登录"。
+      整张卡片都可点：未登录 → 去登录页；已登录 → 去编辑资料页
+      （编辑页目前是占位，进去会看到"正在开发中"）。
+    -->
+    <view class="user-card" hover-class="tap" @click="onUserCardTap">
+      <image class="user-avatar" :src="user?.avatarUrl || DEFAULT_AVATAR_URL" mode="aspectFill" />
+      <view class="user-main">
+        <text class="user-name">{{ user ? user.nickname : '未登录' }}</text>
+        <text class="user-sub">{{ userSubText }}</text>
+      </view>
+      <text class="entry-arrow">›</text>
+    </view>
+
+    <!--
       菜单管理：只有创建人能改菜单（后端也会拦，这里隐藏只是体验），
       所以普通成员整块不显示，换成一句说明——否则他会点进去、填完表单才被拒绝，
       那是最难查的一种体验问题。
@@ -90,7 +104,7 @@
       </view>
     </view>
 
-    <text class="page-note">个人资料与成员管理将在后续模块接入</text>
+    <text class="page-note">修改头像和昵称的功能还在路上</text>
   </view>
 </template>
 
@@ -98,13 +112,12 @@
 /**
  * 「我的」页。
  *
- * 三个改动值得说明：
+ * 几处设计值得说明：
  *
- * 1. 摘掉了「我的订单」入口（页面代码仍然保留在 pages/orders 里，只是没有入口）。
- *    那个页面是旧商家版的遗留：它的逻辑是"先扫码进店，再看你在那家店的订单"。
- *    在家庭场景里根本没有"订单"这个东西——家里做饭不需要下单，
- *    所以用户点进去只会撞上"请先进入店铺"这种莫名其妙的提示。
- *    留着入口比没有入口更糟，先摘掉。
+ * 1. 顶部是用户信息卡片（头像 + 昵称 + 用户名）。
+ *    改造前这一页不显示"我是谁"，用户看不到自己登录的是哪个账号；
+ *    家里几个人共用一台手机时，这个信息尤其重要。
+ *    未登录时点它去登录页，已登录时点它去编辑资料页。
  *
  * 2. 加了「菜单管理」分组（分类管理 + 菜品管理）。
  *    菜单页现在是纯浏览，改菜谱统一收在这里。
@@ -122,10 +135,54 @@
  *    隐藏只是体验，真正的拦截在后端（SpaceService.ensure_owner）。
  */
 
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
+import { DEFAULT_AVATAR_URL, fetchCurrentUser, type CurrentUser } from '../../services/user';
 import { getCurrentSpace, resolveCurrentSpace } from '../../utils/space-context';
 import { hasValidToken } from '../../utils/token';
+
+/**
+ * 当前登录的用户。
+ * 为 null 有两种情况：确实没登录，或者登录态刚失效——
+ * 两种都该显示成"未登录 + 去登录"，所以不需要再区分。
+ */
+const user = ref<CurrentUser | null>(null);
+
+/** 卡片副标题：优先显示能确定身份的用户名 */
+const userSubText = computed(() => {
+  if (!user.value) return '点击登录或注册';
+  // 改造前用微信登录的老账号还没有用户名，如实说明，别显示成一片空白
+  return user.value.username ? `@${user.value.username}` : '还没有设置用户名';
+});
+
+/**
+ * 拉取当前用户信息。
+ *
+ * 没登录时直接返回、不发请求——避免每次切到「我的」都白打一个必然 401 的接口。
+ */
+async function refreshUser(): Promise<void> {
+  if (!hasValidToken()) {
+    user.value = null;
+    return;
+  }
+  try {
+    user.value = await fetchCurrentUser();
+  } catch (error) {
+    // 拉不到（后端没启动、网络不通）时维持上一次的显示，
+    // 而不是把卡片变成"未登录"——那会让人以为自己被登出了，白白慌一下
+  }
+}
+
+/**
+ * 点用户信息卡片。
+ *
+ * 两种状态各去一个地方：
+ *   未登录 → 登录页（否则用户在这一页找不到任何"进账号"的入口）；
+ *   已登录 → 编辑资料页（目前是占位页，里面写明"正在开发中"）。
+ */
+function onUserCardTap(): void {
+  uni.navigateTo({ url: user.value ? '/pages/profile/edit' : '/pages/auth/login' });
+}
 
 /**
  * 我是不是这个家的创建人。
@@ -176,7 +233,10 @@ function goSettings() {
   uni.navigateTo({ url: '/pages/settings/index' });
 }
 
-onShow(refreshRole);
+onShow(() => {
+  refreshUser();
+  refreshRole();
+});
 </script>
 
 <style scoped>
@@ -184,6 +244,43 @@ onShow(refreshRole);
   min-height: 100vh;
   padding: var(--s-4) var(--s-3) calc(var(--s-6) + env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+
+/* 用户信息卡片：整页视觉重心，所以用主色描边把它和下面的功能分组区分开 */
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 168rpx;
+  padding: var(--s-3);
+  border: 2rpx solid var(--c-primary-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-card);
+}
+/* 圆形头像：裁切交给外层容器，这样用户以后换成方图也能自动裁成圆的 */
+.user-avatar {
+  flex: 0 0 auto;
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 50%;
+  background: var(--c-muted);
+}
+.user-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
+.user-name {
+  overflow: hidden;
+  color: var(--c-text);
+  font-size: 34rpx;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-sub {
+  overflow: hidden;
+  color: var(--c-text-2);
+  font-size: 24rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 分组标题：把"设置类"和"功能类"分开，条目一多也不至于糊成一片 */
