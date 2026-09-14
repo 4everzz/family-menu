@@ -60,6 +60,19 @@ class Settings(BaseSettings):
     max_owned_spaces: int = 2
     max_joined_spaces: int = 2
 
+    # ==================== 收藏分区额度 ====================
+    # 一个人最多能建几个**自定义**收藏分区。
+    # 默认收藏夹不占额度——它不是一行数据，是 partition_id 为 NULL 的状态。
+    # 放配置的原因和家庭组额度一样：将来会员可能加次数，只改 space_quota 那个函数。
+    max_favorite_partitions: int = 5
+
+    # ==================== 图片上传 ====================
+    # 图片存放目录。相对 backend/ 运行目录（与代码同盘，便于本地开发与备份）。
+    # 存本地文件而不是对象存储，是第一版的取舍：换云存储时只动 UploadService 一个类。
+    upload_dir: str = "uploads"
+    # 单张图片的大小上限（字节）。默认 5MB——手机随手拍足够，再大就该压缩了
+    max_upload_bytes: int = 5 * 1024 * 1024
+
     # ==================== 派生属性 ====================
     @property
     def is_prod(self) -> bool:

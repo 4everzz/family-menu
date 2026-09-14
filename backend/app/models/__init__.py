@@ -6,6 +6,7 @@ Alembic 自动生成迁移时是通过 Base.metadata 发现表的，
 """
 
 from app.models.base import Base
+from app.models.favorite import FavoritePartition, RecipeFavorite
 from app.models.recipe import Recipe
 from app.models.recipe_category import (
     DEFAULT_CATEGORY_NAME,
@@ -25,6 +26,8 @@ __all__ = [
     "ROLE_MEMBER",
     "Recipe",
     "RecipeCategory",
+    "FavoritePartition",
+    "RecipeFavorite",
     "DEFAULT_CATEGORY_NAMES",
     "DEFAULT_CATEGORY_NAME",
     "MAX_CATEGORY_NAME_LENGTH",

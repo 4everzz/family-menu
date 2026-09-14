@@ -10,9 +10,11 @@
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -75,6 +77,13 @@ def create_app() -> FastAPI:
 
     # 挂载业务路由
     app.include_router(api_router, prefix=settings.api_prefix)
+
+    # 上传文件的静态服务：/uploads/2026/09/xxx.png 直接由文件系统提供。
+    # 注意这不是 /api/v1 前缀下的路径——图片 URL 会存进数据库、被前端 <image> 直接引用，
+    # 保持它短而稳定。目录不存在就先建出来，避免首次上传/首次访问时 404。
+    uploads_dir = Path(settings.upload_dir).resolve()
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
     return app
 

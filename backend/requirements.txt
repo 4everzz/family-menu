@@ -1,6 +1,8 @@
 # ==================== Web 框架 ====================
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
+# python-multipart：解析 multipart/form-data 表单与文件上传（FastAPI 的 UploadFile 依赖它）
+python-multipart>=0.0.9,<1.0
 
 # ==================== 数据库 ====================
 # SQLAlchemy 2：ORM 与查询构造，只使用通用 API，不绑定具体数据库方言

@@ -6,7 +6,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, categories, health, recipes, spaces, users
+from app.api.v1 import auth, categories, favorites, health, recipes, spaces, uploads, users
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -17,3 +17,8 @@ api_router.include_router(spaces.router)
 # （/spaces/{id}/categories 与 /spaces/{id}/recipes），不会互相遮挡。
 api_router.include_router(categories.router)
 api_router.include_router(recipes.router)
+# 收藏路由内部有 /favorites/partitions 与 /favorites/{recipe_id} 的顺序问题，
+# 在 favorites.py 里已经把静态路径写在前面了，这里照常挂载即可。
+api_router.include_router(favorites.router)
+# 上传接口：multipart 表单，前端用 uni.uploadFile 调用
+api_router.include_router(uploads.router)
