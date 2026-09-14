@@ -11,3 +11,6 @@ docs/
 miniprogram/USER_GUIDE.md
 miniprogram/DEPLOYMENT_AND_RECOVERY.md
 miniprogram/BACKEND_MIGRATION_READINESS.md
+
+# 一次性运维脚本（与本项目无关的 MySQL 升级收尾），留在本地即可
+/mysql-finalize-8.4.9.ps1
