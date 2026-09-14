@@ -15,38 +15,20 @@ import { ApiError, BASE_URL, type ApiResponse } from './http';
 import { getToken } from '../utils/token';
 
 /**
- * 本项目只构建微信小程序（项目决策），这里直接用微信的全局对象 wx。
- * 只声明用到的部分，类型自包含，不依赖 @dcloudio/types 的完整形状。
- */
-declare const wx: {
-  chooseMedia: (options: {
-    count: number;
-    mediaType: Array<'image' | 'video'>;
-    sourceType?: Array<'album' | 'camera'>;
-    success?: (res: { tempFiles?: Array<{ tempFilePath?: string }> }) => void;
-    fail?: (err: { errMsg?: string }) => void;
-  }) => void;
-};
-
-/**
- * 从相册选一张图，返回本地临时文件路径。
- *
- * ⚠️ 为什么直接调 wx.chooseMedia 而不是 uni.chooseMedia？
- *   实测本项目这版 uni-app 运行时（3.0.0-5020420260813002）的 mp-weixin 包
- *   **没有实现 chooseMedia 的包装层**（全包 grep 无实现，只有 TS 类型声明），
- *   调 uni.chooseMedia 会抛"chooseMedia is not a function"，
- *   界面上的表现就是「点了没反应」。
- *   直接走 wx.chooseMedia 绕开包装层——它是微信官方 API，基础库 2.10.0 起可用。
- *   若将来要支持 H5/App，这里是必须适配的点之一（和传输适配层同一批）。
+ * 选图用跨平台的 uni.chooseImage（不是 wx.chooseMedia）：
+ *   - App / 微信小程序 / H5 三个目标都有实现，不用为某个平台写专属分支；
+ *   - 之前为绕开 mp-weixin 目标里 uni 没包装 chooseMedia 而直接调 wx.chooseMedia，
+ *     那是"以小程序为主"时期的妥协——现在 App 是主目标，统一走 uni.* 才对。
+ *   - 本项目只传图片，chooseImage 比 chooseMedia 兼容性更好（各平台都支持）。
  */
 export function chooseImageFromAlbum(): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    wx.chooseMedia({
+    uni.chooseImage({
       count: 1,
-      mediaType: ['image'],
-      sourceType: ['album'],
+      sizeType: ['original', 'compressed'],
+      sourceType: ['album', 'camera'],
       success: (res) => {
-        const path = res.tempFiles?.[0]?.tempFilePath;
+        const path = res.tempFilePaths?.[0];
         if (path) resolve(path);
         else reject(new Error('没有选择图片'));
       },

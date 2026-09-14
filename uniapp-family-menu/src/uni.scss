@@ -1,15 +1,16 @@
-$brand-color: #dc2626;
-$brand-dark: #991b1b;
-$page-background: #fff7ed;
-$text-color: #431407;
-$muted-color: #9a3412;
-
-page {
-  background: $page-background;
-  color: $text-color;
-  box-sizing: border-box;
-}
-
+/*
+ * 全局基础样式。
+ *
+ * 这里只保留"每个页面都要、又不好在组件里重复写"的最小重置：
+ * 让所有盒子按 border-box 计算尺寸——否则给元素加 padding 会把宽度撑出去，
+ * 移动端横向特别容易溢出。
+ *
+ * 其余全局样式都不在这里，避免同一件事写两遍互相打架：
+ *   - page 的底色 / 文字色 / 字体族 → App.vue（那里也是设计令牌的唯一来源）
+ *   - button 的重置（去边框、去外边距）→ App.vue
+ *   - 旧商家版的 $brand-color 等 SCSS 变量与 .page-shell → 已随商家版代码一并删除
+ */
+page,
 view,
 text,
 button,
@@ -17,21 +18,4 @@ input,
 textarea,
 image {
   box-sizing: border-box;
-}
-
-button {
-  margin: 0;
-  padding: 0 24rpx;
-  border: 0;
-  border-radius: 16rpx;
-  line-height: 2.6;
-}
-
-button::after {
-  border: 0;
-}
-
-.page-shell {
-  min-height: 100vh;
-  padding: 24rpx;
 }
