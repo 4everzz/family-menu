@@ -26,7 +26,7 @@
 """
 
 from app.core.exceptions import BusinessError, NotFoundError
-from app.models.recipe import Recipe
+from app.models.recipe import SPICE_LEVELS, Recipe
 from app.models.recipe_category import RecipeCategory
 from app.models.user import User
 from app.repositories.recipe_repo import RecipeRepository
@@ -97,6 +97,9 @@ class RecipeService:
         category_id: int,
         description: str | None,
         image_url: str | None,
+        spice_options: list[str] | None = None,
+        default_spice: str | None = None,
+        is_sold_out: bool = False,
     ) -> tuple[Recipe, str, str]:
         """新增菜谱（仅创建人）。返回 (菜谱, 添加者昵称, 分类名)。
 
@@ -106,6 +109,7 @@ class RecipeService:
         category = await self.category_service.ensure_category_in_space(
             space_id, self._normalize_category_id(category_id)
         )
+        cleaned_spices, cleaned_default = self._normalize_spice(spice_options, default_spice)
 
         recipe = await self.repo.create(
             space_id=space_id,
@@ -113,6 +117,9 @@ class RecipeService:
             category_id=category.id,
             description=self._normalize_description(description),
             image_url=self._normalize_image_url(image_url),
+            spice_options=cleaned_spices,
+            default_spice=cleaned_default,
+            is_sold_out=bool(is_sold_out),
             created_by=user.id,
         )
         return recipe, user.nickname, category.name
@@ -147,6 +154,20 @@ class RecipeService:
             values["description"] = self._normalize_description(changes["description"])
         if "image_url" in changes:
             values["image_url"] = self._normalize_image_url(changes["image_url"])
+        if "spice_options" in changes or "default_spice" in changes:
+            # 辣度的两个字段必须**一起**算：改了支持的档位，原来的默认档可能已经不存在了。
+            # 没传的那个用当前值兜底，否则"只想换一下默认档"会把支持列表整个清空。
+            options = (
+                changes["spice_options"] if "spice_options" in changes else recipe.spice_options
+            )
+            default = (
+                changes["default_spice"] if "default_spice" in changes else recipe.default_spice
+            )
+            values["spice_options"], values["default_spice"] = self._normalize_spice(
+                options, default
+            )
+        if "is_sold_out" in changes:
+            values["is_sold_out"] = bool(changes["is_sold_out"])
 
         if not values:
             # 一个字段都没传（空请求体），直接原样返回。
@@ -228,3 +249,30 @@ class RecipeService:
     def _normalize_image_url(value: str | None) -> str | None:
         """清洗图片地址，空字符串按"没有图片"处理。"""
         return (value or "").strip() or None
+
+    @staticmethod
+    def _normalize_spice(
+        spice_options: list[str] | None,
+        default_spice: str | None,
+    ) -> tuple[list[str], str | None]:
+        """清洗辣度设置，返回 (支持的档位, 默认档位)。
+
+        规则（和旧小程序版一致）：
+          · **只认 SPICE_LEVELS 里那四档**，别的值一律丢掉。
+            这样前端就算传来奇怪的东西，库里也只可能是这四个字符串之一，
+            点单时也就不可能出现"菜单上没有的辣度"。
+          · 去重，并**按 SPICE_LEVELS 的顺序**排列——保证点单时按钮永远是
+            「不辣 → 微辣 → 正常辣 → 特辣」，与用户当初勾选的先后无关。
+          · 默认档必须落在支持的档位里；不在或没传，就取第一档。
+          · 支持列表为空时默认档也必须是 None——否则会出现
+            "不问辣度、却记着一个默认值"这种自相矛盾的数据。
+        """
+        selected = {value for value in (spice_options or []) if value in SPICE_LEVELS}
+        normalized = [level for level in SPICE_LEVELS if level in selected]
+
+        if not normalized:
+            return [], None
+
+        if default_spice not in normalized:
+            return normalized, normalized[0]
+        return normalized, default_spice

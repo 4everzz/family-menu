@@ -39,7 +39,14 @@ def _build_service(session: AsyncSession) -> RecipeService:
 
 
 def _to_recipe_info(recipe: Recipe, nickname: str | None, category_name: str) -> RecipeInfo:
-    """把数据库对象组装成前端要的结构。"""
+    """把数据库对象组装成前端要的结构。
+
+    字段是逐个列出来的，没有用 model_validate(recipe) 一把梭：
+    category_name 和 created_by_nickname 是 join 出来的额外列、模型上并没有，
+    混在一起写反而看不清哪些来自菜谱自身、哪些是拼进来的。
+    代价是**加字段时要记得在这里补一行**——漏了不会报错，只会安静地少一个字段
+    （辣度那次就是这么被测试抓出来的）。
+    """
     return RecipeInfo(
         id=recipe.id,
         space_id=recipe.space_id,
@@ -48,6 +55,10 @@ def _to_recipe_info(recipe: Recipe, nickname: str | None, category_name: str) ->
         category_name=category_name,
         description=recipe.description,
         image_url=recipe.image_url,
+        # JSON 列理论上可能是 NULL（老数据的 server_default 已兜住，这里再兜一层）
+        spice_options=recipe.spice_options or [],
+        default_spice=recipe.default_spice,
+        is_sold_out=recipe.is_sold_out,
         created_by=recipe.created_by,
         created_by_nickname=nickname,
         created_at=recipe.created_at,
@@ -110,6 +121,9 @@ async def create_recipe(
         category_id=payload.category_id,
         description=payload.description,
         image_url=payload.image_url,
+        spice_options=payload.spice_options,
+        default_spice=payload.default_spice,
+        is_sold_out=payload.is_sold_out,
     )
     await session.commit()
     return success(_to_recipe_info(recipe, nickname, category_name).model_dump())

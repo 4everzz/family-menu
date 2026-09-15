@@ -25,10 +25,16 @@
     等模块边界清楚了再拆细，避免现在把范围撑爆。
 """
 
-from sqlalchemy import BigInteger, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
+
+# ---------- 辣度 ----------
+# 取值范围固定这四档，**顺序就是点单时按钮的排列顺序**。
+# 这份定义继承自旧小程序版（那边在云函数和两个页面里各写了一遍，值完全一致），
+# 前后端必须一致：后端把 spice_options 随菜谱一起返回，前端只渲染后端给的，不自己拼。
+SPICE_LEVELS = ("不辣", "微辣", "正常辣", "特辣")
 
 
 class Recipe(Base, TimestampMixin):
@@ -82,7 +88,32 @@ class Recipe(Base, TimestampMixin):
     image_url: Mapped[str | None] = mapped_column(
         String(512),
         nullable=True,
-        comment="菜品图片地址。第一版不做上传，先留字段，前端用 emoji 占位",
+        comment="菜品图片地址（存上传接口给的相对路径）。为空时前端用分类色底 + 菜名首字占位",
+    )
+    spice_options: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::json"),
+        comment=(
+            "这道菜支持哪几档辣度，取值只能是 SPICE_LEVELS 里的，顺序按 SPICE_LEVELS 归一化。"
+            "空数组表示点这道菜时不问辣度（比如汤、饮品）"
+        ),
+    )
+    default_spice: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+        comment="默认辣度，必须是 spice_options 里的一个。为空时取第一档",
+    )
+    is_sold_out: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        comment=(
+            "「今天不做」：临时标记，比如买了菜回来发现少了食材。"
+            "和商家的「库存」不是一回事——这里只是今天先不做这道，随时可以取消"
+        ),
     )
     created_by: Mapped[int] = mapped_column(
         BigInteger,

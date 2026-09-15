@@ -684,3 +684,146 @@ async def test_post_update_entry_requires_login(client: AsyncClient, login_as) -
     )
 
     assert response.status_code == 401
+
+
+# ==================== 辣度设置（从旧小程序版搬过来的功能）====================
+
+
+async def test_spice_options_are_normalized_to_fixed_order(client: AsyncClient, login_as) -> None:
+    """辣度档位只认固定的四档，并且**按固定顺序**返回。
+
+    用户当初勾选的先后顺序不该决定点单时按钮的排列——
+    所有人都应该看到「不辣 → 微辣 → 正常辣 → 特辣」，所以后端统一归一化一次。
+    顺手也验证了非法值会被丢掉：就算前端传来"变态辣"，库里也不会存进去。
+    """
+    token, _ = await login_as("spice-order")
+    space = await _create_space(client, token, "辣度顺序")
+    space_id = int(space["id"])
+
+    # 故意乱序 + 重复 + 塞一个不存在的档位
+    dish = await _add_recipe(
+        client,
+        token,
+        space_id,
+        spice_options=["特辣", "不辣", "特辣", "变态辣"],
+        default_spice="特辣",
+    )
+
+    assert dish["spice_options"] == ["不辣", "特辣"]
+    assert dish["default_spice"] == "特辣"
+
+
+async def test_default_spice_falls_back_to_first(client: AsyncClient, login_as) -> None:
+    """默认辣度必须落在支持的档位里；不在、或者没传，就取第一档。"""
+    token, _ = await login_as("spice-default")
+    space = await _create_space(client, token, "默认辣度")
+    space_id = int(space["id"])
+
+    # 没传默认档 → 取第一档
+    plain = await _add_recipe(client, token, space_id, spice_options=["微辣", "正常辣"])
+    assert plain["default_spice"] == "微辣"
+
+    # 传了一个不在支持列表里的默认档 → 同样退回第一档
+    other = await _add_recipe(
+        client,
+        token,
+        space_id,
+        name="宫保鸡丁",
+        spice_options=["微辣"],
+        default_spice="特辣",
+    )
+    assert other["default_spice"] == "微辣"
+
+
+async def test_empty_spice_options_means_no_spice_question(client: AsyncClient, login_as) -> None:
+    """不设辣度档位时，默认档必须也是空的。
+
+    "不问辣度、却记着一个默认值"是自相矛盾的数据——
+    将来别处读到 default_spice 会以为"这道菜是有辣度的"。
+    """
+    token, _ = await login_as("spice-none")
+    space = await _create_space(client, token, "不问辣度")
+    space_id = int(space["id"])
+
+    dish = await _add_recipe(client, token, space_id)
+
+    assert dish["spice_options"] == []
+    assert dish["default_spice"] is None
+
+
+async def test_update_spice_keeps_the_other_field(client: AsyncClient, login_as) -> None:
+    """只改默认辣度时，不能把"支持哪几档"一起清空。
+
+    这两个字段在 Service 里是一起算的：分开处理就会出现
+    "只想换个默认档，结果辣度全没了"这种难查的问题。
+    """
+    token, _ = await login_as("spice-update")
+    space = await _create_space(client, token, "改辣度")
+    space_id = int(space["id"])
+
+    dish = await _add_recipe(
+        client, token, space_id, spice_options=["不辣", "微辣"], default_spice="不辣"
+    )
+
+    response = await client.patch(
+        f"/api/v1/spaces/{space_id}/recipes/{dish['id']}",
+        json={"default_spice": "微辣"},
+        headers=_auth(token),
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["spice_options"] == ["不辣", "微辣"], "支持列表不该被清空"
+    assert data["default_spice"] == "微辣"
+
+
+async def test_clearing_spice_options_also_clears_default(client: AsyncClient, login_as) -> None:
+    """把支持的档位清空（改成"不问辣度"）时，默认档也要跟着清掉。"""
+    token, _ = await login_as("spice-clear")
+    space = await _create_space(client, token, "清空辣度")
+    space_id = int(space["id"])
+
+    dish = await _add_recipe(
+        client, token, space_id, spice_options=["微辣"], default_spice="微辣"
+    )
+
+    response = await client.patch(
+        f"/api/v1/spaces/{space_id}/recipes/{dish['id']}",
+        json={"spice_options": []},
+        headers=_auth(token),
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["spice_options"] == []
+    assert data["default_spice"] is None
+
+
+# ==================== 售罄（「今天不做」）====================
+
+
+async def test_sold_out_flag_round_trip(client: AsyncClient, login_as) -> None:
+    """「今天不做」默认是关着的，能打开也能再关掉。
+
+    它是个临时开关（食材没了、今天不想做），所以必须能随时恢复——
+    和商家的"库存"不同，这里不涉及任何数字计算。
+    """
+    token, _ = await login_as("soldout-flag")
+    space = await _create_space(client, token, "售罄")
+    space_id = int(space["id"])
+
+    dish = await _add_recipe(client, token, space_id)
+    assert dish["is_sold_out"] is False, "新建的菜默认应该是能做的"
+
+    marked = await client.patch(
+        f"/api/v1/spaces/{space_id}/recipes/{dish['id']}",
+        json={"is_sold_out": True},
+        headers=_auth(token),
+    )
+    assert marked.status_code == 200, marked.text
+    assert marked.json()["data"]["is_sold_out"] is True
+
+    restored = await client.patch(
+        f"/api/v1/spaces/{space_id}/recipes/{dish['id']}",
+        json={"is_sold_out": False},
+        headers=_auth(token),
+    )
+    assert restored.json()["data"]["is_sold_out"] is False

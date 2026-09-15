@@ -32,7 +32,24 @@ class RecipeCreateRequest(BaseModel):
     image_url: str | None = Field(
         default=None,
         max_length=512,
-        description="图片地址，可空。第一版不做图片上传，前端用 emoji 占位",
+        description="图片地址（上传接口返回的相对路径），可空。为空时前端用分类色底 + 菜名首字占位",
+    )
+    spice_options: list[str] = Field(
+        default_factory=list,
+        max_length=4,
+        description=(
+            "这道菜支持哪几档辣度，取值见 app/models/recipe.py 的 SPICE_LEVELS。"
+            "空数组表示点这道菜时不问辣度（汤、饮品这类）"
+        ),
+    )
+    default_spice: str | None = Field(
+        default=None,
+        max_length=16,
+        description="默认辣度，必须是 spice_options 里的一个；不传则用第一档",
+    )
+    is_sold_out: bool = Field(
+        default=False,
+        description="「今天不做」。置为 true 后仍能看到这道菜，但不能加进点单",
     )
 
 
@@ -53,6 +70,20 @@ class RecipeUpdateRequest(BaseModel):
     category_id: int | None = Field(default=None, description="分类 ID，必须属于同一个家庭组")
     description: str | None = Field(default=None, max_length=2000, description="做法或说明")
     image_url: str | None = Field(default=None, max_length=512, description="图片地址")
+    spice_options: list[str] | None = Field(
+        default=None,
+        max_length=4,
+        description="支持哪几档辣度。传空数组表示改成「不问辣度」",
+    )
+    default_spice: str | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "默认辣度。既可用来换成另一档，也可以传 null 表示「不指定、取第一档」——"
+            "所以这里用 exclude_unset 区分「没传」和「传了 null」"
+        ),
+    )
+    is_sold_out: bool | None = Field(default=None, description="「今天不做」")
 
 
 class RecipeInfo(BaseModel):
@@ -74,6 +105,18 @@ class RecipeInfo(BaseModel):
     )
     description: str | None = Field(default=None, description="做法或说明")
     image_url: str | None = Field(default=None, description="图片地址")
+    spice_options: list[str] = Field(
+        default_factory=list,
+        description="这道菜支持哪几档辣度。空数组表示点它时不问辣度（前端据此决定要不要弹选择框）",
+    )
+    default_spice: str | None = Field(
+        default=None,
+        description="默认辣度。为空时前端取 spice_options 的第一档",
+    )
+    is_sold_out: bool = Field(
+        default=False,
+        description="「今天不做」。前端据此显示「已售罄」并禁用加菜按钮",
+    )
     created_by: int = Field(..., description="添加者用户 ID")
     created_by_nickname: str | None = Field(
         default=None,

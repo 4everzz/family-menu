@@ -101,15 +101,26 @@ class RecipeRepository:
         category_id: int,
         description: str | None,
         image_url: str | None,
+        spice_options: list[str],
+        default_spice: str | None,
+        is_sold_out: bool,
         created_by: int,
     ) -> Recipe:
-        """新增菜谱。返回的对象已带数据库生成的自增 ID。"""
+        """新增菜谱。返回的对象已带数据库生成的自增 ID。
+
+        辣度相关三个字段是必填的（而不是给默认值）：
+        它们该填什么由 Service 层算好——只认固定的四档、默认档必须落在支持列表里。
+        这里如果各自给一份默认值，就等于在两处各写一套规则，早晚会不一致。
+        """
         recipe = Recipe(
             space_id=space_id,
             name=name,
             category_id=category_id,
             description=description,
             image_url=image_url,
+            spice_options=spice_options,
+            default_spice=default_spice,
+            is_sold_out=is_sold_out,
             created_by=created_by,
         )
         self.session.add(recipe)

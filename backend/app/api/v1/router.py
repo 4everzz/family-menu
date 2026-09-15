@@ -12,6 +12,7 @@ from app.api.v1 import (
     favorites,
     fridge,
     health,
+    orders,
     recipes,
     spaces,
     uploads,
@@ -32,5 +33,7 @@ api_router.include_router(recipes.router)
 api_router.include_router(favorites.router)
 # 冰箱路由：家庭共享域，挂在 space_id 下（/spaces/{id}/fridge）
 api_router.include_router(fridge.router)
+# 点单路由：家庭共享域，挂在 space_id 下（/spaces/{id}/orders）
+api_router.include_router(orders.router)
 # 上传接口：multipart 表单，前端用 uni.uploadFile 调用
 api_router.include_router(uploads.router)
