@@ -59,7 +59,12 @@
             <text class="remark-text">{{ order.remark }}</text>
           </view>
 
-          <text class="order-meta">{{ orderMeta(order) }}</text>
+          <!-- 底部一行：谁点的 + 共几道/几份。
+               昵称单独成一个 flex 子项并截断，避免超长昵称把"共 X 道"挤掉 -->
+          <view class="order-meta">
+            <text class="order-who">{{ orderWho(order) }}</text>
+            <text class="order-count">· 共 {{ order.dishCount }} 道 / {{ order.totalQuantity }} 份</text>
+          </view>
 
           <!--
             操作按钮只在 canManage 时出现。这个值由**后端**判定（创建人 或 提交者本人），
@@ -135,14 +140,11 @@ const emptyText = computed(() => {
   return '这个家还没有点单记录。';
 });
 
-/** 卡片底部一行：谁点的 + 一共几份 */
-function orderMeta(order: DishOrder): string {
-  // 客人借创建人手机点单时，提交者是创建人、客人名字在 guestName 里——
-  // 那种情况说"张三 点的"才有用，说"创建人提交的"等于没说
-  const who = order.guestName
+/** 卡片底部"谁点的"：客人借创建人手机点单时，提交者是创建人、客人名字在 guestName 里 */
+function orderWho(order: DishOrder): string {
+  return order.guestName
     ? `${order.guestName} 点的`
     : `${order.createdByName || '家人'} 提交的`;
-  return `${who} · 共 ${order.dishCount} 道 / ${order.totalQuantity} 份`;
 }
 
 /**
@@ -355,11 +357,21 @@ onShow(load);
 .remark-text { color: var(--c-text-2); font-size: 23rpx; line-height: 1.6; }
 
 .order-meta {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
   margin-top: var(--s-2);
   color: var(--c-text-3);
   font-size: 21rpx;
 }
+/* 昵称单独截断：flex 子项必须 min-width:0 才会收缩并出省略号，否则会被内容撑开 */
+.order-who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.order-count { flex: 0 0 auto; white-space: nowrap; }
 
 .order-actions {
   display: flex;
