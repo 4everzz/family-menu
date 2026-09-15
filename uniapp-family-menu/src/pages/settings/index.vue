@@ -57,7 +57,7 @@
 
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
-import { DEFAULT_AVATAR_URL, fetchCurrentUser } from '../../services/user';
+import { DEFAULT_AVATAR_URL, fetchCurrentUser, resolveAvatarUrl } from '../../services/user';
 import { LOGIN_PATH } from '../../services/auth-api';
 import { clearToken, hasValidToken } from '../../utils/token';
 import { DANGER } from '../../utils/theme';
@@ -87,7 +87,7 @@ async function refresh(): Promise<void> {
     const user = await fetchCurrentUser();
     nickname.value = user.nickname;
     username.value = user.username;
-    avatarUrl.value = user.avatarUrl;
+    avatarUrl.value = resolveAvatarUrl(user.avatarUrl);
   } catch (error) {
     // 读取失败（例如后端没启动）不打断页面，保留默认文案
   }

@@ -3,10 +3,10 @@
     <!--
       用户信息卡片：一眼看清"现在是谁在登录"。
       整张卡片都可点：未登录 → 去登录页；已登录 → 去编辑资料页
-      （编辑页目前是占位，进去会看到"正在开发中"）。
+      （编辑页可以换头像、改昵称）。
     -->
     <view class="user-card" hover-class="tap" @click="onUserCardTap">
-      <image class="user-avatar" :src="user?.avatarUrl || DEFAULT_AVATAR_URL" mode="aspectFill" />
+      <image class="user-avatar" :src="displayAvatar" mode="aspectFill" />
       <view class="user-main">
         <text class="user-name">{{ user ? user.nickname : '未登录' }}</text>
         <text class="user-sub">{{ userSubText }}</text>
@@ -114,8 +114,6 @@
         </view>
       </view>
     </view>
-
-    <text class="page-note">修改头像和昵称的功能还在路上</text>
   </view>
 </template>
 
@@ -155,7 +153,7 @@
 
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
-import { DEFAULT_AVATAR_URL, fetchCurrentUser, type CurrentUser } from '../../services/user';
+import { DEFAULT_AVATAR_URL, fetchCurrentUser, resolveAvatarUrl, type CurrentUser } from '../../services/user';
 import { getCurrentSpace, resolveCurrentSpace } from '../../utils/space-context';
 import { hasValidToken } from '../../utils/token';
 
@@ -172,6 +170,9 @@ const userSubText = computed(() => {
   // 改造前用微信登录的老账号还没有用户名，如实说明，别显示成一片空白
   return user.value.username ? `@${user.value.username}` : '还没有设置用户名';
 });
+
+/** 头像显示地址：本地占位图直接显示，服务端上传的相对路径拼完整地址 */
+const displayAvatar = computed(() => resolveAvatarUrl(user.value?.avatarUrl));
 
 /**
  * 拉取当前用户信息。
@@ -196,7 +197,7 @@ async function refreshUser(): Promise<void> {
  *
  * 两种状态各去一个地方：
  *   未登录 → 登录页（否则用户在这一页找不到任何"进账号"的入口）；
- *   已登录 → 编辑资料页（目前是占位页，里面写明"正在开发中"）。
+ *   已登录 → 编辑资料页（可换头像、改昵称）。
  */
 function onUserCardTap(): void {
   uni.navigateTo({ url: user.value ? '/pages/profile/edit' : '/pages/auth/login' });
@@ -361,12 +362,4 @@ onShow(() => {
   white-space: nowrap;
 }
 .entry-arrow { flex: 0 0 auto; color: var(--c-text-3); font-size: 40rpx; line-height: 1; }
-
-.page-note {
-  display: block;
-  margin-top: var(--s-5);
-  color: var(--c-text-3);
-  font-size: 22rpx;
-  text-align: center;
-}
 </style>

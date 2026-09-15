@@ -9,7 +9,7 @@
  * 这是有意的：只要能传 ID，别人就能传一个别人的 ID 读到别人的数据。
  */
 
-import { request } from './http';
+import { request, resolveFileUrl } from './http';
 
 /**
  * 默认头像（进包的本地图片，不依赖网络）。
@@ -52,4 +52,65 @@ export async function fetchCurrentUser(): Promise<CurrentUser> {
     nickname: dto.nickname || '小家用户',
     avatarUrl: dto.avatar_url || DEFAULT_AVATAR_URL,
   };
+}
+
+/**
+ * 修改个人资料的请求体。
+ *
+ * 两个字段都可选：只传哪个就只改哪个（后端用 exclude_unset 区分"没传"和"传 null"）。
+ *   · nickname —— 昵称；
+ *   · avatarUrl —— 头像**相对路径**（/uploads/...）或 null。
+ *     传 null 表示"撤销自定义头像、恢复默认占位图"；不传则保持原值。
+ */
+export interface UpdateUserPayload {
+  nickname?: string;
+  /** 头像相对路径或 null（恢复默认）。不传 = 不动头像 */
+  avatarUrl?: string | null;
+}
+
+/**
+ * 修改当前登录用户的个人资料（昵称 / 头像）。
+ *
+ * 走 **POST** /users/me：这个入口和 PATCH 行为完全一致，后端单独开它是为了兼容
+ * 微信小程序（wx.request 不支持 PATCH）。用 POST 而不是 PATCH，前端就能在
+ * App / H5 / 小程序三端共用同一段代码——这也正是 http.ts 里 RequestOptions.method
+ * 故意不含 PATCH 的原因（见那里的注释）。
+ *
+ * 后端字段是 snake_case，所以这里手动转一道：前端用 avatarUrl，发过去是 avatar_url。
+ */
+export async function updateCurrentUser(payload: UpdateUserPayload): Promise<CurrentUser> {
+  const data: Record<string, unknown> = {};
+  if (payload.nickname !== undefined) data.nickname = payload.nickname;
+  if (payload.avatarUrl !== undefined) data.avatar_url = payload.avatarUrl;
+
+  // 后端对"什么都不传"会 422 拒绝；这里前置拦截，避免白打一次请求
+  if (Object.keys(data).length === 0) {
+    return fetchCurrentUser();
+  }
+
+  const dto = await request<UserDto>({ url: '/users/me', method: 'POST', data });
+  return {
+    id: dto.id,
+    username: dto.username || '',
+    nickname: dto.nickname || '小家用户',
+    avatarUrl: dto.avatar_url || DEFAULT_AVATAR_URL,
+  };
+}
+
+/**
+ * 把头像地址变成 <image> 能直接显示的地址。
+ *
+ * 两种来源要区别对待：
+ *   · 本地打包的占位图（/static/...）—— 是前端资源，直接用它，不能拼服务器地址；
+ *   · 服务端上传的相对路径（/uploads/...）—— 必须用 resolveFileUrl 拼成完整地址，
+ *     否则在 App / H5 里拼不出真实 URL、图就裂了。
+ * 历史数据里若已经是完整 http 地址，resolveFileUrl 会原样返回，不会重复拼。
+ *
+ * 统一收这一处，是为了避免"编辑页传的是相对路径、我的页却直接拿相对路径显示"
+ * 这类只在部分页面裂图的不一致。
+ */
+export function resolveAvatarUrl(url: string | null | undefined): string {
+  if (!url) return DEFAULT_AVATAR_URL;
+  if (url.startsWith('/static/')) return url;
+  return resolveFileUrl(url);
 }
