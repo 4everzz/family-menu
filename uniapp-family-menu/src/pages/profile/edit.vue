@@ -28,14 +28,14 @@
           <input
             class="nickname-input"
             v-model="nicknameInput"
-            :maxlength="64"
+            :maxlength="20"
             placeholder="给家人们留个名字"
             placeholder-class="nickname-placeholder"
             confirm-type="done"
           />
         </view>
       </view>
-      <text class="counter">{{ trimmedNickname.length }}/64</text>
+      <text class="counter">{{ trimmedNickname.length }}/20</text>
     </view>
 
     <button
