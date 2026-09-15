@@ -24,6 +24,7 @@ from app.models.recipe_category import (
 from app.models.space import ROLE_ADMIN, ROLE_MEMBER, Space, SpaceMember
 from app.models.user import DEFAULT_NICKNAME, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, User
 from app.models.user_identity import PROVIDER_WX_MP, UserIdentity
+from app.models.user_profile import CalorieLog, UserProfile
 
 __all__ = [
     "Base",
@@ -49,4 +50,6 @@ __all__ = [
     "DEFAULT_CATEGORY_NAMES",
     "DEFAULT_CATEGORY_NAME",
     "MAX_CATEGORY_NAME_LENGTH",
+    "UserProfile",
+    "CalorieLog",
 ]
