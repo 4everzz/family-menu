@@ -93,3 +93,16 @@ class UploadService:
         """
         now = datetime.now(timezone.utc)
         return self.base_dir / f"{now.year:04d}" / f"{now.month:02d}" / f"{uuid.uuid4().hex}{ext}"
+
+    def read_upload_bytes(self, relative_url: str) -> bytes:
+        """按 uploads 接口返回的相对路径（/uploads/...）读回图片字节（识别用）。
+
+        只接受本站上传产出的相对路径，避免前端传任意路径来读服务器文件。
+        """
+        if not relative_url or not relative_url.startswith("/uploads/"):
+            raise BusinessError("图片地址不合法")
+        rel = relative_url[len("/uploads/"):]
+        path = self.base_dir / rel
+        if not path.exists() or not path.is_file():
+            raise BusinessError("图片不存在，请重新上传")
+        return path.read_bytes()

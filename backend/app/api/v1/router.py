@@ -16,13 +16,16 @@ from app.api.v1 import (
     recipes,
     spaces,
     uploads,
+    user_profile,
     users,
+    vision,
 )
 
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
+api_router.include_router(user_profile.router)
 api_router.include_router(spaces.router)
 # 分类路由要挂在菜谱路由之前吗？不必要——两者的路径前缀不同
 # （/spaces/{id}/categories 与 /spaces/{id}/recipes），不会互相遮挡。
@@ -37,3 +40,5 @@ api_router.include_router(fridge.router)
 api_router.include_router(orders.router)
 # 上传接口：multipart 表单，前端用 uni.uploadFile 调用
 api_router.include_router(uploads.router)
+# 拍照识别食物热量：读回上传的图片字节，交给多模态模型（无 key 走占位）
+api_router.include_router(vision.router)

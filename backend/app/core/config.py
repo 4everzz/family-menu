@@ -73,6 +73,15 @@ class Settings(BaseSettings):
     # 单张图片的大小上限（字节）。默认 5MB——手机随手拍足够，再大就该压缩了
     max_upload_bytes: int = 5 * 1024 * 1024
 
+    # ==================== 多模态识别（拍照识别热量） ====================
+    # DashScope（通义千问 VL）的 OpenAI 兼容接口。
+    # 留空时识别走占位数据（前端提示"演示数据"），不影响其它功能；
+    # 把可用 Key 写进 backend/.env 即自动接通真实模型。
+    dashscope_api_key: str = ""
+    dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    # ⚠️ 默认值只是占位：实现时请核对 DashScope 当前在售的 VL 模型 id
+    vision_model: str = "qwen-vl-max"
+
     # ==================== 派生属性 ====================
     @property
     def is_prod(self) -> bool:
