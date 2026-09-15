@@ -17,33 +17,57 @@
         <text class="empty-hint">去「我的 → 设置 → 切换家庭」选一个家</text>
       </view>
 
-      <!-- 有家庭组但一切正常：这是最好的状态 -->
-      <view v-else-if="alerts.length" class="list">
-        <view
-          v-for="a in alerts"
-          :key="a.id"
-          class="card"
-          :class="a.level"
-          hover-class="tap"
-          @click="openAlert(a)"
-        >
-          <view class="card-icon" :class="a.level" aria-label="提醒"></view>
-          <view class="card-main">
-            <view class="card-head">
-              <text class="card-title">{{ a.title }}</text>
-              <text class="card-badge" :class="a.level">{{ badge(a) }}</text>
+      <template v-else>
+        <!-- 按类别筛选：已过期 / 临期 / 缺货，纯前端过滤（后端已把全部提醒一次返回） -->
+        <view v-if="alerts.length" class="filters">
+          <view class="filter-scroll">
+            <view class="filter-track">
+              <view
+                v-for="f in filters"
+                :key="f"
+                class="chip"
+                :class="{ active: activeFilter === f }"
+                hover-class="tap"
+                @click="activeFilter = f"
+              >{{ f }}</view>
             </view>
-            <text v-if="a.detail" class="card-detail">{{ a.detail }}</text>
           </view>
-          <text class="card-arrow">›</text>
         </view>
-      </view>
 
-      <!-- 有家庭组，但暂时没有要提醒的事 -->
-      <view v-else class="empty">
-        <text class="empty-text">暂时没有需要提醒的事</text>
-        <text class="empty-hint">冰箱食材都还新鲜、库存充足</text>
-      </view>
+        <!-- 列表：按当前筛选展示 -->
+        <view v-if="filtered.length" class="list">
+          <view
+            v-for="a in filtered"
+            :key="a.id"
+            class="card"
+            :class="a.level"
+            hover-class="tap"
+            @click="openAlert(a)"
+          >
+            <view class="card-icon" :class="a.level" aria-label="提醒"></view>
+            <view class="card-main">
+              <view class="card-head">
+                <text class="card-title">{{ a.title }}</text>
+                <text class="card-badge" :class="a.level">{{ badge(a) }}</text>
+              </view>
+              <text v-if="a.detail" class="card-detail">{{ a.detail }}</text>
+            </view>
+            <text class="card-arrow">›</text>
+          </view>
+        </view>
+
+        <!-- 有数据，但当前筛选项没有命中 -->
+        <view v-else-if="alerts.length" class="empty">
+          <text class="empty-text">这个分类下暂时没有提醒</text>
+          <text class="empty-hint">换个筛选条件看看</text>
+        </view>
+
+        <!-- 有家庭组，但暂时没有要提醒的事 -->
+        <view v-else class="empty">
+          <text class="empty-text">暂时没有需要提醒的事</text>
+          <text class="empty-hint">冰箱食材都还新鲜、库存充足</text>
+        </view>
+      </template>
     </template>
   </view>
 </template>
@@ -64,7 +88,7 @@
  *    level 决定配色：danger（已过期/缺货）用危险色，warning（临期）用提醒色。
  */
 
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
 import { fetchAlerts, type Alert } from '../../services/alerts';
@@ -79,9 +103,25 @@ const isOwner = ref(false);
 
 /** 列表顶部的短标签：过期 / 临期 / 缺货 */
 function badge(a: Alert): string {
+  return kindOf(a);
+}
+
+/** 筛选类别：全部 / 已过期 / 临期 / 缺货 */
+const filters = ['全部', '已过期', '临期', '缺货'];
+/** 当前选中的筛选，默认看全部 */
+const activeFilter = ref('全部');
+
+/** 这条提醒属于哪一类（与 badge 文案一致，作为筛选匹配依据） */
+function kindOf(a: Alert): '已过期' | '临期' | '缺货' {
   if (a.type === 'fridge_out') return '缺货';
   return a.level === 'danger' ? '已过期' : '临期';
 }
+
+/** 按当前筛选算出来的可见列表（纯前端过滤，不重新请求后端） */
+const filtered = computed<Alert[]>(() => {
+  if (activeFilter.value === '全部') return alerts.value;
+  return alerts.value.filter((a) => kindOf(a) === activeFilter.value);
+});
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -94,9 +134,12 @@ async function load(): Promise<void> {
 
     if (!spaceId) {
       alerts.value = [];
+      activeFilter.value = '全部';
       return;
     }
 
+    // 每次重新拉数据都回到"全部"，避免切换家庭后残留上一个家的筛选导致列表空掉
+    activeFilter.value = '全部';
     alerts.value = await fetchAlerts(spaceId);
   } catch (error) {
     showError(error);
@@ -145,6 +188,31 @@ function openAlert(a: Alert): void {
 }
 
 .tip { margin-top: 60rpx; color: var(--c-text-3); font-size: 24rpx; text-align: center; }
+
+/* 筛选药丸：横向滚动，多了也不挤。用原生 CSS 实现（overflow-x:auto），不用 scroll-view——
+   和冰箱页一致：scroll-view 在 loading 切换导致整块重挂载时会抛 "scrollLeft of null"（DCloud 老问题）。 */
+.filters { margin-top: var(--s-3); }
+.filter-scroll { width: 100%; white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.filter-scroll::-webkit-scrollbar { display: none; }
+.filter-track { display: inline-flex; gap: var(--s-2); padding: 2rpx 0; }
+.chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: var(--touch-min);
+  padding: 0 var(--s-3);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: 24rpx;
+}
+.chip.active {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+  color: #fff;
+  font-weight: 500;
+}
 
 .list { margin-top: var(--s-3); display: flex; flex-direction: column; gap: var(--s-2); }
 
