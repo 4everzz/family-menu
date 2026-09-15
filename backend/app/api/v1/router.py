@@ -7,6 +7,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    alerts,
     auth,
     categories,
     favorites,
@@ -42,3 +43,5 @@ api_router.include_router(orders.router)
 api_router.include_router(uploads.router)
 # 拍照识别食物热量：读回上传的图片字节，交给多模态模型（无 key 走占位）
 api_router.include_router(vision.router)
+# 家庭提醒：把冰箱"该注意的状态"聚合成列表（临期/过期 + 缺货），纯读、无新表
+api_router.include_router(alerts.router)

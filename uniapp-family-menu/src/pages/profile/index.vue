@@ -97,6 +97,17 @@
           <text class="entry-arrow">›</text>
         </view>
 
+        <view class="entry-item" hover-class="tap" @click="goAlerts">
+          <view class="entry-icon" :style="{ background: 'var(--c-tint-clay)' }">
+            <image class="entry-icon-img" src="/static/icons/warning.png" mode="aspectFit" />
+          </view>
+          <view class="entry-main">
+            <text class="entry-name">提醒</text>
+            <text class="entry-desc">冰箱临期、过期和缺货的待办</text>
+          </view>
+          <text class="entry-arrow">›</text>
+        </view>
+
         <view class="entry-item" hover-class="tap" @click="goHealth">
           <view class="entry-icon" :style="{ background: 'var(--c-tint-sage)' }">
             <image class="entry-icon-img" src="/static/icons/file-text.png" mode="aspectFit" />
@@ -267,6 +278,17 @@ function goFridge() {
  */
 function goOrders() {
   uni.navigateTo({ url: '/pages/orders/index' });
+}
+
+/**
+ * 家庭提醒：冰箱临期/过期/缺货的待办。
+ *
+ * 这是本期异常处理（业务预警）落地的入口，只做到"提醒列表"这一层，
+ * 不做菜单页顶部横幅、也不持久化"已读/忽略"——冰箱状态变了提醒自然变。
+ * 对全家可见，和冰箱、点单记录并列放在「其他」里。
+ */
+function goAlerts() {
+  uni.navigateTo({ url: '/pages/alerts/index' });
 }
 
 /** 健康档案：个人私有域——身高体重、饮食备注、拍照记热量 */
