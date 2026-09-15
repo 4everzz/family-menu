@@ -258,6 +258,11 @@ function goOrders() {
   uni.navigateTo({ url: '/pages/orders/index' });
 }
 
+/** 健康档案：个人私有域——身高体重、饮食备注、拍照记热量 */
+function goHealth() {
+  uni.navigateTo({ url: '/pages/profile/health' });
+}
+
 /** 设置页：切换账号、切换家庭都在里面 */
 function goSettings() {
   uni.navigateTo({ url: '/pages/settings/index' });

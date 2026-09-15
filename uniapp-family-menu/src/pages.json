@@ -14,6 +14,7 @@
     { "path": "pages/favorites/index", "style": { "navigationBarTitleText": "我的收藏" } },
     { "path": "pages/auth/login", "style": { "navigationBarTitleText": "登录" } },
     { "path": "pages/profile/edit", "style": { "navigationBarTitleText": "编辑资料" } },
+    { "path": "pages/profile/health", "style": { "navigationBarTitleText": "健康档案" } },
     { "path": "pages/cart/index", "style": { "navigationBarTitleText": "点单" } },
     { "path": "pages/orders/index", "style": { "navigationBarTitleText": "点单记录" } }
   ],
