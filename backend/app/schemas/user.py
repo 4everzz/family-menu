@@ -45,7 +45,7 @@ class UserUpdateRequest(BaseModel):
 
     nickname: str | None = Field(
         default=None,
-        max_length=64,
+        max_length=20,
         description="昵称，可以填中文。不传表示不改",
     )
     avatar_url: str | None = Field(

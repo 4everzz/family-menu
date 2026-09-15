@@ -21,7 +21,7 @@ from app.repositories.user_repo import UserRepository
 AVATAR_URL_PREFIX = "/uploads/"
 
 # 与 schemas/user.py 的 UserUpdateRequest 保持一致
-MAX_NICKNAME_LENGTH = 64
+MAX_NICKNAME_LENGTH = 20
 MAX_AVATAR_URL_LENGTH = 512
 
 
