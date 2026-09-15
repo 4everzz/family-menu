@@ -1,76 +1,74 @@
 <template>
   <view class="ai-page">
-    <view class="hero">
-      <view class="hero-badge">AI</view>
-      <text class="hero-title">AI 助手</text>
-      <text class="hero-copy">拍张照，帮你估算这道菜的热量，点一下就能存进记录。</text>
+    <!--
+      页头：和菜单/冰箱页同一套"页面身份"写法（标题 + 一行说明）。
+      刻意不用大 banner/徽标——那种"AI 产品落地页"的排场正是要避免的：
+      这是一页要用的小工具，不是宣传页。
+    -->
+    <view class="page-head">
+      <text class="page-title">AI 助手</text>
+      <text class="page-subtitle">拍照估算热量</text>
     </view>
 
     <!--
-      拍照识别热量：从健康档案页整体搬到这里（用户定的归属）。
-      识别是 AI 能力，档案页只留手动记一笔。
+      上传区：整块可点，虚线框 + CSS 相机图标，像个"把照片放进来"的入口，
+      而不是一个营销味的大按钮。点下去有按压反馈（hover-class="tap"，全局 0.72 透明度）。
     -->
-    <view class="card">
-      <text class="card-title">拍照识别热量</text>
-      <text class="card-desc">拍照或从相册选一张，自动识别食物并估算热量</text>
+    <view class="upload-zone" :class="{ busy }" hover-class="tap" @click="onRecognize">
+      <view class="zone-glyph" />
+      <text class="zone-title">{{ busy ? '识别中…' : '拍照或从相册选择' }}</text>
+      <text class="zone-hint">{{ busy ? '正在分析这张照片' : '拍一张食物照片，估算它的热量' }}</text>
+    </view>
 
-      <view class="recognize-btn" :class="{ disabled: busy }" hover-class="tap" @click="onRecognize">
-        {{ busy ? '识别中…' : '拍照 / 从相册选择' }}
+    <!-- 识别走的是占位数据时如实说明，不假装是真的 -->
+    <view v-if="mock" class="mock-hint">
+      演示数据：把可用的 DashScope Key 填进后端 .env 即自动接通真实识别
+    </view>
+
+    <!-- 识别结果：每条一键计入当天热量记录 -->
+    <view v-if="estimates.length" class="section">
+      <view class="section-head">
+        <text class="section-title">识别结果</text>
+        <text class="section-count">{{ estimates.length }} 项</text>
       </view>
 
-      <view v-if="mock" class="mock-hint">
-        演示数据：把可用的 DashScope Key 填进后端 .env 即自动接通真实识别
-      </view>
-
-      <!-- 识别结果：每条「计入热量」一键写进当天记录 -->
-      <view v-for="(item, idx) in estimates" :key="idx" class="estimate">
-        <view class="estimate-main">
-          <text class="estimate-name">{{ item.food_name }}</text>
-          <text class="estimate-meta">
+      <view v-for="(item, idx) in estimates" :key="idx" class="result">
+        <view class="result-main">
+          <text class="result-name">{{ item.food_name }}</text>
+          <text class="result-meta">
             {{ Math.round(item.calories) }} kcal{{ item.portion ? ' · ' + item.portion : '' }}
           </text>
         </view>
+        <!-- 用描边药丸而非实心大按钮：一行一个动作，克制一点，不抢结果的注意力 -->
         <view
-          class="estimate-add"
+          class="result-add"
           :class="{ added: addedMap[idx] }"
           hover-class="tap"
           @click="logEstimate(item, idx)"
         >{{ addedMap[idx] ? '已计入' : '计入热量' }}</view>
       </view>
-
-      <view v-if="todayCount > 0" class="today-sum">
-        今天已记 {{ todayCount }} 条 · 合计 {{ Math.round(todayTotal) }} kcal
-      </view>
     </view>
 
-    <!-- 后续阶段：对话式推荐（尚未开发） -->
-    <view class="plan-card">
-      <text class="plan-title">接下来会做</text>
-      <view v-for="item in plans" :key="item" class="plan-row">
-        <view class="plan-dot" />
-        <text class="plan-text">{{ item }}</text>
-      </view>
+    <!-- 当天累计：给"计入"一个落点，一眼知道今天记了多少 -->
+    <view v-if="todayCount > 0" class="today">
+      <text class="today-label">今天已记</text>
+      <text class="today-value">{{ todayCount }} 条 · {{ Math.round(todayTotal) }} kcal</text>
     </view>
-
-    <text class="page-note">其余能力开发中，敬请期待</text>
   </view>
 </template>
 
 <script setup lang="ts">
 /**
- * AI 助手 tab。
+ * AI 助手 tab —— 目前落地的是「拍照识别热量」。
  *
- * 这一栏现在落地的是「拍照识别热量」——它原本做在个人健康档案页，
- * 但识图属于 AI 能力，用户决定整体归到这里（档案页只保留手动记热量）。
- * 识别结果的「一键计入热量」交互保留：识别出食物后点一下就写进当天记录，
- * 不用再手抄数字。
+ * 这一块原本做在个人健康档案页，但识图属于 AI 能力，用户决定整体归到这里，
+ * 档案页只保留手动记热量。识别结果的「一键计入热量」保留：识别出食物后
+ * 点一下写进当天记录，不用再手抄数字；同一张图不会重复计入。
  *
  * 后端接口都已就绪（services/health.ts）：
  *   · recognizeFood  → POST /vision/recognize-food（先 uploadImage 拿相对路径）
  *   · addCalorieLog  → POST /users/me/calorie-logs
  * 身份由后端从令牌解析，前端不传 user_id。
- *
- * 对话式推荐（按冰箱推荐、按减脂条件筛菜…）属后续阶段，暂列在页尾。
  */
 
 import { computed, ref } from 'vue';
@@ -86,13 +84,6 @@ import {
 import { chooseImageFromAlbum, uploadImage } from '../../services/upload';
 import { hasValidToken } from '../../utils/token';
 
-// 对话式推荐等后续能力，先列出来让用户知道这一栏的规划
-const plans = [
-  '按家庭冰箱里现有的食材，推荐能做什么菜',
-  '按减脂期、低糖、忌口等条件筛选菜品',
-  '按人数、口味和预算搭配一桌菜',
-];
-
 const busy = ref(false);
 const mock = ref(false);
 const estimates = ref<FoodEstimate[]>([]);
@@ -101,7 +92,7 @@ const lastImageUrl = ref<string | null>(null);
 /** 哪几条结果已经计入了（按下标标记），避免重复计入 */
 const addedMap = ref<Record<number, boolean>>({});
 
-// 当天记录：用来显示"今天已记 N 条 / 合计 X kcal"，让"计入"有反馈
+// 当天记录：用来显示"今天已记 N 条 · 合计 X kcal"，让"计入"有反馈
 const logs = ref<CalorieLog[]>([]);
 
 /** 本地当天日期 yyyy-mm-dd，和后端记录的 eaten_at 直接比字符串 */
@@ -194,54 +185,75 @@ async function logEstimate(item: FoodEstimate, idx: number): Promise<void> {
   box-sizing: border-box;
 }
 
-/* 头部：这一栏的品牌感，同时说清"现在能做什么" */
-.hero {
+/* 页头：不加边框和底——它是"页面身份"，不是卡片 */
+.page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.page-title {
+  overflow: hidden;
+  color: var(--c-text);
+  font-size: 40rpx;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-subtitle { flex: 0 0 auto; color: var(--c-text-2); font-size: 23rpx; }
+
+/* 上传区：虚线框读作"可以往里放东西"，比实心大按钮更像工具而不是广告 */
+.upload-zone {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-2);
-  padding: var(--s-5) var(--s-3);
-  border-radius: var(--r-lg);
-  background: var(--c-primary-bg);
-  border: 2rpx solid var(--c-border);
-}
-.hero-badge {
-  display: inline-flex;
   align-items: center;
-  height: 48rpx;
-  padding: 0 var(--s-2);
-  border-radius: var(--r-pill);
-  background: var(--c-primary);
-  color: #fff;
-  font-size: 22rpx;
-}
-.hero-title { color: var(--c-text); font-size: 44rpx; font-weight: 500; }
-.hero-copy { color: var(--c-text-2); font-size: 25rpx; line-height: 1.7; }
-
-/* 功能卡 */
-.card {
+  gap: var(--s-2);
   margin-top: var(--s-3);
-  padding: var(--s-4) var(--s-3);
-  border: 2rpx solid var(--c-border);
+  padding: var(--s-5) var(--s-3);
+  border: 2rpx dashed var(--c-border-strong);
   border-radius: var(--r-lg);
   background: var(--c-surface);
-  box-shadow: var(--shadow-card);
 }
-.card-title { display: block; color: var(--c-text); font-size: 32rpx; font-weight: 500; }
-.card-desc { display: block; margin-top: 6rpx; color: var(--c-text-2); font-size: 24rpx; line-height: 1.6; }
+/* 识别中：整体降透明度，示意"先别点"（按钮语义用文字表达，不靠纯颜色） */
+.upload-zone.busy { opacity: 0.7; }
 
-.recognize-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 88rpx;
-  margin-top: var(--s-3);
-  border-radius: var(--r-lg);
-  background: var(--c-primary);
-  color: #fff;
-  font-size: 29rpx;
+/* 相机图标：纯 CSS 拼（机身 + 镜头 + 顶部取景凸起），颜色走主色令牌。
+   不用 emoji——跨平台字形不一致、也拿不到设计令牌颜色。 */
+.zone-glyph {
+  position: relative;
+  width: 76rpx;
+  height: 60rpx;
+  border: 4rpx solid var(--c-primary);
+  border-radius: 12rpx;
+  box-sizing: border-box;
 }
-.recognize-btn.disabled { background: var(--c-muted); color: var(--c-text-3); }
+.zone-glyph::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26rpx;
+  height: 26rpx;
+  border: 4rpx solid var(--c-primary);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+}
+.zone-glyph::after {
+  content: '';
+  position: absolute;
+  left: 16rpx;
+  top: -14rpx;
+  width: 24rpx;
+  height: 12rpx;
+  border: 4rpx solid var(--c-primary);
+  border-bottom: 0;
+  border-radius: 8rpx 8rpx 0 0;
+  box-sizing: border-box;
+}
+
+.zone-title { color: var(--c-text); font-size: 29rpx; font-weight: 500; }
+.zone-hint { color: var(--c-text-2); font-size: 23rpx; }
 
 /* 占位数据提示 */
 .mock-hint {
@@ -254,71 +266,68 @@ async function logEstimate(item: FoodEstimate, idx: number): Promise<void> {
   line-height: 1.5;
 }
 
-/* 识别结果行 */
-.estimate {
+.section { margin-top: var(--s-4); }
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 var(--s-1) var(--s-2);
+}
+.section-title { color: var(--c-text); font-size: 27rpx; font-weight: 500; }
+.section-count { color: var(--c-text-3); font-size: 22rpx; }
+
+.result {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  margin-top: var(--s-2);
-  padding: var(--s-3);
+  min-height: 120rpx;
+  margin-bottom: var(--s-2);
+  padding: var(--s-2) var(--s-3);
   border: 2rpx solid var(--c-border);
   border-radius: var(--r-md);
   background: var(--c-surface);
+  box-shadow: var(--shadow-card);
 }
-.estimate-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4rpx; }
-.estimate-name { color: var(--c-text); font-size: 28rpx; font-weight: 500; }
-.estimate-meta { color: var(--c-text-2); font-size: 24rpx; }
-.estimate-add {
+.result-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
+.result-name {
+  overflow: hidden;
+  color: var(--c-text);
+  font-size: 28rpx;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.result-meta { color: var(--c-text-2); font-size: 23rpx; }
+
+.result-add {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   height: var(--touch-min);
   padding: 0 var(--s-3);
+  border: 2rpx solid var(--c-primary);
   border-radius: var(--r-pill);
-  background: var(--c-primary);
-  color: #fff;
+  color: var(--c-primary);
   font-size: 25rpx;
 }
-/* 已计入：置灰、"已计入"，防止同一张图重复记两遍 */
-.estimate-add.added { background: var(--c-muted); color: var(--c-text-3); }
-
-.today-sum {
-  margin-top: var(--s-3);
-  color: var(--c-text-2);
-  font-size: 23rpx;
-  text-align: center;
-}
-
-/* 后续规划 */
-.plan-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-  margin-top: var(--s-3);
-  padding: var(--s-4) var(--s-3);
-  border: 2rpx solid var(--c-border);
-  border-radius: var(--r-lg);
-  background: var(--c-surface);
-  box-shadow: var(--shadow-card);
-}
-.plan-title { color: var(--c-text-2); font-size: 23rpx; }
-.plan-row { display: flex; align-items: flex-start; gap: var(--s-2); }
-/* 用一个小圆点做项目符号，比文字里的「·」对齐更稳，换行时也不会缩进错位 */
-.plan-dot {
-  flex: 0 0 auto;
-  width: 12rpx;
-  height: 12rpx;
-  margin-top: 14rpx;
-  border-radius: 50%;
-  background: var(--c-primary);
-}
-.plan-text { min-width: 0; flex: 1; color: var(--c-text); font-size: 26rpx; line-height: 1.7; }
-
-.page-note {
-  display: block;
-  margin-top: var(--s-5);
+/* 已计入：去描边 + 置灰，明确"这条不用再点了" */
+.result-add.added {
+  border-color: var(--c-border);
+  background: var(--c-muted);
   color: var(--c-text-3);
-  font-size: 22rpx;
-  text-align: center;
 }
+
+/* 当天累计：用主色浅底把它和结果区区分开，但不抢主体 */
+.today {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: var(--s-4);
+  padding: var(--s-3);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-primary-bg);
+}
+.today-label { color: var(--c-text-2); font-size: 24rpx; }
+.today-value { color: var(--c-primary); font-size: 28rpx; font-weight: 500; }
 </style>
