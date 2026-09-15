@@ -3,7 +3,7 @@
  *
  * 这一层和 services/recipe.ts 是同一套写法：
  *   1. 发请求交给 services/http.ts 统一处理（拼地址、带令牌、解析 { code, message, data }）；
- *   2. 把后端下划线字段（created_by_nickname）转成前端驼峰（createdByName），
+ *   2. 把后端下划线字段转成前端驼峰（如 category_name → categoryName），
  *      转换只在这一个文件做，页面不用关心后端命名习惯。
  *
  * 关于权限：冰箱也是"家庭共享域"，可见范围由"是不是这个家庭成员"决定，判断全在后端。
@@ -61,8 +61,6 @@ export interface FridgeItem {
   note: string;
   /** 是否临近过期或已过期（后端按今天+7天窗口算出） */
   isExpiring: boolean;
-  /** 添加者昵称，后端查不到时为空字符串 */
-  createdByName: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,7 +96,6 @@ function toItem(dto: FridgeItemDto): FridgeItem {
     expiryDate: dto.expiry_date || null,
     note: dto.note || '',
     isExpiring: dto.is_expiring,
-    createdByName: dto.created_by_nickname || '',
     createdAt: dto.created_at,
     updatedAt: dto.updated_at,
   };

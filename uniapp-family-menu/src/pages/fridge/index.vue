@@ -78,7 +78,6 @@
           </view>
 
           <text v-if="item.note" class="card-note">{{ item.note }}</text>
-          <text class="card-by">{{ item.createdByName ? '由 ' + item.createdByName + ' 添加' : '' }}</text>
 
           <!-- 删除：仅创建人。普通成员看不到这个按钮，只能浏览 -->
           <view
@@ -385,7 +384,6 @@ function removeItem(item: FridgeItem): void {
   font-size: 23rpx;
   line-height: 1.6;
 }
-.card-by { display: block; margin-top: var(--s-1); color: var(--c-text-3); font-size: 21rpx; }
 .card-del {
   position: absolute;
   top: var(--s-3);

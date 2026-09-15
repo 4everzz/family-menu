@@ -104,10 +104,9 @@
         {{ pending ? '正在保存…' : isEdit ? '保存修改' : '加入冰箱' }}
       </view>
 
-      <view v-if="isEdit" class="delete-btn" hover-class="tap" @click="confirmDelete">删除这件食材</view>
+        <view v-if="isEdit" class="delete-btn" hover-class="tap" @click="confirmDelete">删除这件食材</view>
 
-      <text v-if="metaLine" class="page-note">{{ metaLine }}</text>
-    </template>
+      </template>
   </view>
 </template>
 
@@ -144,7 +143,6 @@ const itemId = ref('');
 const loading = ref(true);
 const pending = ref(false);
 const focusedField = ref('');
-const metaLine = ref('');
 
 /** 表单内容。reactive 比四个 ref 整齐 */
 const form = ref({
@@ -203,7 +201,6 @@ async function load(): Promise<void> {
         expiryDate: item.expiryDate || '',
         note: item.note,
       };
-      metaLine.value = item.createdByName ? `由 ${item.createdByName} 添加` : '';
       uni.setNavigationBarTitle({ title: '编辑食材' });
     } else {
       uni.setNavigationBarTitle({ title: '新增食材' });
@@ -396,5 +393,4 @@ onLoad((options) => {
   font-size: 28rpx;
   font-weight: 500;
 }
-.page-note { display: block; margin-top: var(--s-4); color: var(--c-text-3); font-size: 22rpx; text-align: center; }
 </style>

@@ -116,8 +116,6 @@ const recipe = ref<Recipe>({
   spiceOptions: [],
   defaultSpice: '',
   isSoldOut: false,
-  createdByName: '',
-  createdBy: 0,
   updatedAt: '',
 });
 

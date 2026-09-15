@@ -3,7 +3,7 @@
  *
  * 这一层做两件事：
  *   1. 发请求（拼地址、带令牌交给 services/http.ts 统一处理）；
- *   2. 把后端的下划线字段名（created_by_nickname）转成前端驼峰（createdByName）。
+ *   2. 把后端的下划线字段名转成前端驼峰（如 category_name → categoryName）。
  *      转换只在这一个文件里做，页面代码就不用关心后端的命名习惯，
  *      将来后端改字段名也只需要改这里。
  *
@@ -98,10 +98,6 @@ export interface Recipe {
   defaultSpice: SpiceLevel | '';
   /** 「今天不做」：仍能在菜单里看到，但不能加进点单 */
   isSoldOut: boolean;
-  /** 添加者昵称，后端查不到时为空字符串 */
-  createdByName: string;
-  /** 添加者用户 ID，留着以后做"只看我加的"这类功能 */
-  createdBy: number;
   /** 最后修改时间（后端返回的 ISO 字符串） */
   updatedAt: string;
 }
@@ -153,8 +149,6 @@ function toRecipe(dto: RecipeDto): Recipe {
     spiceOptions,
     defaultSpice,
     isSoldOut: Boolean(dto.is_sold_out),
-    createdByName: dto.created_by_nickname || '',
-    createdBy: dto.created_by,
     updatedAt: dto.updated_at,
   };
 }
