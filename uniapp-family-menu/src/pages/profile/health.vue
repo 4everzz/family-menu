@@ -1,15 +1,33 @@
 <template>
   <view class="health-page">
+    <!-- 下拉打开时的透明遮罩：点别处收起。透明不挡视觉，只接住"点空白处关闭" -->
+    <view v-if="openPicker" class="picker-mask" @click="closePicker" />
+
     <!-- 基本信息：性别 / 身高 / 体重 / 目标 -->
     <view class="group">
       <text class="group-title">基本信息</text>
       <view class="entry-group">
-        <view class="entry-item" hover-class="tap" @click="pickGender">
+        <!--
+          性别/目标用**卡片内小下拉**（用户定的交互）：
+          点行就在这行下面展开一个小菜单（约卡片 1/3 宽、贴右侧箭头），
+          不再弹全屏 ActionSheet——选个性别这种一步操作，不该把整个屏幕都罩住。
+        -->
+        <view class="entry-item picker-row" hover-class="tap" @click="togglePicker('gender')">
           <view class="entry-main">
             <text class="entry-name">性别</text>
             <text class="entry-desc">{{ genderLabel || '未设置' }}</text>
           </view>
           <text class="entry-arrow">›</text>
+          <view v-if="openPicker === 'gender'" class="inline-dropdown" @click.stop>
+            <view
+              v-for="o in GENDER_OPTIONS"
+              :key="o.value"
+              class="dropdown-option"
+              :class="{ active: gender === o.value }"
+              hover-class="tap"
+              @click="chooseGender(o)"
+            >{{ o.label }}</view>
+          </view>
         </view>
 
         <view class="entry-item">
@@ -40,12 +58,22 @@
           <text class="field-unit">kg</text>
         </view>
 
-        <view class="entry-item" hover-class="tap" @click="pickGoal">
+        <view class="entry-item picker-row" hover-class="tap" @click="togglePicker('goal')">
           <view class="entry-main">
             <text class="entry-name">目标</text>
             <text class="entry-desc">{{ goalLabel || '未设置' }}</text>
           </view>
           <text class="entry-arrow">›</text>
+          <view v-if="openPicker === 'goal'" class="inline-dropdown" @click.stop>
+            <view
+              v-for="o in GOAL_OPTIONS"
+              :key="o.value"
+              class="dropdown-option"
+              :class="{ active: goal === o.value }"
+              hover-class="tap"
+              @click="chooseGoal(o)"
+            >{{ o.label }}</view>
+          </view>
         </view>
       </view>
     </view>
@@ -74,31 +102,35 @@
       {{ saving ? '保存中…' : '保存档案' }}
     </button>
 
-    <!-- 拍照识别热量 -->
-    <view class="group">
-      <text class="group-title">拍照识别热量</text>
-      <view class="entry-group">
-        <button class="photo-btn" :disabled="busy" @click="onRecognize">
-          {{ busy ? '识别中…' : '拍照 / 从相册选择' }}
-        </button>
-
-        <view v-if="mock" class="mock-hint">演示数据：把可用的 DashScope Key 填进后端 .env 即自动接通真实识别</view>
-
-        <view v-for="(item, idx) in estimates" :key="idx" class="estimate-card">
-          <view class="estimate-main">
-            <text class="estimate-name">{{ item.food_name }}</text>
-            <text class="estimate-kcal">{{ Math.round(item.calories) }} kcal</text>
-            <text v-if="item.portion" class="estimate-portion">{{ item.portion }}</text>
-          </view>
-          <button class="estimate-save" @click="saveEstimate(item)">记下</button>
-        </view>
-      </view>
-    </view>
+    <!--
+      拍照识别热量已从本页移除（用户定的）：它后期整体挪到「AI」栏，
+      识别结果"一键计入热量"的交互到那时保留。这里先留手动记一笔，
+      否则识别挪走后热量记录就没有任何录入途径、整个模块成死页。
+    -->
 
     <!-- 热量记录：按天分组，算每日合计 -->
     <view class="group">
       <text class="group-title">热量记录</text>
-      <view v-if="groupedLogs.length === 0" class="empty-tip">还没有记录，拍张照或手动添加吧</view>
+
+      <!-- 手动记一笔：吃了什么 + 多少千卡，一条搞定 -->
+      <view class="entry-group manual-add">
+        <input
+          class="manual-name"
+          v-model="newFood"
+          placeholder="吃了什么，如 番茄炒蛋"
+          placeholder-class="field-placeholder"
+        />
+        <input
+          class="manual-kcal"
+          v-model="newKcal"
+          type="digit"
+          placeholder="kcal"
+          placeholder-class="field-placeholder"
+        />
+        <view class="manual-btn" hover-class="tap" @click="addManual">记一笔</view>
+      </view>
+
+      <view v-if="groupedLogs.length === 0" class="empty-tip">还没有记录，在上面记一笔吧</view>
 
       <view v-for="[day, group] in groupedLogs" :key="day" class="entry-group log-group">
         <view class="log-head">
@@ -127,10 +159,12 @@
 /**
  * 健康档案页（个人私有域）。
  *
- * 三块能力，都走后端已就绪的接口（services/health.ts）：
+ * 能力块，都走后端已就绪的接口（services/health.ts）：
  *   · 基本信息 + 饮食备注 —— updateHealthProfile（POST /users/me/health-profile，部分更新）；
- *   · 拍照识别热量 —— chooseImageFromAlbum → uploadImage（拿相对路径）→ recognizeFood；
- *   · 热量记录 —— 列表 / 新增 / 删除，按天汇总显示。
+ *   · 热量记录 —— 手动记一笔 / 列表 / 删除，按天汇总显示。
+ *
+ * 拍照识别热量**不放在这一页**（用户定的）：后期整体挪到「AI」栏去做，
+ * 识别结果"一键计入热量"的交互保留到那时的设计里（后端 /vision/recognize-food 不动）。
  *
  * 身份完全由后端从令牌解析，前端不传 user_id。没登录时只渲染空态、不发请求。
  */
@@ -138,16 +172,13 @@
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { resolveFileUrl } from '../../services/http';
-import { chooseImageFromAlbum, uploadImage } from '../../services/upload';
 import {
   addCalorieLog,
   deleteCalorieLog,
   fetchCalorieLogs,
   fetchHealthProfile,
-  recognizeFood,
   updateHealthProfile,
   type CalorieLog,
-  type FoodEstimate,
   type Gender,
   type Goal,
   type HealthProfile,
@@ -163,12 +194,6 @@ const goal = ref<Goal | ''>('');
 const diet = ref('');
 
 const saving = ref(false);
-const busy = ref(false);
-
-// 识别结果
-const estimates = ref<FoodEstimate[]>([]);
-const mock = ref(false);
-const lastImageUrl = ref<string | null>(null);
 
 // 记录列表
 const logs = ref<CalorieLog[]>([]);
@@ -254,66 +279,52 @@ async function onSave(): Promise<void> {
   }
 }
 
-// ============ 选择器 ============
-function pickGender(): void {
-  uni.showActionSheet({
-    itemList: GENDER_OPTIONS.map((o) => o.label),
-    success: (res) => {
-      gender.value = GENDER_OPTIONS[res.tapIndex].value;
-    },
-  });
+// ============ 卡片内小下拉 ============
+/** 当前展开的下拉：gender / goal，空串表示都没开（同一时间只开一个） */
+const openPicker = ref<'gender' | 'goal' | ''>('');
+
+function togglePicker(which: 'gender' | 'goal'): void {
+  openPicker.value = openPicker.value === which ? '' : which;
 }
 
-function pickGoal(): void {
-  uni.showActionSheet({
-    itemList: GOAL_OPTIONS.map((o) => o.label),
-    success: (res) => {
-      goal.value = GOAL_OPTIONS[res.tapIndex].value;
-    },
-  });
+function closePicker(): void {
+  openPicker.value = '';
 }
 
-// ============ 拍照识别 ============
-async function onRecognize(): Promise<void> {
-  if (busy.value) return;
+function chooseGender(o: { label: string; value: Gender }): void {
+  gender.value = o.value;
+  closePicker();
+}
 
-  let filePath: string;
-  try {
-    filePath = await chooseImageFromAlbum();
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('cancel')) return;
-    uni.showToast({ title: error instanceof Error ? error.message : '选图失败', icon: 'none' });
+function chooseGoal(o: { label: string; value: Goal }): void {
+  goal.value = o.value;
+  closePicker();
+}
+
+// ============ 手动记一笔 ============
+const newFood = ref('');
+const newKcal = ref('');
+
+/** 手动记一条热量。校验放在前端做一层（后端还有自己的校验），提示用中文 */
+async function addManual(): Promise<void> {
+  const name = newFood.value.trim();
+  const kcal = parseFloat(newKcal.value);
+  if (!name) {
+    uni.showToast({ title: '先写吃了什么', icon: 'none' });
     return;
   }
-
-  busy.value = true;
-  try {
-    const result = await uploadImage(filePath);
-    const resp = await recognizeFood(result.url);
-    mock.value = resp.mock;
-    estimates.value = resp.items;
-    lastImageUrl.value = result.url;
-  } catch (error) {
-    uni.showToast({ title: error instanceof Error ? error.message : '识别失败', icon: 'none' });
-  } finally {
-    busy.value = false;
+  if (Number.isNaN(kcal) || kcal <= 0) {
+    uni.showToast({ title: '热量要填大于 0 的数字', icon: 'none' });
+    return;
   }
-}
-
-async function saveEstimate(item: FoodEstimate): Promise<void> {
   try {
-    await addCalorieLog({
-      food_name: item.food_name,
-      calories: item.calories,
-      portion: item.portion,
-      image_url: lastImageUrl.value,
-      source: 'vision',
-    });
+    await addCalorieLog({ food_name: name, calories: kcal, source: 'manual' });
+    newFood.value = '';
+    newKcal.value = '';
     uni.showToast({ title: '已记录', icon: 'success' });
-    estimates.value = [];
     await loadLogs();
   } catch (error) {
-    uni.showToast({ title: error instanceof Error ? error.message : '保存失败', icon: 'none' });
+    uni.showToast({ title: error instanceof Error ? error.message : '记录失败', icon: 'none' });
   }
 }
 
@@ -352,12 +363,21 @@ onShow(load);
   font-size: 23rpx;
 }
 
+/* 不用 overflow:hidden 裁圆角——性别/目标的小下拉要从卡片里伸出来，
+   裁了会被切掉。圆角改由首尾行自己承担 */
 .entry-group {
   border: 2rpx solid var(--c-border);
   border-radius: var(--r-lg);
   background: var(--c-surface);
   box-shadow: var(--shadow-card);
-  overflow: hidden;
+}
+.entry-item:first-child {
+  border-top-left-radius: var(--r-lg);
+  border-top-right-radius: var(--r-lg);
+}
+.entry-item:last-child {
+  border-bottom-left-radius: var(--r-lg);
+  border-bottom-right-radius: var(--r-lg);
 }
 .entry-item {
   display: flex;
@@ -420,54 +440,67 @@ onShow(load);
 .save-btn--disabled { background: var(--c-muted); color: var(--c-text-3); }
 .save-btn::after { border: none; }
 
-/* 拍照按钮：和保存按钮同款主色 */
-.photo-btn {
-  margin: var(--s-3);
-  border: none;
-  border-radius: var(--r-lg);
-  background: var(--c-primary);
-  color: #fff;
-  font-size: 29rpx;
-  line-height: 88rpx;
+/* ---------- 卡片内小下拉 ----------
+   贴着行右侧箭头往下展开，宽度约卡片 1/3（用户定的）。
+   遮罩透明、z-index 20；下拉 30 压在遮罩上，也压住下面的分组。 */
+.picker-row { position: relative; }
+.picker-mask { position: fixed; inset: 0; z-index: 20; background: transparent; }
+.inline-dropdown {
+  position: absolute;
+  top: calc(100% + 6rpx);
+  right: var(--s-3);
+  z-index: 30;
+  width: 33%;
+  min-width: 200rpx;
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
 }
-.photo-btn[disabled] { background: var(--c-muted); color: var(--c-text-3); }
-.photo-btn::after { border: none; }
-
-/* 占位数据提示 */
-.mock-hint {
-  margin: 0 var(--s-3) var(--s-3);
-  padding: var(--s-2) var(--s-3);
-  border-radius: var(--r-sm);
-  background: var(--c-muted);
+.dropdown-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
   color: var(--c-text-2);
-  font-size: 22rpx;
-  line-height: 1.5;
+  font-size: 26rpx;
+}
+.dropdown-option + .dropdown-option { border-top: 2rpx solid var(--c-border); }
+.dropdown-option.active {
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+  font-weight: 500;
 }
 
-/* 识别结果卡片 */
-.estimate-card {
+/* ---------- 手动记一笔 ---------- */
+.manual-add {
   display: flex;
   align-items: center;
   gap: var(--s-2);
+  margin-bottom: var(--s-2);
   padding: var(--s-2) var(--s-3);
-  border-top: 2rpx solid var(--c-border);
 }
-.estimate-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4rpx; }
-.estimate-name { color: var(--c-text); font-size: 28rpx; font-weight: 500; }
-.estimate-kcal { color: var(--c-primary); font-size: 26rpx; }
-.estimate-portion { color: var(--c-text-2); font-size: 22rpx; }
-.estimate-save {
+.manual-name { flex: 1; min-width: 0; height: var(--touch-min); color: var(--c-text); font-size: 27rpx; }
+.manual-kcal {
+  flex: 0 0 140rpx;
+  width: 140rpx;
+  height: var(--touch-min);
+  color: var(--c-text);
+  font-size: 27rpx;
+  text-align: right;
+}
+.manual-btn {
   flex: 0 0 auto;
-  margin: 0;
-  padding: 0 var(--s-4);
-  border: 2rpx solid var(--c-primary);
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--c-primary);
+  display: flex;
+  align-items: center;
+  height: var(--touch-min);
+  padding: 0 var(--s-3);
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: #fff;
   font-size: 25rpx;
-  line-height: 64rpx;
 }
-.estimate-save::after { border: none; }
 
 /* 记录分组 */
 .empty-tip { color: var(--c-text-3); font-size: 25rpx; text-align: center; padding: var(--s-5) 0; }

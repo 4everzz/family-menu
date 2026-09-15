@@ -17,34 +17,6 @@
     <view v-if="loading" class="tip">正在读取…</view>
 
     <template v-else>
-      <!-- 筛选：分类 + 存放。用_chip 同款药丸，和菜单页风格一致 -->
-      <view class="filters">
-        <view class="filter-scroll">
-          <view class="filter-track">
-            <view
-              v-for="c in categories"
-              :key="'c-' + c"
-              class="chip"
-              :class="{ active: activeCategory === c }"
-              hover-class="tap"
-              @click="activeCategory = c"
-            >{{ c }}</view>
-          </view>
-        </view>
-        <view class="filter-scroll">
-          <view class="filter-track">
-            <view
-              v-for="s in storages"
-              :key="'s-' + s"
-              class="chip"
-              :class="{ active: activeStorage === s }"
-              hover-class="tap"
-              @click="activeStorage = s"
-            >{{ s }}</view>
-          </view>
-        </view>
-      </view>
-
       <!-- 搜索框：按食材名或备注模糊搜 -->
       <view class="search">
         <input
@@ -56,42 +28,75 @@
         />
       </view>
 
-      <!-- 食材列表 -->
-      <view v-if="items.length" class="list">
-        <view
-          v-for="item in items"
-          :key="item.id"
-          class="card"
-          :class="{ expiring: item.isExpiring, 'has-del': isOwner }"
-          hover-class="tap"
-          @click="openItem(item)"
-        >
-          <view class="card-head">
-            <text class="card-name">{{ item.name }}</text>
-            <text class="card-qty">{{ formatQty(item) }}</text>
-          </view>
-
-          <view class="card-tags">
-            <text v-if="item.category" class="tag">{{ item.category }}</text>
-            <text v-if="item.storage" class="tag tag-storage">{{ item.storage }}</text>
-            <text v-if="item.expiryDate" class="tag" :class="expiryTagClass(item)">{{ expiryLabel(item) }}</text>
-          </view>
-
-          <text v-if="item.note" class="card-note">{{ item.note }}</text>
-
-          <!-- 删除：仅创建人。普通成员看不到这个按钮，只能浏览 -->
+      <!--
+        左右分栏（结构照菜单页）：
+        左侧竖排「存放位置」（全部/冷藏/冷冻/常温），右侧是分类药丸 + 食材列表。
+        原先两排横向药丸叠在一起显得冗余；存放只有四项，天生适合侧栏。
+      -->
+      <view class="fridge-layout">
+        <view class="storage-sidebar">
           <view
-            v-if="isOwner"
-            class="card-del"
+            v-for="s in storages"
+            :key="'s-' + s"
+            class="storage-button"
+            :class="{ active: activeStorage === s }"
             hover-class="tap"
-            @click.stop="removeItem(item)"
-          >删除</view>
+            @click="activeStorage = s"
+          >{{ s }}</view>
         </view>
-      </view>
 
-      <view v-else class="empty">
-        <text class="empty-text">这个分类下还没有食材</text>
-        <text v-if="isOwner" class="empty-hint">点右下角「添加食材」记一笔</text>
+        <view class="fridge-area">
+          <view class="filter-scroll">
+            <view class="filter-track">
+              <view
+                v-for="c in categories"
+                :key="'c-' + c"
+                class="chip"
+                :class="{ active: activeCategory === c }"
+                hover-class="tap"
+                @click="activeCategory = c"
+              >{{ c }}</view>
+            </view>
+          </view>
+
+          <!-- 食材列表 -->
+          <view v-if="items.length" class="list">
+            <view
+              v-for="item in items"
+              :key="item.id"
+              class="card"
+              :class="{ expiring: item.isExpiring, 'has-del': isOwner }"
+              hover-class="tap"
+              @click="openItem(item)"
+            >
+              <view class="card-head">
+                <text class="card-name">{{ item.name }}</text>
+                <text class="card-qty">{{ formatQty(item) }}</text>
+              </view>
+
+              <view class="card-tags">
+                <text v-if="item.category" class="tag">{{ item.category }}</text>
+                <text v-if="item.storage" class="tag tag-storage">{{ item.storage }}</text>
+                <text v-if="item.expiryDate" class="tag" :class="expiryTagClass(item)">{{ expiryLabel(item) }}</text>
+              </view>
+
+              <text v-if="item.note" class="card-note">{{ item.note }}</text>
+
+              <!-- 删除：仅创建人。普通成员看不到这个按钮，只能浏览 -->
+              <view
+                v-if="isOwner"
+                class="card-del"
+                hover-class="tap"
+                @click.stop="removeItem(item)"
+              >删除</view>
+            </view>
+          </view>
+
+          <view v-else class="empty">
+            <text class="empty-text">这个分类下还没有食材</text>
+            <text v-if="isOwner" class="empty-hint">点右下角「添加食材」记一笔</text>
+          </view>
+        </view>
       </view>
     </template>
 
@@ -245,12 +250,15 @@ function removeItem(item: FridgeItem): void {
 
 <style scoped>
 .fridge-page {
-  min-height: 100vh;
-  padding: var(--s-4) var(--s-3) calc(var(--s-7) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: var(--s-4) var(--s-3) 0;
   box-sizing: border-box;
 }
 
 .space-bar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--s-3);
@@ -273,6 +281,7 @@ function removeItem(item: FridgeItem): void {
 }
 
 .alert {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--s-2);
@@ -308,12 +317,41 @@ function removeItem(item: FridgeItem): void {
 
 .tip { margin-top: 60rpx; color: var(--c-text-3); font-size: 24rpx; text-align: center; }
 
-/* 筛选药丸：横向滚动，多了也不挤 */
-.filters { margin-top: var(--s-3); display: flex; flex-direction: column; gap: var(--s-2); }
-/* 横向滚动用原生 CSS 实现（overflow-x:auto），不再用 scroll-view。
-   scroll-view 在「loading 切换导致整块重挂载」时，内部会去写 scrollLeft 但节点引用为 null，
-   抛出 "Cannot set property 'scrollLeft' of null"（DCloud 官方论坛长期存在该问题）。
-   筛选药丸不需要 scroll 事件/scroll-into-view，纯 CSS 滚动即可，且各端行为一致。 */
+/* 左右分栏：左侧存放侧栏固定宽度，右侧分类药丸 + 列表吃掉剩余空间（结构照菜单页） */
+.fridge-layout { display: flex; gap: var(--s-2); flex: 1; min-height: 0; margin-top: var(--s-3); }
+/* 侧栏与列表区用原生 CSS overflow 滚动，不用 scroll-view——
+   scroll-view 在 loading 切换重挂载时会写 scrollLeft/scrollTop 而节点引用为 null，
+   抛 "of null" 异常（DCloud 老问题，详见菜单页同款注释）。 */
+.storage-sidebar { flex: 0 0 176rpx; width: 176rpx; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.storage-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
+  margin-bottom: var(--s-1);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: 25rpx;
+}
+.storage-button.active {
+  border-color: var(--c-primary);
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+  font-weight: 500;
+}
+.fridge-area {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* 底部留出 FAB 的高度，最后一张卡片不被「添加食材」盖住 */
+  padding-bottom: 200rpx;
+  box-sizing: border-box;
+}
+/* 分类药丸：横向滚动，多了也不挤 */
 .filter-scroll { width: 100%; white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 .filter-scroll::-webkit-scrollbar { display: none; }
 .filter-track { display: inline-flex; gap: var(--s-2); padding: 2rpx 0; }
@@ -336,7 +374,7 @@ function removeItem(item: FridgeItem): void {
   font-weight: 500;
 }
 
-.search { margin-top: var(--s-3); }
+.search { flex: 0 0 auto; margin-top: var(--s-3); }
 .search-input {
   height: var(--touch-min);
   padding: 0 var(--s-3);
