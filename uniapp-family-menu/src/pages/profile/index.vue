@@ -96,6 +96,17 @@
           </view>
           <text class="entry-arrow">›</text>
         </view>
+
+        <view class="entry-item" hover-class="tap" @click="goHealth">
+          <view class="entry-icon" :style="{ background: 'var(--c-tint-sage)' }">
+            <image class="entry-icon-img" src="/static/icons/file-text.png" mode="aspectFit" />
+          </view>
+          <view class="entry-main">
+            <text class="entry-name">健康档案</text>
+            <text class="entry-desc">身高体重、饮食备注与热量记录</text>
+          </view>
+          <text class="entry-arrow">›</text>
+        </view>
       </view>
     </view>
 
