@@ -13,7 +13,7 @@
         分区切换：默认收藏夹永远在第一位（后端保证，它的 id 是 null）。
         用横向滚动而不是换行——分区是用户自己建的，数量不受我们控制。
       -->
-      <scroll-view class="partition-scroll" scroll-x :show-scrollbar="false">
+      <view class="partition-scroll">
         <view class="partition-inner">
           <view
             v-for="item in partitions"
@@ -26,7 +26,7 @@
             {{ item.name }} {{ item.count }}
           </view>
         </view>
-      </scroll-view>
+      </view>
 
       <view v-if="items.length" class="list">
         <view
@@ -254,8 +254,12 @@ onShow(load);
 .error-hint { color: var(--c-text-2); font-size: 23rpx; line-height: 1.6; }
 .retry-btn { display: flex; align-items: center; justify-content: center; min-height: var(--touch-min); margin-top: var(--s-2); border-radius: var(--r-md); background: var(--c-primary); color: #ffffff; font-size: 26rpx; }
 
-.partition-scroll { flex: 0 0 auto; width: 100%; }
-.partition-inner { display: flex; gap: var(--s-2); padding-bottom: var(--s-1); }
+/* 分区条横向滚动用原生 CSS（overflow-x:auto）代替 scroll-view——
+   规避 scroll-view 在重挂载时写 scrollLeft 报 null 的框架问题。
+   inner 用 inline-flex 才能随内容撑开、让父级出现横向滚动条。 */
+.partition-scroll { flex: 0 0 auto; width: 100%; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.partition-scroll::-webkit-scrollbar { display: none; }
+.partition-inner { display: inline-flex; gap: var(--s-2); padding-bottom: var(--s-1); }
 .partition-chip {
   flex: 0 0 auto;
   display: flex;

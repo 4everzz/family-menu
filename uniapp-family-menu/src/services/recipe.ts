@@ -25,6 +25,19 @@
 import type { Category } from './category';
 import { request } from './http';
 
+/**
+ * 辣度档位。
+ *
+ * ⚠️ **必须和后端 `app/models/recipe.py` 的 `SPICE_LEVELS` 完全一致**（连顺序也要一致）：
+ *   后端只认这四个字符串，传别的值会被静默丢掉；
+ *   而顺序决定了点单时那几个按钮的排列。
+ * 这份值是从旧小程序版继承来的（那边云函数和两个页面里各写了一遍，值完全相同）。
+ */
+export const SPICE_LEVELS = ['不辣', '微辣', '正常辣', '特辣'] as const;
+
+/** 辣度档位（联合类型，写错值编译期就能发现） */
+export type SpiceLevel = (typeof SPICE_LEVELS)[number];
+
 /** 后端返回的菜谱结构（原始字段，下划线风格） */
 interface RecipeDto {
   id: number;
@@ -34,6 +47,9 @@ interface RecipeDto {
   category_name: string;
   description: string | null;
   image_url: string | null;
+  spice_options: string[] | null;
+  default_spice: string | null;
+  is_sold_out: boolean;
   created_by: number;
   created_by_nickname: string | null;
   created_at: string;
@@ -69,8 +85,19 @@ export interface Recipe {
   categoryName: string;
   /** 简介，后端没填时统一给空字符串，页面不用判 null */
   description: string;
-  /** 图片地址，第一版不做图片上传，基本为空 */
+  /** 图片地址。为空时页面用「分类色底 + 菜名首字」占位，而不是留一片空白 */
   imageUrl: string;
+  /**
+   * 这道菜支持哪几档辣度。
+   * 空数组表示**点它时不问辣度**（汤、饮品这类），前端据此决定要不要弹辣度选择。
+   */
+  spiceOptions: SpiceLevel[];
+  /**
+   * 默认辣度。后端保证它一定在 spiceOptions 里；为空只可能是 spiceOptions 也为空。
+   */
+  defaultSpice: SpiceLevel | '';
+  /** 「今天不做」：仍能在菜单里看到，但不能加进点单 */
+  isSoldOut: boolean;
   /** 添加者昵称，后端查不到时为空字符串 */
   createdByName: string;
   /** 添加者用户 ID，留着以后做"只看我加的"这类功能 */
@@ -93,10 +120,27 @@ export interface RecipeInput {
   categoryId: string;
   description: string;
   imageUrl: string;
+  /** 支持哪几档辣度。空数组 = 点这道菜时不问辣度 */
+  spiceOptions: SpiceLevel[];
+  /** 默认辣度。必须在 spiceOptions 里；留空的话后端取第一档 */
+  defaultSpice: string;
+  /** 「今天不做」。仍能在菜单里看到，但不能加进点单 */
+  isSoldOut: boolean;
 }
 
 /** 把后端字段转成前端结构 */
 function toRecipe(dto: RecipeDto): Recipe {
+  // 只留下后端认可的四档。后端在写入时已经归一化过一次，
+  // 这里再过滤是防脏数据：万一有人直接改库塞了个奇怪的值，
+  // 页面也不会渲染出一个永远点不通的辣度按钮。
+  const spiceOptions = (Array.isArray(dto.spice_options) ? dto.spice_options : []).filter(
+    (value): value is SpiceLevel => (SPICE_LEVELS as readonly string[]).includes(value),
+  );
+  const defaultSpice =
+    dto.default_spice && spiceOptions.includes(dto.default_spice as SpiceLevel)
+      ? (dto.default_spice as SpiceLevel)
+      : '';
+
   return {
     id: String(dto.id),
     spaceId: String(dto.space_id),
@@ -106,6 +150,9 @@ function toRecipe(dto: RecipeDto): Recipe {
     // 后端返回 null 表示"没填"，统一成空字符串，页面里就不用到处判空
     description: dto.description || '',
     imageUrl: dto.image_url || '',
+    spiceOptions,
+    defaultSpice,
+    isSoldOut: Boolean(dto.is_sold_out),
     createdByName: dto.created_by_nickname || '',
     createdBy: dto.created_by,
     updatedAt: dto.updated_at,
@@ -169,6 +216,10 @@ export async function createRecipe(spaceId: string, input: RecipeInput): Promise
       // 但直接给 null 语义更清楚，也少一层转换
       description: input.description.trim() || null,
       image_url: input.imageUrl.trim() || null,
+      spice_options: input.spiceOptions,
+      // 没选默认档就给 null，后端会取第一档（而不是存一个空字符串进库）
+      default_spice: input.defaultSpice || null,
+      is_sold_out: input.isSoldOut,
     },
   });
   return toRecipe(dto);
@@ -190,6 +241,9 @@ export async function updateRecipe(
   if (input.categoryId !== undefined) data.category_id = Number(input.categoryId);
   if (input.description !== undefined) data.description = input.description.trim() || null;
   if (input.imageUrl !== undefined) data.image_url = input.imageUrl.trim() || null;
+  if (input.spiceOptions !== undefined) data.spice_options = input.spiceOptions;
+  if (input.defaultSpice !== undefined) data.default_spice = input.defaultSpice || null;
+  if (input.isSoldOut !== undefined) data.is_sold_out = input.isSoldOut;
 
   const dto = await request<RecipeDto>({
     url: `/spaces/${spaceId}/recipes/${recipeId}`,

@@ -15,7 +15,7 @@
     <template v-else>
       <!-- 分类筛选：横向滚动而不是换行铺开。
            分类数量由用户自己定，做成两行会把下面的列表挤下去 -->
-      <scroll-view class="filter-scroll" scroll-x :show-scrollbar="false">
+      <view class="filter-scroll">
         <view class="filter-inner">
           <view
             class="filter-chip"
@@ -36,7 +36,7 @@
             {{ item.name }} {{ item.recipeCount }}
           </view>
         </view>
-      </scroll-view>
+      </view>
 
       <view v-if="filtered.length" class="list">
         <view v-for="item in filtered" :key="item.id" class="row" hover-class="tap" @click="edit(item)">
@@ -193,7 +193,7 @@ onShow(() => {
   align-self: flex-start;
   display: flex;
   align-items: center;
-  height: 72rpx;
+  height: var(--touch-min);
   padding: 0 var(--s-4);
   border-radius: var(--r-pill);
   background: var(--c-primary);
@@ -201,13 +201,16 @@ onShow(() => {
   font-size: 25rpx;
 }
 
-.filter-scroll { width: 100%; white-space: nowrap; }
+/* 分类筛选条横向滚动用原生 CSS（overflow-x:auto）代替 scroll-view，
+   规避 scroll-view 重挂载时写 scrollLeft 报 null 的框架问题 */
+.filter-scroll { width: 100%; white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.filter-scroll::-webkit-scrollbar { display: none; }
 .filter-inner { display: inline-flex; align-items: center; gap: var(--s-2); padding: var(--s-1) 0 var(--s-3); }
 .filter-chip {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  height: 72rpx;
+  height: var(--touch-min);
   padding: 0 var(--s-3);
   border: 2rpx solid var(--c-border);
   border-radius: var(--r-pill);

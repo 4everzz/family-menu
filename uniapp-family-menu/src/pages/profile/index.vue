@@ -85,6 +85,17 @@
           </view>
           <text class="entry-arrow">›</text>
         </view>
+
+        <view class="entry-item" hover-class="tap" @click="goOrders">
+          <view class="entry-icon" :style="{ background: 'var(--c-tint-sand)' }">
+            <image class="entry-icon-img" src="/static/icons/rest.png" mode="aspectFit" />
+          </view>
+          <view class="entry-main">
+            <text class="entry-name">点单记录</text>
+            <text class="entry-desc">客人点了什么、还有什么没做</text>
+          </view>
+          <text class="entry-arrow">›</text>
+        </view>
       </view>
     </view>
 
@@ -133,6 +144,13 @@
  *    普通成员看到的是"菜谱由创建人维护"的说明卡片——
  *    这比"让他点进去、填完表单才被拒绝"要好得多。
  *    隐藏只是体验，真正的拦截在后端（SpaceService.ensure_owner）。
+ *
+ * 5. 「其他」里新增「点单记录」入口，和家庭冰箱并列。
+ *    家里来客人时，客人在菜单页选菜、提交点单，这一页是给做饭的人看的：
+ *    谁点了什么、还有什么没做。
+ *    它和冰箱有一处刻意不同——冰箱是长期共享的资料（只有创建人能改），
+ *    点单是一次性的请求（任何成员都能提，提交者本人和创建人能管），
+ *    所以这个入口对所有人显示。
  */
 
 import { computed, ref } from 'vue';
@@ -226,6 +244,17 @@ function goFavorites() {
 /** 家庭冰箱：家庭共享功能，按当前家庭组展示 */
 function goFridge() {
   uni.navigateTo({ url: '/pages/fridge/index' });
+}
+
+/**
+ * 点单记录：家里来客人时点的单，以及还没做的。
+ *
+ * 这一页对所有人可见——点单本来就是给全家人看的"今天要做什么菜"；
+ * 但"标记完成 / 删除"只有提交者本人和创建人能做，
+ * 那个判断在后端算好了（canManage 字段），前端只管照着显示按钮。
+ */
+function goOrders() {
+  uni.navigateTo({ url: '/pages/orders/index' });
 }
 
 /** 设置页：切换账号、切换家庭都在里面 */

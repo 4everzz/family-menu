@@ -19,7 +19,7 @@
     <template v-else>
       <!-- 筛选：分类 + 存放。用_chip 同款药丸，和菜单页风格一致 -->
       <view class="filters">
-        <scroll-view class="filter-scroll" scroll-x>
+        <view class="filter-scroll">
           <view class="filter-track">
             <view
               v-for="c in categories"
@@ -30,8 +30,8 @@
               @click="activeCategory = c"
             >{{ c }}</view>
           </view>
-        </scroll-view>
-        <scroll-view class="filter-scroll" scroll-x>
+        </view>
+        <view class="filter-scroll">
           <view class="filter-track">
             <view
               v-for="s in storages"
@@ -42,7 +42,7 @@
               @click="activeStorage = s"
             >{{ s }}</view>
           </view>
-        </scroll-view>
+        </view>
       </view>
 
       <!-- 搜索框：按食材名或备注模糊搜 -->
@@ -311,7 +311,12 @@ function removeItem(item: FridgeItem): void {
 
 /* 筛选药丸：横向滚动，多了也不挤 */
 .filters { margin-top: var(--s-3); display: flex; flex-direction: column; gap: var(--s-2); }
-.filter-scroll { width: 100%; white-space: nowrap; }
+/* 横向滚动用原生 CSS 实现（overflow-x:auto），不再用 scroll-view。
+   scroll-view 在「loading 切换导致整块重挂载」时，内部会去写 scrollLeft 但节点引用为 null，
+   抛出 "Cannot set property 'scrollLeft' of null"（DCloud 官方论坛长期存在该问题）。
+   筛选药丸不需要 scroll 事件/scroll-into-view，纯 CSS 滚动即可，且各端行为一致。 */
+.filter-scroll { width: 100%; white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.filter-scroll::-webkit-scrollbar { display: none; }
 .filter-track { display: inline-flex; gap: var(--s-2); padding: 2rpx 0; }
 .chip {
   flex: 0 0 auto;
@@ -334,7 +339,7 @@ function removeItem(item: FridgeItem): void {
 
 .search { margin-top: var(--s-3); }
 .search-input {
-  height: 80rpx;
+  height: var(--touch-min);
   padding: 0 var(--s-3);
   border: 2rpx solid var(--c-border);
   border-radius: var(--r-md);

@@ -510,7 +510,7 @@ onShow(load);
   align-self: flex-start;
   display: flex;
   align-items: center;
-  height: 72rpx;
+  height: var(--touch-min);
   padding: 0 var(--s-4);
   border-radius: var(--r-pill);
   background: var(--c-primary);

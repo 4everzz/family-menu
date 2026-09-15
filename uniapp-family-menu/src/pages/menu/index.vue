@@ -50,7 +50,7 @@
 
       <view class="menu-layout">
         <!-- 分类侧栏：条目 = 全部 + 这个家的分类，顺序完全照用后端 -->
-        <scroll-view class="category-sidebar" scroll-y>
+        <view class="category-sidebar">
           <view
             class="category-button"
             :class="{ active: activeCategoryId === '' }"
@@ -71,9 +71,9 @@
             <text class="category-name">{{ item.name }}</text>
             <text class="category-count">{{ item.recipeCount }}</text>
           </view>
-        </scroll-view>
+        </view>
 
-        <scroll-view class="recipe-area" scroll-y>
+        <view class="recipe-area">
           <view class="section-head">
             <text class="section-title">{{ activeCategoryName }}</text>
             <text class="section-count">{{ filtered.length }} 道菜</text>
@@ -81,30 +81,60 @@
 
           <view v-if="filtered.length" class="recipe-list">
             <view v-for="item in filtered" :key="item.id" class="recipe-card" hover-class="tap" @click="openDetail(item)">
-              <!-- 有图的菜显示缩略图；没图的就纯文字，不留空占位（和分类色块一个道理） -->
-              <image
-                v-if="item.imageUrl"
-                class="recipe-photo"
-                :src="resolveFileUrl(item.imageUrl)"
-                mode="aspectFill"
-              />
+              <!--
+                菜品视觉块（对照旧小程序版的 .dish-visual）。
+                有照片就显示照片；没照片时在**分类色底**上显示**菜名首字**。
+
+                为什么不干脆留空？因为一整列空白卡片根本认不出是哪道菜，
+                看着还像"功能没做完"。给个带颜色的首字，既能分辨类型又好辨认。
+              -->
+              <view class="dish-visual" :style="{ background: categoryTint(item) }">
+                <image
+                  v-if="item.imageUrl"
+                  class="dish-photo"
+                  :src="resolveFileUrl(item.imageUrl)"
+                  mode="aspectFill"
+                />
+                <text v-else class="dish-initial">{{ item.name.slice(0, 1) }}</text>
+              </view>
+
               <view class="recipe-copy">
                 <text class="recipe-name">{{ item.name }}</text>
-                <text class="recipe-desc">{{ item.description || '还没写简介' }}</text>
-                <text class="recipe-meta">{{ metaText(item) }}</text>
+                <!--
+                  没写简介就**整行不显示**（用户要求）。
+                  原来固定显示一句"还没写简介"，等于每张卡片都挂一句一样的话：
+                  既吵，又让人以为这菜谱是半成品。
+                -->
+                <text v-if="item.description" class="recipe-desc">{{ item.description }}</text>
+                <!-- 只显示分类。不显示"谁加的"（用户要求）——
+                     家里几个人一起维护菜谱，标了也没人看，反而占地方 -->
+                <text class="recipe-meta">{{ item.categoryName }}</text>
               </view>
+
               <!--
-                收藏星标：点一下收藏进默认栏，再点一下取消。
-                @click.stop 是关键——不然点星星会同时把卡片点开，跳去详情页。
+                「今天不做」的菜：显示标签、不给加。
+                注意它**仍然留在菜单里**——直接藏起来的话，用户会以为这道菜被删了。
               -->
-              <view class="fav-star" hover-class="tap" @click.stop="toggleFavorite(item)">
-                <image
-                  class="fav-star-img"
-                  :src="favoritedIds.has(item.id) ? '/static/icons/star-active.png' : '/static/icons/star.png'"
-                  mode="aspectFit"
-                />
+              <text v-if="item.isSoldOut" class="soldout-label">已售罄</text>
+
+              <!--
+                加入点单：同样必须 @click.stop，否则会顺手把详情页也打开。
+                已加过的菜显示份数而不是加号，用户一眼就知道"这道菜我点过了"。
+              -->
+              <view v-else class="dish-stepper" @click.stop>
+                <view
+                  v-if="cartQuantityOf(item.id) > 0"
+                  class="stepper-btn secondary"
+                  hover-class="tap"
+                  @click.stop="onDecreaseTap(item)"
+                >
+                  <text class="stepper-icon">−</text>
+                </view>
+                <text v-if="cartQuantityOf(item.id) > 0" class="stepper-qty">{{ cartQuantityOf(item.id) }}</text>
+                <view class="stepper-btn" hover-class="tap" @click.stop="onAddTap(item)">
+                  <text class="stepper-icon">+</text>
+                </view>
               </view>
-              <text class="recipe-arrow">›</text>
             </view>
           </view>
 
@@ -116,10 +146,62 @@
             <template v-else>这个家还没有菜谱。</template>
           </view>
 
-          <view class="bottom-space" />
-        </scroll-view>
+          <view class="bottom-space" :class="{ 'with-fab': cartTotal > 0 }" />
+        </view>
       </view>
     </template>
+
+    <!--
+      底部购物车栏。
+      结构和尺寸对照小程序版（miniprogram/pages/menu/index.wxml 的 .cart-bar）：
+      通栏药丸 + 左侧购物车图标（纯 CSS 画的篮子 + 份数角标）+ 中间"已选几道" + 右侧实心按钮。
+      刻意不显示金额——家里的菜不标价，点了也不付钱。
+    -->
+    <view v-if="cartTotal > 0" class="cart-bar">
+      <view class="cart-bar-main" hover-class="tap" @click="goCart">
+        <view class="cart-icon">
+          <view class="cart-icon-basket" />
+          <view class="cart-icon-wheel left" />
+          <view class="cart-icon-wheel right" />
+          <text class="cart-icon-badge">{{ cartTotal }}</text>
+        </view>
+        <view class="cart-bar-summary">
+          <text class="cart-bar-count">已选 {{ cartLines }} 道</text>
+          <text class="cart-bar-note">共 {{ cartTotal }} 份</text>
+        </view>
+      </view>
+      <view class="cart-bar-selected" hover-class="tap" @click="goCart">去提交</view>
+    </view>
+
+    <!--
+      辣度选择弹窗（对照旧小程序版的 .dish-modal）。
+      只在"这道菜设了辣度档位"时才弹——汤、饮品那类不问辣度的菜，
+      点加号就直接加进去了，不该为了一道不需要选的菜多弹一次窗。
+
+      默认选中的是这道菜的默认辣度，所以绝大多数情况下用户直接点"加进去"就行了。
+    -->
+    <view v-if="spiceDialogDish" class="spice-mask" @click="closeSpiceDialog">
+      <view class="spice-dialog" @click.stop>
+        <text class="spice-title">{{ spiceDialogDish.name }}</text>
+        <text class="spice-hint">选个辣度再加进点单</text>
+
+        <view class="spice-options">
+          <view
+            v-for="level in spiceDialogDish.spiceOptions"
+            :key="level"
+            class="spice-option"
+            :class="{ active: chosenSpice === level }"
+            hover-class="tap"
+            @click="chosenSpice = level"
+          >{{ level }}</view>
+        </view>
+
+        <view class="spice-actions">
+          <view class="spice-cancel" hover-class="tap" @click="closeSpiceDialog">取消</view>
+          <view class="spice-confirm" hover-class="tap" @click="confirmSpice">加进点单</view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -138,18 +220,25 @@
  *   所以现在这里只读——点卡片进的是只读详情页；
  *   增删改统一收在「我的 → 菜单管理」里。
  *
- *   旧的商家代码（扫码进店 / 购物车 / 订单 / 商家登录）已在转型清理时一并删除，
+ *   旧的商家代码（扫码进店 / 订单 / 商家登录）已在转型清理时一并删除，
  *   仓库里现在只剩家庭版这一套代码。
+ *
+ *   2026-09-15：这一页加回了「加入点单」（每张卡片右侧的 +，右下角是购物车浮标）。
+ *   它和当初删掉的那个购物车不是一回事——那个是"扫码进店 → 挑菜 → 结算下单"，
+ *   带价格和订单；现在是"家里来客人时，把想吃的菜攒起来一起提交"，没有价格也不用付款。
+ *   加菜只是存在本机的一段临时选择（utils/dish-cart.ts），**不改动任何家庭数据**，
+ *   所以和下面这条"这一页只读"的原则并不冲突。
  */
 
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
 import type { Category } from '../../services/category';
-import { favoriteRecipe, fetchFavoritedIds, unfavoriteRecipe } from '../../services/favorite';
 import { resolveFileUrl } from '../../services/http';
 import { fetchRecipes } from '../../services/recipe';
 import type { Recipe } from '../../services/recipe';
+import { addDish, decreaseDish, getCart } from '../../utils/dish-cart';
+import type { CartItem } from '../../utils/dish-cart';
 import { showError } from '../../utils/format';
 import { getCurrentSpaceId, getCurrentSpaceName, resolveCurrentSpace } from '../../utils/space-context';
 
@@ -157,8 +246,6 @@ const spaceId = ref('');
 const spaceName = ref('');
 const categories = ref<Category[]>([]);
 const recipes = ref<Recipe[]>([]);
-/** 我在这个家里已收藏的菜谱 ID。Set 只为 O(1) 判断"这颗星亮不亮" */
-const favoritedIds = ref<Set<string>>(new Set());
 /** 当前选中的分类 ID。空字符串代表「全部」，不是后端给的真实分类 */
 const activeCategoryId = ref('');
 const keyword = ref('');
@@ -167,12 +254,58 @@ const errorMessage = ref('');
 /** 是否已成功加载过一次：用来区分「首次进入显示加载中」和「从别处回来时静默刷新」 */
 const loadedOnce = ref(false);
 
+/**
+ * 点单购物车（本地状态，存在本机，不在后端）。
+ *
+ * 为什么放在本地而不是每加一道菜就往后端写一条？
+ *   客人翻菜单时会反复加减，每一步都发请求既慢又会产生一堆半成品数据；
+ *   等他点够了一起提交，"这单要做什么"才是这个场景真正关心的东西。
+ *   代价是换设备就没了——对这个场景完全可以接受。
+ */
+const cartItems = ref<CartItem[]>([]);
+
 
 /** 当前分类的名字，显示在右侧列表的标题上 */
 const activeCategoryName = computed(() => {
   if (!activeCategoryId.value) return '全部';
   return categories.value.find((item) => item.id === activeCategoryId.value)?.name || '全部';
 });
+
+/** 购物车总份数，显示在底部购物车栏的角标上 */
+const cartTotal = computed(() =>
+  cartItems.value.reduce((sum, item) => sum + item.quantity, 0),
+);
+
+/** 选了**几道菜**。和"几份"是两个数：3 道菜各 2 份 = 3 道 / 6 份 */
+const cartLines = computed(() => cartItems.value.length);
+
+/**
+ * 「菜谱 ID → 已点份数」的查找表。
+ *
+ * 卡片上要显示"这道菜我加了几份"。如果直接在模板里写
+ * `cartItems.find(...)`，列表里每张卡片每次渲染都要遍历一遍购物车；
+ * 预先算成 Map 之后是 O(1)，模板也好读。
+ *
+ * ⚠️ 同一道菜选了两种辣度时购物车里是两行（"一份微辣、一份特辣"），
+ * 所以这里是**按菜谱 ID 累加**，卡片上显示的是这道菜的总份数。
+ */
+const cartQuantityMap = computed(() => {
+  const map = new Map<string, number>();
+  for (const item of cartItems.value) {
+    map.set(item.recipeId, (map.get(item.recipeId) || 0) + item.quantity);
+  }
+  return map;
+});
+
+/** 查某道菜在购物车里的份数（没加过就是 0） */
+function cartQuantityOf(recipeId: string): number {
+  return cartQuantityMap.value.get(recipeId) || 0;
+}
+
+/** 从本机缓存重新读一次购物车（进页面、切换家庭组后都要读） */
+function refreshCart(): void {
+  cartItems.value = getCart(spaceId.value);
+}
 
 /** 关键词匹配：菜名或简介里出现就算命中 */
 function matchKeyword(item: Recipe, search: string): boolean {
@@ -188,11 +321,6 @@ const filtered = computed(() =>
       matchKeyword(item, keyword.value.trim()),
   ),
 );
-
-/** 卡片底部那行小字：分类 + 谁加的（后端查不到昵称时就只显示分类） */
-function metaText(item: Recipe): string {
-  return item.createdByName ? `${item.categoryName} · ${item.createdByName} 加的` : item.categoryName;
-}
 
 /**
  * 加载菜谱。
@@ -222,8 +350,6 @@ async function load(): Promise<void> {
     const list = await fetchRecipes(spaceId.value);
     categories.value = list.categories;
     recipes.value = list.recipes;
-    // 星标状态单独查：收藏是个人私有域，跟菜谱列表是两回事
-    favoritedIds.value = await fetchFavoritedIds(spaceId.value);
     loadedOnce.value = true;
 
     // 当前选中的分类如果已经不在清单里了（比如在「分类管理」里把它删了），回到「全部」——
@@ -238,6 +364,9 @@ async function load(): Promise<void> {
     errorMessage.value = error instanceof Error ? error.message : '读取菜谱失败，请稍后重试';
   } finally {
     loading.value = false;
+    // 每次进页面都重读一次购物车：用户可能刚在购物车页删了菜、或者提交后清空了，
+    // 而这一页的浮标和卡片上的份数都得跟着变
+    refreshCart();
   }
 }
 
@@ -258,26 +387,94 @@ function openDetail(item: Recipe): void {
 }
 
 /**
- * 收藏 / 取消收藏（收藏进「默认收藏夹」）。
+ * 分类底色。
  *
- * 改完 Set 之后**整体换一个新 Set**，而不是只调 add/delete：
- * Vue 3 的响应式虽然能追踪 Set，但整只替换最稳，不会出现"星星不亮"的诡异问题。
- * 换分区不在这里做——收藏页里有「移动」入口，菜单页只负责最快的那一步。
+ * 没上传照片的菜用「分类色底 + 菜名首字」占位，颜色从这里来：
+ * 按分类在清单里的**位置**轮着取四个设计令牌里的浅底。
+ * 用位置而不是分类 ID 取模，是因为 ID 是自增的、间隔很大，
+ * 取模之后颜色会挤在一两个色上，看不出"按类型区分"的效果。
  */
-async function toggleFavorite(item: Recipe): Promise<void> {
+const CATEGORY_TINTS = [
+  'var(--c-tint-clay)',
+  'var(--c-tint-sand)',
+  'var(--c-tint-sage)',
+  'var(--c-tint-stone)',
+];
+
+function categoryTint(item: Recipe): string {
+  const index = categories.value.findIndex((category) => category.id === item.categoryId);
+  return CATEGORY_TINTS[(index < 0 ? 0 : index) % CATEGORY_TINTS.length];
+}
+
+/** 正在选辣度的那道菜；null 表示弹窗没打开 */
+const spiceDialogDish = ref<Recipe | null>(null);
+/** 弹窗里当前选中的辣度 */
+const chosenSpice = ref('');
+
+/**
+ * 点「+」。
+ *
+ * 不问辣度的菜直接加进去；设了辣度档位的先弹出来让用户选——
+ * 这是旧小程序版的交互，家里几个人口味不一样时全靠它。
+ */
+function onAddTap(item: Recipe): void {
+  if (item.isSoldOut) return;
+
+  if (!item.spiceOptions.length) {
+    doAdd(item, '');
+    return;
+  }
+
+  // 默认选中这道菜的默认辣度，所以多数时候用户直接点「加进点单」就行了
+  chosenSpice.value = item.defaultSpice || item.spiceOptions[0];
+  spiceDialogDish.value = item;
+}
+
+/**
+ * 点卡片上的「−」。
+ *
+ * 从这道菜里减一份。因为辣度可能让同一道菜分成多行，
+ * 具体减哪一行交给 dish-cart.ts 按"默认辣度优先"的规则处理。
+ */
+function onDecreaseTap(item: Recipe): void {
+  cartItems.value = decreaseDish(spaceId.value, item.id, item.defaultSpice || '');
+}
+
+/** 关掉辣度弹窗（点遮罩或取消） */
+function closeSpiceDialog(): void {
+  spiceDialogDish.value = null;
+}
+
+/** 弹窗里点「加进点单」 */
+function confirmSpice(): void {
+  const dish = spiceDialogDish.value;
+  if (!dish) return;
+  doAdd(dish, chosenSpice.value);
+  spiceDialogDish.value = null;
+}
+
+/**
+ * 真正写进购物车。
+ *
+ * 这里**不校验**"我是不是创建人"之类的权限——因为点单是"提需求"，
+ * 任何家庭成员都能做（和改菜单不一样）。真正的拦截在后端。
+ */
+function doAdd(item: Recipe, spice: string): void {
   try {
-    if (favoritedIds.value.has(item.id)) {
-      await unfavoriteRecipe(item.id);
-      favoritedIds.value = new Set([...favoritedIds.value].filter((id) => id !== item.id));
-      uni.showToast({ title: '已取消收藏', icon: 'none' });
-    } else {
-      await favoriteRecipe(item.id, null);
-      favoritedIds.value = new Set([...favoritedIds.value, item.id]);
-      uni.showToast({ title: '已收藏到「默认收藏夹」', icon: 'none' });
-    }
+    cartItems.value = addDish(spaceId.value, item.id, item.name, spice);
+    // 加菜是高频操作，给一个短提示就行，不能打断翻菜单的节奏。
+    // 带辣度时把辣度一并报出来，用户才知道自己刚加的是哪一份
+    const suffix = spice ? `（${spice}）` : '';
+    uni.showToast({ title: `已加入「${item.name}」${suffix}`, icon: 'none' });
   } catch (error) {
+    // 只有超出上限时才会走到这里（消息是中文的，可直接展示）
     showError(error);
   }
+}
+
+/** 去购物车页（提交点单） */
+function goCart(): void {
+  uni.navigateTo({ url: '/pages/cart/index' });
 }
 
 onShow(load);
@@ -333,7 +530,7 @@ onShow(load);
   align-self: flex-start;
   display: flex;
   align-items: center;
-  height: 72rpx;
+  height: var(--touch-min);
   padding: 0 var(--s-4);
   border-radius: var(--r-pill);
   background: var(--c-primary);
@@ -357,7 +554,7 @@ onShow(load);
   align-self: flex-start;
   display: flex;
   align-items: center;
-  height: 80rpx;
+  height: var(--touch-min);
   margin-top: var(--s-1);
   padding: 0 var(--s-4);
   border-radius: var(--r-pill);
@@ -394,7 +591,12 @@ onShow(load);
 
 /* 左右分栏：左边分类固定宽度，右边菜谱列表吃掉剩余空间 */
 .menu-layout { display: flex; gap: var(--s-2); flex: 1; min-height: 0; margin-top: var(--s-3); }
-.category-sidebar { flex: 0 0 176rpx; width: 176rpx; height: 100%; }
+/* 分类侧栏与菜谱区原本用 scroll-view 做区域滚动；它们和筛选条一样，
+   都处在「loading 切换导致整块重挂载」的结构里，scroll-view 在重挂载时会写
+   scrollTop/scrollLeft 而节点引用为 null，抛 "of null" 异常。
+   这两个容器有固定高度（height:100%）且不需 scroll 事件，改用原生 CSS
+   overflow-y:auto 滚动，彻底规避该框架问题。 */
+.category-sidebar { flex: 0 0 176rpx; width: 176rpx; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .category-button {
   display: flex;
   align-items: center;
@@ -418,7 +620,7 @@ onShow(load);
 .category-count { color: var(--c-text-3); font-size: 21rpx; }
 .category-button.active .category-count { color: var(--c-primary); }
 
-.recipe-area { flex: 1; min-width: 0; height: 100%; }
+.recipe-area { flex: 1; min-width: 0; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; padding: 4rpx 4rpx var(--s-2); }
 .section-title { color: var(--c-text); font-size: 27rpx; font-weight: 500; }
 .section-count { color: var(--c-text-3); font-size: 22rpx; }
@@ -427,7 +629,7 @@ onShow(load);
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  min-height: 136rpx;
+  min-height: 176rpx;
   margin-bottom: var(--s-2);
   padding: var(--s-2);
   border: 2rpx solid var(--c-border);
@@ -436,46 +638,106 @@ onShow(load);
   box-shadow: var(--shadow-card);
 }
 .recipe-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
+/* 菜名允许折两行：卡片左侧被视觉块占掉之后，一行放不下「冬瓜排骨汤」这种名字，
+   直接截断会让人分不清是哪道菜 */
 .recipe-name {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--c-text);
-  font-size: 29rpx;
+  font-size: 28rpx;
   font-weight: 500;
+  line-height: 1.35;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .recipe-desc {
   overflow: hidden;
   color: var(--c-text-2);
-  font-size: 23rpx;
+  font-size: 22rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .recipe-meta { color: var(--c-text-3); font-size: 21rpx; }
-.recipe-arrow { flex: 0 0 auto; color: var(--c-text-3); font-size: 36rpx; line-height: 1; }
 
-/* 有图的菜显示 96rpx 缩略图，位置就是当年分类色块的位置 */
-.recipe-photo {
-  flex: 0 0 auto;
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: var(--r-sm);
-  border: 2rpx solid var(--c-border);
-  background: var(--c-muted);
-}
-
-/* 收藏星标：做成一个 88rpx 的命中区（手指大小），图形本身只有 40rpx——
-   星星那么小的图标，命中区不放大根本点不准 */
-.fav-star {
+/* 菜品视觉块（对照旧小程序版的 .dish-visual，那边是 192×144）。
+   我们这边的卡片被左侧分类栏挤掉一些宽度，所以取一个正方形。
+   有照片就显示照片，没有就在分类色底上显示菜名首字——
+   留空的话一整列卡片看着像"功能没做完"，还认不出是哪道菜 */
+.dish-visual {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--touch-min);
+  width: 144rpx;
+  height: 144rpx;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+}
+.dish-photo { width: 100%; height: 100%; }
+/* 首字：用主色，压在四个浅底上都够清楚 */
+.dish-initial {
+  color: var(--c-primary);
+  font-size: 48rpx;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* 卡片上快速加减：参考小程序菜单页的 .dish-quick-add。
+   没加过菜时只显示「+」按钮；加过后显示「− 数量 +」。
+   按钮用 64rpx 圆形（和小程序版一致），+ 用实心主色、− 用浅色底。 */
+.dish-stepper {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12rpx;
   height: var(--touch-min);
   margin-right: calc(-1 * var(--s-2));
 }
-.fav-star-img { width: 40rpx; height: 40rpx; }
+.stepper-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 32rpx;
+  background: var(--c-primary);
+  color: #fff;
+  box-sizing: border-box;
+}
+.stepper-btn.secondary {
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+}
+.stepper-icon {
+  font-family: sans-serif;
+  font-size: 36rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+.stepper-qty {
+  min-width: 36rpx;
+  color: var(--c-primary);
+  font-size: 28rpx;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* 「今天不做」标签。
+   用提醒色（琥珀）而不是危险色（红）：「今天不做」是随时能恢复的临时状态，
+   用红色会让人以为这道菜出问题了、甚至以为要被删掉了 */
+.soldout-label {
+  flex: 0 0 auto;
+  padding: 8rpx 14rpx;
+  border-radius: var(--r-sm);
+  background: var(--c-warn-bg);
+  color: var(--c-warn-text);
+  font-size: 22rpx;
+  font-weight: 500;
+  white-space: nowrap;
+}
 
 .content-state {
   padding: 60rpx var(--s-3);
@@ -486,4 +748,184 @@ onShow(load);
 }
 /* 给底部 tabBar 留出空间，不然最后一张卡片会被盖住 */
 .bottom-space { height: 120rpx; }
+/* 购物车栏出现时要多留一段，否则最后一张卡片会被它压住半截 */
+.bottom-space.with-fab { height: 240rpx; }
+
+/* ---------- 底部购物车栏 ----------
+   对照小程序版的 .cart-bar：
+   · 通栏（左右各留 24rpx）、高 96rpx、圆角 48rpx 的药丸形；
+   · 深色底托着一个亮色实心按钮，层次一眼分明；
+   · 购物车图标不用图片，纯 CSS 拼（篮身 + 提手 + 两个轮子）——
+     能用设计令牌控色、任何分辨率都不糊，也不用多带一张图进包。
+   bottom 要同时让过 tabBar（约 100rpx）和全面屏手势条（安全区），
+   少让一样就会在某个机型上被压住或被挡掉。 */
+.cart-bar {
+  position: fixed;
+  left: var(--s-3);
+  right: var(--s-3);
+  bottom: calc(120rpx + env(safe-area-inset-bottom));
+  z-index: 20;
+  display: flex;
+  align-items: stretch;
+  height: 96rpx;
+  overflow: hidden;
+  border-radius: 48rpx;
+  /* 深色底借主文字那个暖黑（#1c1917）：比纯黑柔和，又不和主色抢注意力 */
+  background: var(--c-text);
+  color: #fff;
+  box-shadow: var(--shadow-float);
+}
+.cart-bar-main { min-width: 0; flex: 1; display: flex; align-items: stretch; }
+
+/* 购物车图标：92rpx 的固定区域，里面用几个小盒子拼出车形和轮子 */
+.cart-icon { position: relative; width: 92rpx; flex: 0 0 92rpx; height: 96rpx; }
+.cart-icon-basket {
+  position: absolute;
+  left: 26rpx;
+  top: 31rpx;
+  width: 36rpx;
+  height: 25rpx;
+  border: 4rpx solid #fff;
+  border-top: 0;
+  border-radius: 0 0 8rpx 8rpx;
+  box-sizing: border-box;
+}
+.cart-icon-basket::before {
+  content: '';
+  position: absolute;
+  left: 2rpx;
+  top: -12rpx;
+  width: 27rpx;
+  height: 12rpx;
+  border-top: 4rpx solid #fff;
+}
+.cart-icon-wheel {
+  position: absolute;
+  bottom: 24rpx;
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: #fff;
+}
+.cart-icon-wheel.left { left: 31rpx; }
+.cart-icon-wheel.right { left: 55rpx; }
+/* 角标和右侧按钮都用"比主色亮一档"的色：
+   主色 #9a3412 压在近黑底上会陷进去，看着像不可点 */
+.cart-icon-badge {
+  position: absolute;
+  right: 3rpx;
+  top: 11rpx;
+  min-width: 30rpx;
+  height: 30rpx;
+  padding: 0 7rpx;
+  border-radius: 16rpx;
+  background: var(--c-primary-weak);
+  color: #fff;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 30rpx;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.cart-bar-summary {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-1);
+  padding: 0 var(--s-3) 0 var(--s-1);
+}
+.cart-bar-count { flex: 0 1 auto; font-size: 25rpx; white-space: nowrap; }
+.cart-bar-note { flex: 0 0 auto; font-size: 27rpx; font-weight: 500; white-space: nowrap; }
+
+.cart-bar-selected {
+  width: 164rpx;
+  flex: 0 0 164rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-primary-weak);
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ---------- 辣度选择弹窗 ----------
+   结构对照旧小程序版的 .dish-modal：标题 + 选项网格 + 取消/确定。
+   四档排两列，比排成一列短一半，手指也够得着。 */
+.spice-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 56rpx 44rpx;
+  background: rgba(28, 25, 23, 0.48);
+  box-sizing: border-box;
+}
+.spice-dialog {
+  width: 100%;
+  max-width: 620rpx;
+  padding: var(--s-4) var(--s-3);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 16rpx 40rpx rgba(28, 25, 23, 0.22);
+  box-sizing: border-box;
+}
+.spice-title { display: block; color: var(--c-text); font-size: 34rpx; font-weight: 500; }
+.spice-hint { display: block; margin-top: 6rpx; color: var(--c-text-2); font-size: 24rpx; }
+
+.spice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.spice-option {
+  flex: 0 0 calc(50% - var(--s-1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--touch-min);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: 26rpx;
+  box-sizing: border-box;
+}
+/* 选中态：描边 + 底色 + 字色三重变化，小屏上单靠浅底色看不出选了哪个 */
+.spice-option.active {
+  border-color: var(--c-primary);
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+  font-weight: 500;
+}
+
+.spice-actions { display: flex; gap: var(--s-2); margin-top: var(--s-4); }
+.spice-cancel,
+.spice-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  border-radius: var(--r-md);
+  font-size: 28rpx;
+}
+.spice-cancel {
+  flex: 0 0 200rpx;
+  border: 2rpx solid var(--c-border-strong);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+}
+.spice-confirm {
+  flex: 1;
+  background: var(--c-primary);
+  color: #fff;
+  font-weight: 500;
+}
 </style>

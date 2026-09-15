@@ -67,6 +67,55 @@
             <text class="image-pick-hint">{{ uploading ? '正在上传…' : '从相册选一张' }}</text>
           </view>
         </view>
+
+        <!--
+          辣度设置（对照旧小程序版的「菜品设置」页）。
+          「支持哪几档」和「默认哪一档」是两个问题，所以分两步选：
+          前者是这道菜**能不能**做微辣/特辣，后者是**不特别说明时**按哪一档记。
+        -->
+        <view class="field-group">
+          <text class="field-label">辣度设置（可多选）</text>
+          <view class="spice-grid">
+            <view
+              v-for="level in SPICE_LEVELS"
+              :key="level"
+              class="spice-chip"
+              :class="{ active: form.spiceOptions.includes(level) }"
+              hover-class="tap"
+              @click="toggleSpice(level)"
+            >{{ level }}</view>
+          </view>
+          <text class="field-tip">一档都不选，表示点这道菜时不问辣度（汤、饮品通常这样）。</text>
+
+          <!-- 默认辣度只从"已选中的档位"里挑，所以它必须出现在上面之后 -->
+          <template v-if="form.spiceOptions.length">
+            <text class="field-label">默认辣度</text>
+            <view class="spice-grid">
+              <view
+                v-for="level in form.spiceOptions"
+                :key="level"
+                class="spice-chip"
+                :class="{ active: form.defaultSpice === level }"
+                hover-class="tap"
+                @click="form.defaultSpice = level"
+              >{{ level }}</view>
+            </view>
+            <text class="field-tip">点单时客人没特别说，就按这一档记。</text>
+          </template>
+        </view>
+
+        <!-- 「今天不做」：临时开关，不是库存 -->
+        <view class="field-group">
+          <view class="switch-row" hover-class="tap" @click="form.isSoldOut = !form.isSoldOut">
+            <text class="field-label">今天不做</text>
+            <view class="switch-track" :class="{ on: form.isSoldOut }">
+              <view class="switch-knob" />
+            </view>
+          </view>
+          <text class="field-tip">
+            打开后这道菜仍留在菜单里，但暂时不能加进点单——比如今天食材没了。随时可以关掉。
+          </text>
+        </view>
       </view>
 
       <view class="save-btn" :class="{ disabled: !canSave }" hover-class="tap" @click="submit">
@@ -75,8 +124,6 @@
 
       <!-- 删除放在这个页面里，列表页的卡片上不放开删的入口，少一次误触 -->
       <view v-if="isEdit" class="delete-btn" hover-class="tap" @click="confirmDelete">删除这道菜</view>
-
-      <text v-if="metaLine" class="page-note">{{ metaLine }}</text>
     </template>
   </view>
 </template>
@@ -105,7 +152,8 @@ import type { Category } from '../../services/category';
 import { fetchCategories } from '../../services/category';
 import { resolveFileUrl } from '../../services/http';
 import { uploadImage, chooseImageFromAlbum } from '../../services/upload';
-import { createRecipe, deleteRecipe, fetchRecipe, updateRecipe } from '../../services/recipe';
+import { SPICE_LEVELS, createRecipe, deleteRecipe, fetchRecipe, updateRecipe } from '../../services/recipe';
+import type { SpiceLevel } from '../../services/recipe';
 import { getCurrentSpaceId } from '../../utils/space-context';
 import { showError } from '../../utils/format';
 import { DANGER } from '../../utils/theme';
@@ -118,13 +166,48 @@ const loading = ref(true);
 const pending = ref(false);
 /** 当前聚焦的字段名，用来把输入框描边点亮。小程序没有 CSS :focus，只能用 JS 标记 */
 const focusedField = ref('');
-/** 编辑模式下显示「由谁添加」，给用户一点上下文 */
-const metaLine = ref('');
 
-/** 表单内容。用 reactive 而不是四个 ref，改起来更整齐 */
-const form = reactive({ name: '', categoryId: '', description: '', imageUrl: '' });
+/** 表单内容。用 reactive 而不是一堆 ref，改起来更整齐 */
+const form = reactive({
+  name: '',
+  categoryId: '',
+  description: '',
+  imageUrl: '',
+  /**
+   * 这道菜支持哪几档辣度（多选）。
+   * 空数组 = 点这道菜时不问辣度，汤和饮品通常就是这样。
+   */
+  spiceOptions: [] as SpiceLevel[],
+  /** 默认辣度。必须落在 spiceOptions 里；没得选时为空串 */
+  defaultSpice: '' as SpiceLevel | '',
+  /** 「今天不做」 */
+  isSoldOut: false,
+});
 /** 图片正在上传中：此时禁用再选，避免同一张图传两次 */
 const uploading = ref(false);
+
+/**
+ * 勾选 / 取消一个辣度档位。
+ *
+ * 每次改完都**按 SPICE_LEVELS 的顺序重排**，而不是保持用户勾选的先后：
+ * 点单时那几个按钮的顺序应该人人一样（不辣 → 微辣 → 正常辣 → 特辣），
+ * 否则同一道菜在两个人的手机上排出来不一样。
+ */
+function toggleSpice(level: SpiceLevel): void {
+  const index = form.spiceOptions.indexOf(level);
+  if (index >= 0) form.spiceOptions.splice(index, 1);
+  else form.spiceOptions.push(level);
+
+  form.spiceOptions = SPICE_LEVELS.filter((item) => form.spiceOptions.includes(item));
+
+  // 默认辣度必须落在选中的档位里：原来选的那档被取消了，就退回第一档；
+  // 一档都不剩时清空——"不问辣度却记着默认值"是自相矛盾的数据
+  if (!form.spiceOptions.length) {
+    form.defaultSpice = '';
+  } else if (!form.spiceOptions.includes(form.defaultSpice as SpiceLevel)) {
+    form.defaultSpice = form.spiceOptions[0];
+  }
+}
 
 const isEdit = computed(() => !!recipeId.value);
 /** 菜名必填、分类必选（后端也校验，这里只是避免白跑一次请求） */
@@ -151,7 +234,11 @@ async function load(): Promise<void> {
       form.categoryId = recipe.categoryId;
       form.description = recipe.description;
       form.imageUrl = recipe.imageUrl;
-      metaLine.value = recipe.createdByName ? `由 ${recipe.createdByName} 添加` : '';
+      // 复制一份数组而不是直接引用：直接引用的话，用户取消勾选会把
+      // 从接口拿到的那个对象也改掉，虽然这里看不出问题，但那种"改着改着把源数据改了"的坑很难查
+      form.spiceOptions = [...recipe.spiceOptions];
+      form.defaultSpice = recipe.defaultSpice;
+      form.isSoldOut = recipe.isSoldOut;
       uni.setNavigationBarTitle({ title: '编辑菜谱' });
     } else {
       // 不预选分类（用户拍板）：让用户自己点，而不是替他做主塞进「热菜」。
@@ -208,6 +295,10 @@ async function submit(): Promise<void> {
       categoryId: form.categoryId,
       description: form.description,
       imageUrl: form.imageUrl,
+      spiceOptions: form.spiceOptions,
+      // 没选默认档就交给后端取第一档（传空串会被后端当成"没指定"）
+      defaultSpice: form.defaultSpice || form.spiceOptions[0] || '',
+      isSoldOut: form.isSoldOut,
     };
 
     if (isEdit.value) await updateRecipe(spaceId.value, recipeId.value, payload);
@@ -386,4 +477,60 @@ onLoad((options) => {
 .image-preview { display: flex; align-items: flex-end; gap: var(--s-3); }
 .image-preview-img { width: 200rpx; height: 200rpx; border-radius: var(--r-md); border: 2rpx solid var(--c-border); background: var(--c-muted); }
 .image-remove { padding: 30rpx var(--s-2); margin: -30rpx calc(-1 * var(--s-2)); color: var(--c-danger); font-size: 23rpx; }
+
+/* 字段下面那行小字说明 */
+.field-tip { color: var(--c-text-3); font-size: 22rpx; line-height: 1.6; }
+
+/* 辣度档位：两列，各占 88rpx 高，和别处的选项一样好点 */
+.spice-grid { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.spice-chip {
+  flex: 0 0 calc(50% - var(--s-1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--touch-min);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: 26rpx;
+  box-sizing: border-box;
+}
+.spice-chip.active {
+  border-color: var(--c-primary);
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+  font-weight: 500;
+}
+
+/* 「今天不做」的开关：轨道 + 圆点自己画，不为了一个开关引组件库。
+   整行都可点（不只那个小开关），手指不用瞄准 */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: var(--touch-min);
+}
+.switch-track {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  width: 96rpx;
+  height: 56rpx;
+  padding: 4rpx;
+  border-radius: var(--r-pill);
+  background: var(--c-border-strong);
+  box-sizing: border-box;
+}
+.switch-track.on { background: var(--c-primary); }
+.switch-knob {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2rpx 6rpx rgba(28, 25, 23, 0.18);
+  transition: transform 0.16s ease;
+}
+.switch-track.on .switch-knob { transform: translateX(40rpx); }
 </style>
