@@ -33,7 +33,17 @@
         <view class="retry-btn" hover-class="tap" @click="load">重试</view>
       </view>
 
-      <view v-else-if="!orders.length" class="content-state">{{ emptyText }}</view>
+      <!-- 空态用卡片 + 动作，而不是一行光秃秃的文字：默认停在「待处理」，
+           这里正是"还没点菜"的家最常看到的画面，得告诉用户下一步去哪 -->
+      <view v-else-if="!orders.length" class="empty-card">
+        <text class="empty-copy">{{ emptyText }}</text>
+        <view
+          v-if="filter === ORDER_STATUS_PENDING"
+          class="empty-btn"
+          hover-class="tap"
+          @click="goMenu"
+        >去菜单点菜</view>
+      </view>
 
       <view v-else class="order-list">
         <view v-for="order in orders" :key="order.id" class="order-card">
@@ -225,6 +235,15 @@ function goSettings(): void {
   uni.navigateTo({ url: '/pages/settings/index' });
 }
 
+/** 空态里的"去菜单点菜"：本页通常从「我的」进来，页面栈深度不固定，返回失败就切菜单标签页 */
+function goMenu(): void {
+  if (getCurrentPages().length > 1) {
+    uni.navigateBack();
+  } else {
+    uni.switchTab({ url: '/pages/menu/index' });
+  }
+}
+
 onShow(load);
 </script>
 
@@ -300,14 +319,6 @@ onShow(load);
   background: var(--c-primary);
   color: #fff;
   font-size: 25rpx;
-}
-
-.content-state {
-  padding: 60rpx var(--s-3);
-  color: var(--c-text-2);
-  font-size: 24rpx;
-  line-height: 1.7;
-  text-align: center;
 }
 
 .order-list { margin-top: var(--s-3); }

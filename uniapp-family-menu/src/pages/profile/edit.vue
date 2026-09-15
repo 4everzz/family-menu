@@ -40,6 +40,7 @@
 
     <button
       class="save-btn"
+      hover-class="tap"
       :class="{ 'save-btn--disabled': !canSave }"
       :disabled="!canSave"
       @click="onSaveNickname"
@@ -276,7 +277,7 @@ onShow(load);
   font-size: 30rpx;
   line-height: 88rpx;
 }
-.save-btn--disabled { background: var(--c-muted); color: var(--c-text-3); }
+.save-btn--disabled { background: var(--c-disabled); color: #fff; }
 /* uni-app 的 button 默认带一条 ::after 边框，这里清掉，免得和圆角描边叠出双线 */
 .save-btn::after { border: none; }
 

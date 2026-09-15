@@ -428,7 +428,9 @@ function removeItem(item: FridgeItem): void {
   right: var(--s-3);
   padding: 6rpx var(--s-3);
   border-radius: var(--r-sm);
-  color: var(--c-danger);
+  /* 文字压在 --c-danger-bg 浅底上必须用 -text 变体：
+     --c-danger 在这个底上只有约 4.4:1，略低于 4.5 的 AA 线 */
+  color: var(--c-danger-text);
   font-size: 23rpx;
   background: var(--c-danger-bg);
 }

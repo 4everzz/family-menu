@@ -50,7 +50,8 @@
 
       <view v-else class="empty-card">
         <text class="empty-title">{{ activeName }}还是空的</text>
-        <text class="empty-copy">去菜单页点亮菜谱卡片右上角的星星，它就会出现在这里。</text>
+        <text class="empty-copy">打开一道菜的详情页，点右上角的星标，它就会收藏到这里。</text>
+        <view class="empty-btn" hover-class="tap" @click="goMenu">去菜单看看</view>
       </view>
 
       <!--
@@ -137,6 +138,15 @@ async function switchPartition(partitionId: number | null): Promise<void> {
 
 function openDetail(item: FavoriteItem): void {
   uni.navigateTo({ url: `/pages/recipe/detail?id=${item.recipeId}` });
+}
+
+/** 空态引导：收藏页在页面栈里可能不是从菜单页进来的，返回失败时切到菜单标签页兜底 */
+function goMenu(): void {
+  if (getCurrentPages().length > 1) {
+    uni.navigateBack();
+  } else {
+    uni.switchTab({ url: '/pages/menu/index' });
+  }
 }
 
 /**
@@ -241,7 +251,7 @@ async function reloadPartitions(): Promise<void> {
 onShow(load);
 </script>
 
-<style>
+<style scoped>
 .favorites-page {
   min-height: 100vh;
   padding: var(--s-4) var(--s-3) calc(var(--s-6) + env(safe-area-inset-bottom));
@@ -295,6 +305,19 @@ onShow(load);
 .empty-card { display: flex; flex-direction: column; gap: var(--s-2); margin-top: 140rpx; padding: var(--s-5) var(--s-4); text-align: center; }
 .empty-title { color: var(--c-text); font-size: 30rpx; font-weight: 500; }
 .empty-copy { color: var(--c-text-2); font-size: 24rpx; line-height: 1.7; }
+.empty-btn {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  height: var(--touch-min);
+  margin-top: var(--s-2);
+  padding: 0 var(--s-5);
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 500;
+}
 
 .manage-card {
   display: flex;

@@ -322,7 +322,7 @@ onLoad((options) => {
   background: var(--c-surface);
   box-shadow: var(--shadow-card);
 }
-.block-title { color: var(--c-text-3); font-size: 23rpx; }
+.block-title { color: var(--c-text-2); font-size: 23rpx; }
 .block-body {
   color: var(--c-text);
   font-size: 28rpx;

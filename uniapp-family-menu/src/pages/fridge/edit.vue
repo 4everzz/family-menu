@@ -2,6 +2,11 @@
   <view class="edit-page">
     <view v-if="loading" class="tip">正在读取…</view>
 
+    <view v-else-if="errorMessage" class="error-card">
+      <text class="error-text">{{ errorMessage }}</text>
+      <view class="retry-btn" hover-class="tap" @click="load">重试</view>
+    </view>
+
     <template v-else>
       <view class="form-card">
         <view class="field-group">
@@ -143,6 +148,8 @@ const itemId = ref('');
 const loading = ref(true);
 const pending = ref(false);
 const focusedField = ref('');
+/** 读取失败时的提示。为空才正常渲染表单——否则编辑一件读不出来的食材会显示成空白新增表单 */
+const errorMessage = ref('');
 
 /** 表单内容。reactive 比四个 ref 整齐 */
 const form = ref({
@@ -172,6 +179,7 @@ function onDateChange(e: { detail: { value: string } }): void {
 
 async function load(): Promise<void> {
   loading.value = true;
+  errorMessage.value = '';
   try {
     await ensureLogin();
     spaceId.value = getCurrentSpaceId();
@@ -206,7 +214,9 @@ async function load(): Promise<void> {
       uni.setNavigationBarTitle({ title: '新增食材' });
     }
   } catch (error) {
-    showError(error);
+    // 编辑一件读不出来的食材时，不能落回一张空白表单——那会让人以为数据丢了。
+    // 用页面内的错误卡 + 重试代替 toast，用户能原地重试。
+    errorMessage.value = error instanceof Error ? error.message : '读取失败，请稍后重试';
   } finally {
     loading.value = false;
   }
@@ -277,7 +287,30 @@ onLoad((options) => {
   padding: var(--s-4) var(--s-3) calc(var(--s-6) + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
-.tip { display: block; margin-top: 60rpx; color: var(--c-text-3); font-size: 24rpx; text-align: center; }
+.tip { display: block; margin-top: var(--s-6); color: var(--c-text-3); font-size: 24rpx; text-align: center; }
+
+.error-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding: var(--s-4) var(--s-3);
+  border: 2rpx solid var(--c-danger-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+}
+.error-text { color: var(--c-danger); font-size: 27rpx; font-weight: 500; }
+.retry-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
+  margin-top: var(--s-2);
+  border-radius: var(--r-md);
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 26rpx;
+}
 
 .form-card {
   padding: var(--s-4) var(--s-3);
@@ -359,11 +392,20 @@ onLoad((options) => {
   box-sizing: border-box;
 }
 .picker.placeholder { color: var(--c-text-3); }
+/* 清除：能点的内联动作，得给够 88rpx 触摸区。
+   这里父级是 column flex（不是收藏页那种横向行），所以不能靠上下负 margin 扩区——
+   那会吃掉 gap、压在日期框上误触。改成撑满 88rpx、再用 -16rpx 抵消掉 field-group 的
+   gap，视觉间距和原来几乎一样；负 margin-left 让文字和「保质期」标签左对齐。
+   颜色用主色而不是 --c-text-3：灰色是"不可点"的语义，这里是个明确的动作。 */
 .clear-date {
   align-self: flex-start;
-  margin-top: var(--s-1);
-  padding: var(--s-1) 0;
-  color: var(--c-text-3);
+  display: flex;
+  align-items: center;
+  height: var(--touch-min);
+  margin-top: calc(-1 * var(--s-2));
+  margin-left: calc(-1 * var(--s-2));
+  padding: 0 var(--s-2);
+  color: var(--c-primary);
   font-size: 22rpx;
 }
 

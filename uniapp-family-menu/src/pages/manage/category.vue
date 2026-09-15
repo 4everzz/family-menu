@@ -16,7 +16,7 @@
     </view>
 
     <template v-else>
-      <view class="list">
+      <view v-if="categories.length" class="list">
         <view v-for="item in categories" :key="item.id" class="row">
           <view class="row-main">
             <text class="row-name">{{ item.name }}</text>
@@ -27,6 +27,12 @@
             <view class="action danger" hover-class="tap" @click="remove(item)">删除</view>
           </view>
         </view>
+      </view>
+
+      <!-- 一个分类都没有时，空着手给个边框卡片会像"加载坏了"——换成一句说明 + 明确的下一步 -->
+      <view v-else class="empty-card">
+        <text class="empty-title">还没有分类</text>
+        <text class="empty-copy">点下面的「新增分类」建第一个，比如「热菜」「汤」。建好之后，加菜时就能选它了。</text>
       </view>
 
       <view class="add-btn" hover-class="tap" @click="add">+ 新增分类</view>
@@ -250,6 +256,19 @@ onShow(() => {
   border-bottom: 2rpx solid var(--c-border);
 }
 .row:last-child { border-bottom: none; }
+
+/* 空态：虚线卡片，和购物车/收藏页的空态长得一样，用户一眼认得出"这里还没东西" */
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-5) var(--s-4);
+  border: 2rpx dashed var(--c-border-strong);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+}
+.empty-title { color: var(--c-text); font-size: 28rpx; font-weight: 500; }
+.empty-copy { color: var(--c-text-2); font-size: 24rpx; line-height: 1.65; }
 .row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .row-name {
   overflow: hidden;

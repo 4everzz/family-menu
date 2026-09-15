@@ -2,6 +2,11 @@
   <view class="edit-page">
     <view v-if="loading" class="tip">正在读取…</view>
 
+    <view v-else-if="errorMessage" class="error-card">
+      <text class="error-text">{{ errorMessage }}</text>
+      <view class="retry-btn" hover-class="tap" @click="load">重试</view>
+    </view>
+
     <template v-else>
       <view class="form-card">
         <view class="field-group">
@@ -162,6 +167,8 @@ const spaceId = ref('');
 const recipeId = ref('');
 const categories = ref<Category[]>([]);
 const loading = ref(true);
+/** 读取失败时的提示。为空才正常渲染表单——否则编辑一道读不出来的菜会显示成空白新增表单 */
+const errorMessage = ref('');
 /** 请求进行中标记：防止连点导致重复提交（新增接口不是幂等的，连点会加出两条） */
 const pending = ref(false);
 /** 当前聚焦的字段名，用来把输入框描边点亮。小程序没有 CSS :focus，只能用 JS 标记 */
@@ -215,6 +222,7 @@ const canSave = computed(() => !pending.value && !!form.name.trim() && !!form.ca
 
 async function load(): Promise<void> {
   loading.value = true;
+  errorMessage.value = '';
   try {
     await ensureLogin();
     spaceId.value = getCurrentSpaceId();
@@ -247,7 +255,9 @@ async function load(): Promise<void> {
       uni.setNavigationBarTitle({ title: '新增菜谱' });
     }
   } catch (error) {
-    showError(error instanceof Error ? error.message : '读取失败，请稍后重试');
+    // 编辑一道读不出来的菜时，不能落回一张空白表单——那会让人以为数据丢了。
+    // 用页面内的错误卡 + 重试代替 toast，用户能原地重试。
+    errorMessage.value = error instanceof Error ? error.message : '读取失败，请稍后重试';
   } finally {
     loading.value = false;
   }
@@ -355,7 +365,30 @@ onLoad((options) => {
   padding: var(--s-4) var(--s-3) calc(var(--s-6) + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
-.tip { display: block; margin-top: 60rpx; color: var(--c-text-3); font-size: 24rpx; text-align: center; }
+.tip { display: block; margin-top: var(--s-6); color: var(--c-text-3); font-size: 24rpx; text-align: center; }
+
+.error-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding: var(--s-4) var(--s-3);
+  border: 2rpx solid var(--c-danger-border);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+}
+.error-text { color: var(--c-danger); font-size: 27rpx; font-weight: 500; }
+.retry-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
+  margin-top: var(--s-2);
+  border-radius: var(--r-md);
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 26rpx;
+}
 
 /* 整张表单放一张卡片里：输入框之间靠间距分组，视觉上比"一堆散落的框"整齐得多 */
 .form-card {
