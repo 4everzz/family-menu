@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     # ⚠️ 默认值只是占位：实现时请核对 DashScope 当前在售的 VL 模型 id
     vision_model: str = "qwen-vl-max"
+    # AI 对话用的**文本**模型（不是 VL）。与上面共用 key 和 base_url。
+    # 2026-09 实测在售：qwen-plus / qwen-max / qwen-turbo / qwen-flash。
+    # 选 plus 是因为它够聪明又便宜，做"从一句话里抽结构化字段"这类活很够用。
+    chat_model: str = "qwen-plus"
 
     # ==================== 派生属性 ====================
     @property

@@ -3,6 +3,8 @@
 与其它仓储同一套约定：只 flush、不 commit，事务边界交给接口层。
 """
 
+from datetime import date, datetime, time, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,6 +58,28 @@ class OrderRepository:
 
         result = await self.session.execute(stmt)
         return [(row[0], row[1]) for row in result.all()]
+
+    async def has_orders_on(self, space_id: int, day: date) -> bool:
+        """某个家庭组在 `day` 这一天有没有点单。给「今日未点单」提醒用。
+
+        为什么用显式的时刻区间，而不是 cast(created_at as date) = :day？
+            created_at 是 timestamptz（存的是绝对时刻）。显式的绝对时刻区间是无歧义比较；
+            交给 SQL 自己 cast 会依赖会话的 TimeZone 设置，换台机器/换个连接结果就可能变，
+            这种"在 A 机器上对、在 B 机器上错"的坑最难查。所以边界在 Python 侧按本地时区算好。
+        """
+        tz = datetime.now().astimezone().tzinfo
+        start = datetime.combine(day, time.min, tzinfo=tz)
+        end = start + timedelta(days=1)
+        result = await self.session.execute(
+            select(DishOrder.id)
+            .where(
+                DishOrder.space_id == space_id,
+                DishOrder.created_at >= start,
+                DishOrder.created_at < end,
+            )
+            .limit(1)  # 只关心"有没有"，取 1 行即可，不必 count
+        )
+        return result.first() is not None
 
     async def list_items_grouped(self, order_ids: list[int]) -> dict[int, list[DishOrderItem]]:
         """一次取出多张点单的明细，按 order_id 分组。

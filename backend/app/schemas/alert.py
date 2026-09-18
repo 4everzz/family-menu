@@ -18,12 +18,18 @@ class AlertResponse(BaseModel):
 
     字段说明：
     - id：稳定唯一标识（"类型:关联ID"），用于列表 key 与（将来的）忽略状态。
-    - type：提醒类型，目前只有 fridge_expiring / fridge_out 两类。
-    - level：紧急程度，danger（已过期/缺货）比 warning（临期）更紧急。
-    - title：一句话标题，如「鸡蛋 已过期」「鸡蛋 3 天后过期」「鸡蛋 缺货」。
+    - type：提醒类型，目前有三类：
+        · fridge_expiring —— 冰箱食材临期 / 已过期
+        · fridge_out      —— 冰箱食材缺货
+        · order_empty_today —— 今天这个家还没有点单
+    - level：紧急程度，从急到缓为 danger > warning > info。
+        danger：已过期 / 缺货；warning：临期；info：只是提示（如今日未点单）。
+    - title：一句话标题，如「鸡蛋 已过期」「鸡蛋 3 天后过期」「鸡蛋 缺货」「今天还没有人点单」。
     - detail：补充说明，如「保质期 2026-09-18」「库存 0 个」。
     - related_id：关联的食材 ID（可空），方便前端跳到对应食材编辑页。
+        ⚠️ order_empty_today 不关联具体食材，这里为 null。
     - action：点击这条提醒要跳转的前端路由，如 /pages/fridge/edit?id=123。
+        ⚠️ 允许为空字符串，表示"这条只是信息、不可点击"（如 order_empty_today）。
     """
 
     id: str

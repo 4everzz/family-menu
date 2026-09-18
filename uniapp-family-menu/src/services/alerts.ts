@@ -9,10 +9,11 @@
  *   1. 发请求交给 services/http.ts 统一处理（拼地址、带令牌、解析 { code, message, data }）；
  *   2. 把后端下划线字段（related_id）转成前端驼峰（relatedId），转换只在这一个文件做。
  *
- * 关于范围：v1 只做两类冰箱提醒——
+ * 关于范围：目前有三类——
  *   · fridge_expiring：临期（warning）/ 已过期（danger），阈值 3 天，后端定；
- *   · fridge_out：库存 <= 0 缺货（danger）。
- * 其余"该提醒的事"（比如菜谱今天不做、今天没人点单）本期不做。
+ *   · fridge_out：库存 <= 0 缺货（danger）；
+ *   · order_empty_today：今天这个家还没点单（info，仅提示）。后端从上午 9 点起才产出，
+ *     且 `action` 为空字符串表示"不可点击"。
  */
 
 import { request } from './http';
@@ -21,17 +22,17 @@ import { request } from './http';
 interface AlertDto {
   /** 稳定 ID，形如 "fridge_expiring:123"，前端不用来查库，仅作列表 key */
   id: string;
-  /** 提醒类型：fridge_expiring / fridge_out */
+  /** 提醒类型：fridge_expiring / fridge_out / order_empty_today */
   type: string;
-  /** 严重级别：danger（过期/缺货）> warning（临期） */
+  /** 严重级别：danger（过期/缺货）> warning（临期）> info（仅提示） */
   level: string;
-  /** 主标题，如「鸡蛋 已过期」「鸡蛋 2 天后过期」「鸡蛋 缺货」 */
+  /** 主标题，如「鸡蛋 已过期」「鸡蛋 2 天后过期」「鸡蛋 缺货」「今天还没有人点单」 */
   title: string;
   /** 补充说明，如「保质期 2026-09-18」「库存 0个」 */
   detail: string;
-  /** 关联食材 ID，点了跳去编辑那条食材 */
+  /** 关联食材 ID，点了跳去编辑那条食材；order_empty_today 为 null */
   related_id: number | null;
-  /** 点击后要去的页面路径，形如 /pages/fridge/edit?id=123 */
+  /** 点击后要去的页面路径；空字符串表示这条不可点击 */
   action: string;
 }
 
@@ -39,11 +40,12 @@ interface AlertDto {
 export interface Alert {
   id: string;
   type: string;
-  /** 严重级别，只可能是 danger / warning */
-  level: 'danger' | 'warning';
+  /** 严重级别，只可能是 danger / warning / info */
+  level: 'danger' | 'warning' | 'info';
   title: string;
   detail: string;
   relatedId: number | null;
+  /** 空字符串表示这条只是信息、不可点击 */
   action: string;
 }
 
@@ -57,7 +59,9 @@ function toAlert(dto: AlertDto): Alert {
   return {
     id: dto.id,
     type: dto.type,
-    level: dto.level === 'danger' ? 'danger' : 'warning',
+    // 逐档显式映射，不用 `level === 'danger' ? 'danger' : 'warning'` 那种写法——
+    // 那样任何新级别都会被静默压成 warning，改后端加一档前端不会有任何提示。
+    level: dto.level === 'danger' ? 'danger' : dto.level === 'info' ? 'info' : 'warning',
     title: dto.title,
     detail: dto.detail || '',
     relatedId: dto.related_id ?? null,

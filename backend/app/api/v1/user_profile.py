@@ -15,6 +15,7 @@ from app.repositories.calorie_log_repo import CalorieLogRepository
 from app.repositories.user_profile_repo import UserProfileRepository
 from app.schemas.user_profile import (
     CalorieLogCreate,
+    CalorieLogUpdate,
     CalorieLogResponse,
     HealthProfileResponse,
     HealthProfileUpdate,
@@ -80,6 +81,24 @@ async def create_calorie_log(
 ) -> dict:
     """新增一条热量记录（拍照识别或手动添加）。"""
     log = await _service(session).add_log(current_user, payload.model_dump())
+    await session.commit()
+    return success(CalorieLogResponse.model_validate(log).model_dump())
+
+
+@router.put("/users/me/calorie-logs/{log_id}", summary="修改热量记录")
+async def update_calorie_log(
+    log_id: int,
+    payload: CalorieLogUpdate,
+    current_user: CurrentUser,
+    session: DbSession,
+) -> dict:
+    """修改一条热量记录（先校验归属，不是你的会报"记录不存在"）。
+
+    用 PUT 而不是 PATCH：本项目的前端请求层刻意不支持 PATCH
+    （微信小程序的合法 method 里没有它，见 services/http.ts 的注释），
+    而且编辑弹层每次都会送回完整的一条，PUT 的"整条替换"语义正好对得上。
+    """
+    log = await _service(session).update_log(current_user, log_id, payload.model_dump())
     await session.commit()
     return success(CalorieLogResponse.model_validate(log).model_dump())
 

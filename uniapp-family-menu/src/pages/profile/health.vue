@@ -11,12 +11,21 @@
           性别/目标用**卡片内小下拉**（用户定的交互）：
           点行就在这行下面展开一个小菜单（约卡片 1/3 宽、贴右侧箭头），
           不再弹全屏 ActionSheet——选个性别这种一步操作，不该把整个屏幕都罩住。
+
+          2026-09-18：选中的值改成**靠右显示**（用户要求），和身高/体重那一列对齐。
+          原来值压在标签下面，四行里两行是"上下结构"、两行是"左右结构"，眼睛得来回跳；
+          现在四行右边缘一条线，扫一眼就能把整张表读完。
         -->
-        <view class="entry-item picker-row" hover-class="tap" @click="togglePicker('gender')">
-          <view class="entry-main">
-            <text class="entry-name">性别</text>
-            <text class="entry-desc">{{ genderLabel || '未设置' }}</text>
-          </view>
+        <view
+          class="entry-item picker-row"
+          :class="{ open: openPicker === 'gender' }"
+          hover-class="tap"
+          @click="togglePicker('gender')"
+        >
+          <text class="entry-name grow">性别</text>
+          <text class="entry-value" :class="{ placeholder: !genderLabel }">
+            {{ genderLabel || '未设置' }}
+          </text>
           <text class="entry-arrow">›</text>
           <view v-if="openPicker === 'gender'" class="inline-dropdown" @click.stop>
             <view
@@ -25,7 +34,7 @@
               class="dropdown-option"
               :class="{ active: gender === o.value }"
               hover-class="tap"
-              @click="chooseGender(o)"
+              @click.stop="chooseGender(o)"
             >{{ o.label }}</view>
           </view>
         </view>
@@ -58,11 +67,26 @@
           <text class="field-unit">kg</text>
         </view>
 
-        <view class="entry-item picker-row" hover-class="tap" @click="togglePicker('goal')">
-          <view class="entry-main">
-            <text class="entry-name">目标</text>
-            <text class="entry-desc">{{ goalLabel || '未设置' }}</text>
-          </view>
+        <!-- BMI：由身高体重自动算，不用填也填不了。
+             实时跟着输入框变，所以改完身高体重新值马上就在眼前。 -->
+        <view class="entry-item">
+          <text class="entry-name grow">BMI</text>
+          <text v-if="!bmi" class="entry-value placeholder">填好身高体重自动算</text>
+          <text v-else class="entry-value">
+            {{ bmiText }}<text class="bmi-tag" :class="bmiLevel.key">{{ bmiLevel.label }}</text>
+          </text>
+        </view>
+
+        <view
+          class="entry-item picker-row"
+          :class="{ open: openPicker === 'goal' }"
+          hover-class="tap"
+          @click="togglePicker('goal')"
+        >
+          <text class="entry-name grow">目标</text>
+          <text class="entry-value" :class="{ placeholder: !goalLabel }">
+            {{ goalLabel || '未设置' }}
+          </text>
           <text class="entry-arrow">›</text>
           <view v-if="openPicker === 'goal'" class="inline-dropdown" @click.stop>
             <view
@@ -71,11 +95,15 @@
               class="dropdown-option"
               :class="{ active: goal === o.value }"
               hover-class="tap"
-              @click="chooseGoal(o)"
+              @click.stop="chooseGoal(o)"
             >{{ o.label }}</view>
           </view>
         </view>
       </view>
+
+      <text class="group-note">
+        BMI 按中国成人标准分档：偏瘦 &lt;18.5 · 正常 18.5–23.9 · 超重 24–27.9 · 肥胖 ≥28
+      </text>
     </view>
 
     <!-- 饮食备注：自由文本 -->
@@ -211,6 +239,34 @@ const GOAL_OPTIONS: { label: string; value: Goal }[] = [
 
 const genderLabel = computed(() => GENDER_OPTIONS.find((o) => o.value === gender.value)?.label || '');
 const goalLabel = computed(() => GOAL_OPTIONS.find((o) => o.value === goal.value)?.label || '');
+
+/**
+ * BMI = 体重(kg) ÷ 身高(m)²，由身高体重自动算。
+ *
+ * ⚠️ 刻意**不存后端**：它是派生值。一旦存了，每个能改身高/体重的入口都得记得同步更新，
+ * 早晚会出现"库里写着 23.6、按现在的身高体重算出来却是 24.1"这种自相矛盾的数据。
+ * 派生值只算不存，就没有不一致的可能。
+ *
+ * 用 parseFloat 而不是 Number：输入框里的 "183." 这类半成品不该让整行数字消失。
+ */
+const bmi = computed(() => {
+  const height = parseFloat(heightInput.value) / 100;
+  const weight = parseFloat(weightInput.value);
+  if (!Number.isFinite(height) || !Number.isFinite(weight) || height <= 0 || weight <= 0) return null;
+  return weight / (height * height);
+});
+
+const bmiText = computed(() => (bmi.value === null ? '' : bmi.value.toFixed(1)));
+
+/** 分档按中国成人标准（WS/T 428-2013），与卡片下面那行说明保持一致 */
+const bmiLevel = computed<{ key: string; label: string }>(() => {
+  const value = bmi.value;
+  if (value === null) return { key: '', label: '' };
+  if (value < 18.5) return { key: 'low', label: '偏瘦' };
+  if (value < 24) return { key: 'ok', label: '正常' };
+  if (value < 28) return { key: 'high', label: '超重' };
+  return { key: 'obese', label: '肥胖' };
+});
 
 /** 按天分组、日期倒序、算每日合计，给列表用 */
 const groupedLogs = computed(() => {
@@ -399,6 +455,33 @@ onShow(load);
 }
 .entry-arrow { flex: 0 0 auto; color: var(--c-text-3); font-size: 40rpx; line-height: 1; }
 
+/* 值靠右（2026-09-18 用户要求）：性别/目标和身高/体重共用同一条右边缘线。
+   placeholder 态用更浅的灰，一眼区分"还没选"和"选了" */
+.entry-name.grow { flex: 1; min-width: 0; }
+.entry-value { flex: 0 0 auto; color: var(--c-text-2); font-size: 29rpx; }
+.entry-value.placeholder { color: var(--c-text-3); }
+
+/* BMI 分档小标签：颜色跟着档位走——正常用主色，偏离两端用提醒色，肥胖用危险色 */
+.bmi-tag {
+  margin-left: var(--s-2);
+  padding: 2rpx var(--s-2);
+  border-radius: var(--r-sm);
+  font-size: 22rpx;
+}
+.bmi-tag.ok { background: var(--c-primary-bg); color: var(--c-primary); }
+.bmi-tag.low,
+.bmi-tag.high { background: var(--c-warn-bg); color: var(--c-warn-text); }
+.bmi-tag.obese { background: var(--c-danger-bg); color: var(--c-danger); }
+
+/* 分组下面那行小字说明 */
+.group-note {
+  display: block;
+  margin: var(--s-2) var(--s-1) 0;
+  color: var(--c-text-3);
+  font-size: 21rpx;
+  line-height: 1.6;
+}
+
 /* 数字输入框：靠右，和单位一起贴在条目的右侧 */
 .field-input {
   width: 220rpx;
@@ -444,13 +527,26 @@ onShow(load);
    贴着行右侧箭头往下展开，宽度约卡片 1/3（用户定的）。
    遮罩透明、z-index 20；下拉 30 压在遮罩上，也压住下面的分组。 */
 .picker-row { position: relative; }
+/*
+ * ⚠️ 下拉展开时必须把这一行抬到遮罩之上（z-index 30 > 遮罩的 20）。
+ * 原因很隐蔽：行上有 hover-class="tap"，而全局 .tap 是 opacity:0.72 ——
+ * opacity 小于 1 会创建**层叠上下文**，把下拉的 z-index 关在行内部；
+ * 行自己的 z-index 是 auto，于是透明遮罩（fixed、z-index 20）反而盖在它上面，
+ * 点选项实际点到了遮罩 → closePicker → 看起来就是"点了没反应"。
+ * 显式给展开中的行一个 z-index，这个坑就不存在了。
+ */
+.picker-row.open { z-index: 30; }
 .picker-mask { position: fixed; inset: 0; z-index: 20; background: transparent; }
 .inline-dropdown {
   position: absolute;
   top: calc(100% + 6rpx);
   right: var(--s-3);
   z-index: 30;
+  /* 宽度跟随行的 1/3（用户定的），但必须封顶：
+     33% 是相对行宽的，屏幕越宽下拉越宽，宽屏上会撑满整张卡（2026-09-18 实测复现）。
+     封顶值用 px 不用 rpx——rpx 也跟屏宽走，封不住。 */
   width: 33%;
+  max-width: 180px;
   min-width: 200rpx;
   border: 2rpx solid var(--c-border);
   border-radius: var(--r-md);

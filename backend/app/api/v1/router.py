@@ -7,6 +7,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    ai_chat,
     alerts,
     auth,
     categories,
@@ -45,3 +46,6 @@ api_router.include_router(uploads.router)
 api_router.include_router(vision.router)
 # 家庭提醒：把冰箱"该注意的状态"聚合成列表（临期/过期 + 缺货），纯读、无新表
 api_router.include_router(alerts.router)
+# AI 对话：用一句话记账。**只产出待确认的草案，不写库**——
+# 用户在卡片上点「记下」后，前端调已有的 /users/me/calorie-logs 写入。
+api_router.include_router(ai_chat.router)

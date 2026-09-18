@@ -104,6 +104,32 @@ class UserProfileService:
         }
         return await self.log_repo.add(user.id, payload)
 
+    async def update_log(self, user: User, log_id: int, data: dict) -> CalorieLog:
+        """修改一条热量记录（先校验归属）。
+
+        规则和新增保持一致：名称不能空、热量必须填。
+        另外**份量允许清空**——用户把编辑弹层里的份量删掉，就是"这条不显示份量"，
+        所以这里 portion 为空一律存成 None，而不是保留旧值。
+
+        image_url / source 不在可改字段里：来源是"这条记录怎么来的"，
+        改内容不该改来源。用户改过之后它仍然是一条 AI 记的账。
+        """
+        log = await self.log_repo.get_owned(user.id, log_id)
+        if log is None:
+            raise BusinessError("记录不存在")
+
+        name = str(data.get("food_name") or "").strip()
+        if not name:
+            raise BusinessError("请填写食物名称")
+        if data.get("calories") is None:
+            raise BusinessError("请填写热量")
+
+        log.food_name = name
+        log.calories = self._to_decimal(data["calories"], "热量")
+        log.eaten_at = data.get("eaten_at") or log.eaten_at
+        log.portion = str(data["portion"]).strip() if data.get("portion") else None
+        return await self.log_repo.save(log)
+
     async def delete_log(self, user: User, log_id: int) -> None:
         """删除一条热量记录（先校验归属）。"""
         log = await self.log_repo.get_owned(user.id, log_id)

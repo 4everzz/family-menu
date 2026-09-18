@@ -14,6 +14,7 @@ from app.api.deps import CurrentUser, DbSession
 from app.core.response import success
 from app.repositories.category_repo import CategoryRepository
 from app.repositories.fridge_repo import FridgeRepository
+from app.repositories.order_repo import OrderRepository
 from app.repositories.space_repo import SpaceRepository
 from app.schemas.alert import AlertResponse
 from app.services.alert_service import AlertService
@@ -29,7 +30,7 @@ def _build_service(session: AsyncSession) -> AlertService:
     传一个实例进去只是满足依赖装配，不会真正用到。
     """
     space_service = SpaceService(SpaceRepository(session), CategoryRepository(session))
-    return AlertService(FridgeRepository(session), space_service)
+    return AlertService(FridgeRepository(session), space_service, OrderRepository(session))
 
 
 @router.get("/spaces/{space_id}/alerts", summary="家庭提醒列表")
@@ -38,7 +39,7 @@ async def list_alerts(
     current_user: CurrentUser,
     session: DbSession,
 ) -> dict:
-    """列出当前家庭组需要提醒的事项（仅冰箱临期/过期 + 缺货）。"""
+    """列出当前家庭组需要提醒的事项（冰箱临期/过期 + 缺货 + 今日未点单）。"""
     service = _build_service(session)
     alerts = await service.list_alerts(current_user, space_id, date.today())
     return success({"items": [a.model_dump() for a in alerts]})

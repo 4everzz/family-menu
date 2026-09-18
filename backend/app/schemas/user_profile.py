@@ -54,6 +54,24 @@ class CalorieLogCreate(BaseModel):
     source: Optional[str] = Field(default="vision", max_length=16, description="来源 vision / manual")
 
 
+class CalorieLogUpdate(BaseModel):
+    """修改一条热量记录。
+
+    为什么是"整条替换"而不是部分更新（所有字段都必填）？
+      调用方是 AI 页的编辑弹层，它手上永远有完整的四个字段。
+      做成部分更新的话，"portion 传 null"到底是"清掉份量"还是"没传这个字段"
+      就分不清了（Pydantic 里两者都是 None），得额外引入哨兵值——不值得。
+      所以这里要求前端总是把整条送回来，语义也就不含糊了。
+
+    注意 `portion` 允许为 null：用户把份量清空 = 这条记录不显示份量。
+    """
+
+    eaten_at: date = Field(..., description="食用日期")
+    food_name: str = Field(..., min_length=1, max_length=128, description="食物名称")
+    calories: float = Field(..., gt=0, description="热量（kcal）")
+    portion: Optional[str] = Field(default=None, max_length=64, description="份量描述，可空")
+
+
 class CalorieLogResponse(BaseModel):
     """返回给前端的一条热量记录。"""
 
@@ -70,12 +88,22 @@ class CalorieLogResponse(BaseModel):
 
 
 class FoodEstimate(BaseModel):
-    """单条识别结果：一道菜的热量估算。"""
+    """单条识别结果：一道菜的热量估算。
+
+    ⚠️ 热量不是模型直接报的整份值，而是 `kcal_per_100g × grams / 100` 算出来的。
+    这么拆有两个好处：数字可解释（前端能显示「450g × 180 kcal/100g」），
+    以及用户可以按份量（小份/中份/大份）缩放——照片里估份量本来就模糊，
+    与其让模型猜，不如让最清楚自己吃了多少的人来定。
+    """
 
     food_name: str
     calories: float
     portion: Optional[str] = None
     confidence: Optional[float] = None
+    # 这一份的估计克重（模型看图估的），前端拿它当「中份」基准
+    grams: Optional[float] = None
+    # 每 100 克多少千卡（另用纯文字问得，稳定）。查不到时为 null。
+    kcal_per_100g: Optional[float] = None
 
 
 class RecognizeFoodResponse(BaseModel):

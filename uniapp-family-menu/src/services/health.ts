@@ -37,12 +37,22 @@ export interface CalorieLog {
   created_at: string;
 }
 
-/** 单条识别结果 */
+/**
+ * 单条识别结果。
+ *
+ * ⚠️ `calories` 是后端用 `kcal_per_100g × grams / 100` 算出来的，不是模型报的整份值。
+ * 拆开的意义在于前端能按份量缩放：照片里估份量本来就模糊（实测这是误差的主要来源），
+ * 所以让用户选 小份/中份/大份 比让模型猜可靠。
+ */
 export interface FoodEstimate {
   food_name: string;
   calories: number;
   portion: string | null;
   confidence: number | null;
+  /** 这一份的估计克重，前端当「中份」基准用；为 null 时就不给份量选择 */
+  grams: number | null;
+  /** 每 100 克多少千卡；为 null 时说明后端没查到密度，热量会显示 0 */
+  kcal_per_100g: number | null;
 }
 
 /** 拍照识别的返回 */
@@ -117,6 +127,27 @@ export async function addCalorieLog(payload: CalorieLogCreate): Promise<CalorieL
   if (payload.image_url !== undefined) data.image_url = payload.image_url;
   if (payload.source !== undefined) data.source = payload.source;
   return await request<CalorieLog>({ url: `${API}/calorie-logs`, method: 'POST', data });
+}
+
+/** 修改热量记录的请求体。
+ *
+ *  整条替换（四个字段都必填，`portion` 传 null = 清掉份量），不做部分更新——
+ *  部分更新时"portion 传 null"到底是"清掉"还是"没传"，前后端都分不清。
+ *  编辑弹层手上永远有完整的一条，所以整条送回去最省事也最不含糊。 */
+export interface CalorieLogUpdate {
+  eaten_at: string;
+  food_name: string;
+  calories: number;
+  portion: string | null;
+}
+
+/** 修改一条热量记录 */
+export async function updateCalorieLog(id: number, payload: CalorieLogUpdate): Promise<CalorieLog> {
+  return await request<CalorieLog>({
+    url: `${API}/calorie-logs/${id}`,
+    method: 'PUT', // 用 PUT 不用 PATCH：小程序的合法 method 里没有 PATCH（见 http.ts 的注释）
+    data: { ...payload },
+  });
 }
 
 /** 删除一条热量记录 */

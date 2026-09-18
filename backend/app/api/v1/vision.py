@@ -38,6 +38,8 @@ async def recognize_food(
                 calories=i.calories,
                 portion=i.portion,
                 confidence=i.confidence,
+                grams=i.grams,
+                kcal_per_100g=i.kcal_per_100g,
             )
             for i in items
         ],

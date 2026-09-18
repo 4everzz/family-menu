@@ -35,21 +35,11 @@
         </view>
       </view>
 
-      <!-- 辣度：只在设了档位时才显示。默认那一档加重，因为它就是点单时不选时的结果 -->
-      <view v-if="recipe.spiceOptions.length" class="block">
-        <text class="block-title">辣度</text>
-        <view class="spice-tags">
-          <text
-            v-for="level in recipe.spiceOptions"
-            :key="level"
-            class="tag"
-            :class="{ 'tag-strong': level === (recipe.defaultSpice || recipe.spiceOptions[0]) }"
-          >{{ level }}</text>
-        </view>
-        <text class="block-body">
-          点单时不特别说明，就按「{{ recipe.defaultSpice || recipe.spiceOptions[0] }}」记。
-        </text>
-      </view>
+      <!--
+        辣度这一栏 2026-09-18 去掉了（用户定的）。
+        数据本身还在（recipes.spice_options / default_spice），点单时照样会问辣度、
+        编辑页也照样能设——只是"翻菜谱"这一页不再展示它。
+      -->
 
       <view class="block">
         <text class="block-title">简介</text>
@@ -306,9 +296,7 @@ onLoad((options) => {
 }
 /* 「今天不做」：用提醒色而不是危险色——它是随时能恢复的临时状态，不是出问题了 */
 .tag-warn { background: var(--c-warn-bg); color: var(--c-warn-text); }
-/* 默认辣度：实心主色，和其余档位拉开差别，一眼看出"不选时按这个记" */
-.tag-strong { background: var(--c-primary); color: #fff; font-weight: 500; }
-.spice-tags { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+/* .tag-strong / .spice-tags 随辣度栏一起去掉了（2026-09-18），别再捡回来 */
 
 /* 简介区块：正文部分行高放宽到 1.8，读起来不挤 */
 .block {

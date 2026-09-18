@@ -18,7 +18,7 @@
       </view>
 
       <template v-else>
-        <!-- 按类别筛选：已过期 / 临期 / 缺货，纯前端过滤（后端已把全部提醒一次返回） -->
+        <!-- 按类别筛选：已过期 / 临期 / 缺货 / 未点单，纯前端过滤（后端已把全部提醒一次返回） -->
         <view v-if="alerts.length" class="filters">
           <view class="filter-scroll">
             <view class="filter-track">
@@ -52,7 +52,7 @@
               </view>
               <text v-if="a.detail" class="card-detail">{{ a.detail }}</text>
             </view>
-            <text class="card-arrow">›</text>
+            <text v-if="a.action" class="card-arrow">›</text>
           </view>
         </view>
 
@@ -84,8 +84,11 @@
  *    但点进去是去"编辑那条食材"，而冰箱只有创建人能改——
  *    所以普通成员点了若跳到编辑页会被后端拦，这里直接不让他跳（和冰箱列表一致）。
  *
- * 3. v1 只做两类冰箱提醒：临期/过期（按后端 3 天阈值算）+ 缺货。
- *    level 决定配色：danger（已过期/缺货）用危险色，warning（临期）用提醒色。
+ * 3. 三类提醒：冰箱临期/过期（后端按 3 天阈值算）、冰箱缺货、今日未点单。
+ *    level 决定配色：danger（已过期/缺货）危险色、warning（临期）提醒色、info（今日未点单）最轻。
+ *    ⚠️ 今日未点单的 `action` 是空字符串 —— 它是纯信息条，不可点击：
+ *       菜单页是 tabBar 页，navigateTo 跳不过去；而且点单是全员都能做的事，
+ *       也不该套用下面 openAlert 的"仅创建人可点"。
  */
 
 import { computed, ref } from 'vue';
@@ -101,18 +104,21 @@ const hasSpace = ref(false);
 const spaceName = ref('');
 const isOwner = ref(false);
 
-/** 列表顶部的短标签：过期 / 临期 / 缺货 */
+/** 列表顶部的短标签：过期 / 临期 / 缺货 / 未点单 */
 function badge(a: Alert): string {
   return kindOf(a);
 }
 
-/** 筛选类别：全部 / 已过期 / 临期 / 缺货 */
-const filters = ['全部', '已过期', '临期', '缺货'];
+/** 筛选类别：全部 / 已过期 / 临期 / 缺货 / 未点单 */
+const filters = ['全部', '已过期', '临期', '缺货', '未点单'];
 /** 当前选中的筛选，默认看全部 */
 const activeFilter = ref('全部');
 
 /** 这条提醒属于哪一类（与 badge 文案一致，作为筛选匹配依据） */
-function kindOf(a: Alert): '已过期' | '临期' | '缺货' {
+function kindOf(a: Alert): '已过期' | '临期' | '缺货' | '未点单' {
+  // 先按 type 判两类"非冰箱"的，再落回冰箱的两档——顺序不能反，
+  // 否则 order_empty_today 会被下面的 level 兜底判成「临期」。
+  if (a.type === 'order_empty_today') return '未点单';
   if (a.type === 'fridge_out') return '缺货';
   return a.level === 'danger' ? '已过期' : '临期';
 }
@@ -226,7 +232,9 @@ function openAlert(a: Alert): void {
   background: var(--c-surface);
   box-shadow: var(--shadow-card);
 }
-/* 严重级别配色：danger 走危险色，warning 走提醒色（令牌与冰箱页一致） */
+/* 严重级别配色：danger 走危险色，warning 走提醒色（令牌与冰箱页一致）。
+   info（今日未点单）故意不给底色——它只是提示，保持最"素"的白卡片，
+   在列表里自然沉到最后，不会和"东西过期了"抢注意力。 */
 .card.danger { background: var(--c-danger-bg); border-color: var(--c-danger-border); }
 .card.warning { background: var(--c-warn-bg); border-color: var(--c-warn-border); }
 
@@ -243,6 +251,15 @@ function openAlert(a: Alert): void {
 }
 .card-icon.danger { border-bottom-color: var(--c-danger); }
 .card-icon.warning { border-bottom-color: var(--c-warn); }
+/* info 用实心圆点，不用三角+感叹号——那两样是"警告"的语义，拿来提示"还没点菜"太凶了 */
+.card-icon.info {
+  width: 28rpx;
+  height: 28rpx;
+  border: none;
+  border-radius: 50%;
+  background: var(--c-primary);
+}
+.card-icon.info::after { content: ''; }
 .card-icon::after {
   content: '!';
   position: absolute;
@@ -274,6 +291,8 @@ function openAlert(a: Alert): void {
 }
 .card-badge.danger { background: var(--c-danger); color: #fff; }
 .card-badge.warning { background: var(--c-warn); color: #fff; }
+/* info 标签用暖灰底 + 主文字色：在白色卡片上也看得清（--c-muted 太接近白底，会糊掉） */
+.card-badge.info { background: var(--c-border-strong); color: var(--c-text); }
 .card-detail {
   overflow: hidden;
   color: var(--c-text-2);

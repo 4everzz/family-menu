@@ -42,13 +42,23 @@ class CalorieLogRepository:
         return log
 
     async def get_owned(self, user_id: int, log_id: int) -> CalorieLog | None:
-        """按 ID 取记录，同时校验归属：不是你的就当不存在，删除前用。"""
+        """按 ID 取记录，同时校验归属：不是你的就当不存在，删除/修改前用。"""
         stmt = select(CalorieLog).where(
             CalorieLog.id == log_id,
             CalorieLog.user_id == user_id,
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def save(self, log: CalorieLog) -> CalorieLog:
+        """把对象上已修改的字段写回数据库（只 flush，事务由上层提交）。
+
+        对象是 ORM 托管的，改属性本来就会被跟踪，这里显式 add+flush 是为了
+        和别的 repository 保持同一套写法，也让"写回"这件事在调用处看得见。
+        """
+        self.session.add(log)
+        await self.session.flush()
+        return log
 
     async def delete(self, log: CalorieLog) -> None:
         """删除一条记录（先校验归属）。"""
