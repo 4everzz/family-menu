@@ -28,7 +28,8 @@ python run.py
 > HBuilderX 跑真机调试时会占用 8000 和 8001（它自己的内置服务）。后端占不到 8000 就起不来，
 > 而手机连 8000 拿到的是 HBuilderX 返回的纯文本 404，前端报「服务端返回格式异常」——
 > 报错完全指不到真正原因。换到 8300 与它隔开，谁先启动都不冲突。
-> ⚠️ 改端口要同时改三处：本文件、`启动后端.bat`、前端 `uniapp-family-menu/src/services/http.ts`。
+> ⚠️ 改端口要同时改三处：本文件、`run.py`、前端 `uniapp-family-menu/src/services/http.ts`。
+> （另有一份本机专用的 `backend/启动后端.bat`，按根目录 `.gitignore` 不入库，改端口时也别忘了它。）
 
 > **为什么用 `python run.py` 而不是直接敲 `uvicorn`？**
 > 因为 Windows 上必须额外指定事件循环，直接敲 uvicorn 会报
