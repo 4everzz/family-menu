@@ -21,13 +21,13 @@
     </view>
 
     <template v-else>
-      <view class="page-head">
-        <text class="page-title">点单</text>
-        <text class="page-subtitle">{{ spaceName }}</text>
-      </view>
-
+      <!-- 原来是两行：第一行「点单 + 家庭组名」，第二行「已选 N 道菜 + 清空」。
+           标题重复了导航栏，两行信息量却很薄。2026-09-19 合并成一行：
+           家庭组名 + 已选数一句话说清，清空留在右边。 -->
       <view class="list-head">
-        <text class="list-title">已选 {{ items.length }} 道菜</text>
+        <text class="list-title">
+          {{ spaceName ? `${spaceName} · ` : '' }}已选 {{ items.length }} 道菜
+        </text>
         <text class="clear-all" hover-class="tap" @click="clearAll">清空</text>
       </view>
 
@@ -267,14 +267,15 @@ onShow(load);
 
 .tip { display: block; margin-top: var(--s-5); color: var(--c-text-3); font-size: 24rpx; text-align: center; }
 
-.page-head {
+/* 合并后的首行：既是"这是哪个家庭组的单"，也是"选了几道菜"。
+   它现在是页面第一行，所以 margin-top 归零——顶部留白交给 .cart-page 的 padding */
+.list-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--s-3);
+  padding: 0 var(--s-1) var(--s-2);
 }
-.page-title { color: var(--c-text); font-size: 40rpx; font-weight: 500; }
-.page-subtitle { flex: 0 0 auto; color: var(--c-text-2); font-size: 23rpx; }
+.list-title { color: var(--c-text-2); font-size: 24rpx; }
 
 .empty-card {
   display: flex;
@@ -327,11 +328,12 @@ onShow(load);
   box-shadow: var(--shadow-card);
   overflow: hidden;
 }
+/* 行高 128rpx → 152rpx：步进器缩小后右侧空出一截，把卡片放松一点更耐看 */
 .dish-row {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  min-height: 128rpx;
+  min-height: 152rpx;
   padding: 0 var(--s-3);
   border-bottom: 2rpx solid var(--c-border);
 }
@@ -347,29 +349,43 @@ onShow(load);
 /* 辣度用次要色：它是菜名的补充信息，不该和菜名抢注意力 */
 .dish-spice { color: var(--c-text-2); font-size: 23rpx; }
 
-/* 步进器：两个按钮各 88rpx（规范下限）。中间留 16rpx 而不是 8rpx——
-   加减是方向相反的两个操作，挨太近容易点错，而点错的代价是"数量变了" */
+/* 步进器：按钮 88rpx → 76rpx，间隔 16 → 12rpx，数量位 56 → 48rpx。
+   2026-09-19 用户反馈"加减号太宽所占比例太大"——原来整组 264rpx，
+   在一行 365px 里占掉 37%，菜名被压得只剩两三个字。现在 224rpx（−15%）。
+
+   ⚠️ 76rpx（38px）仍高于 WCAG 2.2 AA 的 24px 下限；按钮本身是 76rpx 见方，
+      再用 ::after 把纵向点击范围撑到 96rpx，手指不会因为"变小了"而点空。 */
 .stepper {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: var(--s-2);
+  gap: 12rpx;
 }
 .step-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--touch-min);
-  height: var(--touch-min);
+  width: 76rpx;
+  height: 76rpx;
   border: 2rpx solid var(--c-border);
   border-radius: var(--r-sm);
   background: var(--c-muted);
   color: var(--c-text);
-  font-size: 34rpx;
+  font-size: 32rpx;
   line-height: 1;
+  box-sizing: border-box;
+}
+.step-btn::after {
+  content: '';
+  position: absolute;
+  top: -10rpx;
+  bottom: -10rpx;
+  left: -4rpx;
+  right: -4rpx;
 }
 .step-value {
-  min-width: 56rpx;
+  min-width: 48rpx;
   color: var(--c-text);
   font-size: 28rpx;
   font-weight: 500;
@@ -388,7 +404,13 @@ onShow(load);
 
 .form-group { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-4); }
 .field-label { color: var(--c-text-2); font-size: 24rpx; }
+/* ⚠️ width: 100% / display: block 不能省（2026-09-19 修的真 bug）：
+   <textarea> 是**替换元素**，不写宽度就用浏览器默认的固有宽度（实测只有 300px），
+   而外层容器有 365px —— 结果备注框右边短了一大截，看着像"没对齐"。
+   实测证据：容器 x=12 / right=378，textarea x=12 / right=312（差 66px ≈ 127rpx）。 */
 .field {
+  display: block;
+  width: 100%;
   height: var(--touch-min);
   padding: 0 var(--s-3);
   border: 2rpx solid var(--c-border);

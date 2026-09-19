@@ -2,16 +2,27 @@
   <view class="manage-page" :class="{ 'with-bar': selectMode }">
     <view class="page-head">
       <view class="page-head-top">
-        <text class="page-title">菜单分类</text>
-        <!-- 批量删除入口：每行挂一个删除键太臃肿，改成右上角一个入口 -->
-        <view v-if="categories.length" class="head-btn" hover-class="tap" @click="toggleSelectMode">
-          {{ selectMode ? '取消' : '批量删除' }}
+        <!-- 状态取代标题（2026-09-19）：导航栏已写「分类管理」，页内不重复；
+             这里回答"现在有几个分类"，选中时换成已选数 -->
+        <text class="page-status">
+          {{ selectMode ? `已选 ${pickedIds.length} 个` : `共 ${categories.length} 个分类` }}
+        </text>
+        <view class="head-actions">
+          <!-- 新增：与菜品管理页一致，从列表最下方挪到右上角（那边用户反馈要一直下滑） -->
+          <view v-if="!selectMode" class="head-btn primary" hover-class="tap" @click="add">
+            新增分类
+          </view>
+          <!-- 批量删除入口：每行挂一个删除键太臃肿，改成右上角一个入口 -->
+          <view v-if="categories.length" class="head-btn" hover-class="tap" @click="toggleSelectMode">
+            {{ selectMode ? '取消' : '批量删除' }}
+          </view>
         </view>
       </view>
-      <text class="page-desc">
-        {{ selectMode
-          ? '只能勾选「0 道菜」的分类。还有菜的分类，得先把那些菜改到别的分类才能删。'
-          : '分类是你们家自己的一套，可以随意增加、改名、删除。改了名字，归在这一类下的菜会自动跟着显示新名字，不用一个个去改。' }}
+      <!-- 原说明两句话：第一句（"分类是你们家自己的一套，可以随意增删改"）看按钮就懂，删掉；
+           第二句是**非显而易见**的机制（改名会连带更新），保留成一行。
+           选中模式下的这条规则说明放页面底部的 .page-note 里，那里才是操作发生的地方。 -->
+      <text v-if="!selectMode" class="page-desc">
+        改名后，这一类下的菜会自动跟着换名字。
       </text>
     </view>
 
@@ -48,10 +59,8 @@
       <!-- 一个分类都没有时，空着手给个边框卡片会像"加载坏了"——换成一句说明 + 明确的下一步 -->
       <view v-else class="empty-card">
         <text class="empty-title">还没有分类</text>
-        <text class="empty-copy">点下面的「新增分类」建第一个，比如「热菜」「汤」。建好之后，加菜时就能选它了。</text>
+        <text class="empty-copy">点右上角「新增分类」建第一个，比如「热菜」「汤」。建好之后，加菜时就能选它了。</text>
       </view>
-
-      <view v-if="!selectMode" class="add-btn" hover-class="tap" @click="add">+ 新增分类</view>
 
       <text class="page-note">分类下还有菜的时候不能删除——先把那些菜改到别的分类，再来删。</text>
 
@@ -325,10 +334,18 @@ onShow(() => {
 }
 .tip { display: block; margin-top: 60rpx; color: var(--c-text-3); font-size: 24rpx; text-align: center; }
 
-.page-head { display: flex; flex-direction: column; gap: var(--s-1); margin: 0 var(--s-1) var(--s-4); }
+.page-head { display: flex; flex-direction: column; gap: var(--s-1); margin: 0 var(--s-1) var(--s-3); }
 .page-head-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); }
-.page-title { color: var(--c-text); font-size: 40rpx; font-weight: 500; }
-.page-desc { color: var(--c-text-2); font-size: 24rpx; line-height: 1.7; }
+/* 状态取代标题：与右边按钮同高，读起来是一条工具条 */
+.page-status { color: var(--c-text-2); font-size: 23rpx; }
+.page-desc { color: var(--c-text-2); font-size: 22rpx; line-height: 1.55; }
+/* 右上角动作组：新增（实心主色）+ 批量删除（描边），层次与菜品管理页一致 */
+.head-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--s-2); }
+.head-btn.primary {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+  color: #fff;
+}
 /* 页头右上角的动作（批量删除 / 取消） */
 .head-btn {
   flex: 0 0 auto;
@@ -496,19 +513,6 @@ onShow(() => {
 /* 底部有操作栏时给页面留出空间，别让最后一行被盖住 */
 .manage-page.with-bar { padding-bottom: calc(220rpx + env(safe-area-inset-bottom)); }
 
-.add-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 96rpx;
-  margin-top: var(--s-3);
-  border: 2rpx dashed var(--c-primary);
-  border-radius: var(--r-md);
-  background: var(--c-primary-bg);
-  color: var(--c-primary);
-  font-size: 28rpx;
-  font-weight: 500;
-}
 .page-note {
   display: block;
   margin-top: var(--s-3);

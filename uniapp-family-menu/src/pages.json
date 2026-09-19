@@ -20,8 +20,8 @@
     { "path": "pages/alerts/index", "style": { "navigationBarTitleText": "提醒" } }
   ],
   "tabBar": {
-    "color": "#78716C",
-    "selectedColor": "#9A3412",
+    "color": "#5F6F64",
+    "selectedColor": "#15803D",
     "backgroundColor": "#FFFFFF",
     "borderStyle": "white",
     "list": [
@@ -46,9 +46,9 @@
     ]
   },
   "globalStyle": {
-    "navigationBarBackgroundColor": "#9A3412",
+    "navigationBarBackgroundColor": "#15803D",
     "navigationBarTextStyle": "white",
-    "backgroundColor": "#FFFBEB",
+    "backgroundColor": "#F3FAF5",
     "backgroundTextStyle": "dark"
   }
 }

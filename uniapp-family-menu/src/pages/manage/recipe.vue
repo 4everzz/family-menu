@@ -2,17 +2,28 @@
   <view class="manage-page" :class="{ 'with-bar': selectMode }">
     <view class="page-head">
       <view class="page-head-top">
-        <text class="page-title">菜品管理</text>
-        <!-- 批量删除入口：每行挂一个删除键太臃肿，改成右上角一个入口 -->
-        <view v-if="recipes.length" class="head-btn" hover-class="tap" @click="toggleSelectMode">
-          {{ selectMode ? '取消' : '批量删除' }}
+        <!-- 左边放状态而不是标题（2026-09-19）：
+             原生导航栏已经写着「菜品管理」，页内再写一遍是同一句话说两遍、
+             还白占首屏。换成"这个列表现在有多少道菜"，选中时换成已选数。 -->
+        <text class="page-status">
+          {{ selectMode ? `已选 ${pickedIds.length} 道` : `共 ${recipes.length} 道菜` }}
+        </text>
+        <view class="head-actions">
+          <!-- 新增：2026-09-19 从列表最下方挪到这里（用户反馈"新增菜品还需要一直下滑"）。
+               它是最常用的动作，所以用实心主色；批量删除是低频且偏破坏性的操作，用描边弱化。
+               选中的状态（selectMode）下不给新增，避免"一边勾删除一边加菜"。 -->
+          <view v-if="!selectMode" class="head-btn primary" hover-class="tap" @click="add">
+            新增菜品
+          </view>
+          <!-- 批量删除入口：每行挂一个删除键太臃肿，改成右上角一个入口 -->
+          <view v-if="recipes.length" class="head-btn" hover-class="tap" @click="toggleSelectMode">
+            {{ selectMode ? '取消' : '批量删除' }}
+          </view>
         </view>
       </view>
-      <text class="page-desc">
-        {{ selectMode
-          ? '勾选要删掉的菜，再点底部的删除。'
-          : '这里集中增删改菜谱。点某一道菜可以直接进去改。' }}
-      </text>
+      <!-- 只留真正有用的一句；选中模式下由底部操作栏（全选 / 已选 / 删除）承担指引，
+           这里不重复说嘴 -->
+      <text v-if="!selectMode" class="page-desc">点某一道菜可以直接进去改。</text>
     </view>
 
     <view v-if="loading" class="tip">正在读取…</view>
@@ -69,11 +80,10 @@
 
       <view v-else class="empty-card">
         <text class="empty-text">
-          {{ activeCategoryId ? '这个分类下还没有菜' : '还没有任何菜谱，点下面的按钮加第一道菜' }}
+          {{ activeCategoryId ? '这个分类下还没有菜，点右上角「新增菜品」加一道'
+             : '还没有任何菜谱，点右上角「新增菜品」加第一道菜' }}
         </text>
       </view>
-
-      <view v-if="!selectMode" class="add-btn" hover-class="tap" @click="add">+ 新增菜品</view>
 
       <!-- 批量操作栏：固定在底部（本页不是 tabBar 页，bottom:0 就是屏幕底） -->
       <view v-if="selectMode" class="select-bar">
@@ -287,8 +297,9 @@ onShow(() => {
 
 .page-head { display: flex; flex-direction: column; gap: var(--s-1); margin: 0 var(--s-1) var(--s-3); }
 .page-head-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); }
-.page-title { color: var(--c-text); font-size: 40rpx; font-weight: 500; }
-.page-desc { color: var(--c-text-2); font-size: 24rpx; line-height: 1.7; }
+/* 状态行（取代原来的页内标题）：与右边按钮同高，视觉上是一条工具条 */
+.page-status { color: var(--c-text-2); font-size: 23rpx; }
+.page-desc { color: var(--c-text-3); font-size: 22rpx; line-height: 1.5; }
 /* 页头右上角的动作（批量删除 / 取消） */
 .head-btn {
   flex: 0 0 auto;
@@ -459,17 +470,13 @@ onShow(() => {
 }
 .empty-text { display: block; color: var(--c-text-2); font-size: 25rpx; line-height: 1.7; text-align: center; }
 
-.add-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 96rpx;
-  margin-top: var(--s-3);
-  border: 2rpx dashed var(--c-primary);
-  border-radius: var(--r-md);
-  background: var(--c-primary-bg);
-  color: var(--c-primary);
-  font-size: 28rpx;
-  font-weight: 500;
+/* 右上角的动作组：新增 + 批量删除。两个都是药丸形小按钮，
+   一实一虚形成层次——新增是日常高频动作（实心主色），批量删除低频（描边）。
+   实测两个按钮 + 标题在 360px 宽的手机上一行放得下（约 248px / 可用 337px）。 */
+.head-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--s-2); }
+.head-btn.primary {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+  color: #fff;
 }
 </style>

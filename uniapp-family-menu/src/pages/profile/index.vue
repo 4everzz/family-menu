@@ -98,7 +98,10 @@
         </view>
 
         <view class="entry-item" hover-class="tap" @click="goAlerts">
-          <view class="entry-icon" :style="{ background: 'var(--c-tint-clay)' }">
+          <!-- ⚠️ 唯一一个不用品牌色的图标块：提醒代表"该处理的事"，
+               用琥珀（--c-warn）而不是绿——绿色三角在语义上是矛盾的，
+               而且全绿之后这一行就失去了"该注意"的信号。 -->
+          <view class="entry-icon" :style="{ background: 'var(--c-warn-bg)' }">
             <image class="entry-icon-img" src="/static/icons/warning.png" mode="aspectFit" />
           </view>
           <view class="entry-main">
@@ -310,35 +313,40 @@ onShow(() => {
 <style scoped>
 .profile-page {
   min-height: 100vh;
-  padding: var(--s-4) var(--s-3) calc(var(--s-6) + env(safe-area-inset-bottom));
+  /* 顶部收到 s-3：原生导航栏已经隔开了，页内再来一层 32rpx 是重复留白 */
+  padding: var(--s-3) var(--s-3) calc(var(--s-6) + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
-/* 用户信息卡片：整页视觉重心，所以用主色描边把它和下面的功能分组区分开 */
+/* 用户信息卡片：整页视觉重心。
+   2026-09-19 改：底色用主色极浅底（原来是纯白 + 描边）。
+   同一个页面里"身份区"和下面的功能行都是白卡片，容易糊成一片；
+   染上品牌色之后一眼看出"这是我的身份区"，也不用靠描边硬撑。
+   实测文字对比度：昵称 15:1、副标题 4.8:1，都在 4.5:1 之上。 */
 .user-card {
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  min-height: 168rpx;
-  padding: var(--s-3);
+  min-height: 148rpx;
+  padding: var(--s-2) var(--s-3);
   border: 2rpx solid var(--c-primary-border);
   border-radius: var(--r-lg);
-  background: var(--c-surface);
+  background: var(--c-primary-bg);
   box-shadow: var(--shadow-card);
 }
 /* 圆形头像：裁切交给外层容器，这样用户以后换成方图也能自动裁成圆的 */
 .user-avatar {
   flex: 0 0 auto;
-  width: 112rpx;
-  height: 112rpx;
+  width: 96rpx;
+  height: 96rpx;
   border-radius: 50%;
-  background: var(--c-muted);
+  background: var(--c-surface);
 }
-.user-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
+.user-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4rpx; }
 .user-name {
   overflow: hidden;
   color: var(--c-text);
-  font-size: 34rpx;
+  font-size: 32rpx;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -351,11 +359,12 @@ onShow(() => {
   white-space: nowrap;
 }
 
-/* 分组标题：把"设置类"和"功能类"分开，条目一多也不至于糊成一片 */
-.group { margin-top: var(--s-4); }
+/* 分组标题：把"设置类"和"功能类"分开，条目一多也不至于糊成一片。
+   分组间距 s-4 → s-3：卡片之间 32rpx 的空白 + 标题本身的行高已经足够分层 */
+.group { margin-top: var(--s-3); }
 .group-title {
   display: block;
-  margin: 0 var(--s-1) var(--s-2);
+  margin: 0 var(--s-1) 12rpx;
   color: var(--c-text-2);
   font-size: 23rpx;
 }
@@ -367,12 +376,15 @@ onShow(() => {
   box-shadow: var(--shadow-card);
   overflow: hidden;
 }
+/* 行高 136 → 124rpx、图标块 80 → 72rpx（2026-09-19 收紧）。
+   这一页条目多（7~8 行）+ 每行还有一行说明，原来整页要滑很久；
+   竖向内边距同步收到 10rpx，行看起来更"齐"，触控高度仍 >= 124rpx。 */
 .entry-item {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  min-height: 136rpx;
-  padding: var(--s-2) var(--s-3);
+  min-height: 124rpx;
+  padding: 10rpx var(--s-3);
   border-bottom: 2rpx solid var(--c-border);
 }
 .entry-item:last-child { border-bottom: none; }
@@ -382,14 +394,14 @@ onShow(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 80rpx;
-  height: 80rpx;
+  width: 72rpx;
+  height: 72rpx;
   border-radius: var(--r-sm);
   line-height: 1;
 }
 /* 图标用 SVG 而不是 emoji：emoji 依赖手机字体，同一台手机不同系统版本长得都不一样，
    也没法用设计令牌控制颜色；SVG 是矢量，随设计系统走，缩放不糊 */
-.entry-icon-img { width: 44rpx; height: 44rpx; }
+.entry-icon-img { width: 40rpx; height: 40rpx; }
 .entry-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .entry-name { color: var(--c-text); font-size: 29rpx; font-weight: 500; }
 .entry-desc {

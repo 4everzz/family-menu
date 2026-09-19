@@ -596,18 +596,25 @@ onShow(load);
    scrollTop/scrollLeft 而节点引用为 null，抛 "of null" 异常。
    这两个容器有固定高度（height:100%）且不需 scroll 事件，改用原生 CSS
    overflow-y:auto 滚动，彻底规避该框架问题。 */
-.category-sidebar { flex: 0 0 176rpx; width: 176rpx; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* 分类侧栏宽度 176rpx → 120rpx（2026-09-19 用户要求：缩到原来的 2/3 左右）。
+   省下的 56rpx 全部让给菜谱卡片——卡片里要塞缩略图、菜名、简介和步进器，一直偏挤。
+   ⚠️ 变窄之后「名字 + 数量」横排就放不下了（4 个字的分类名会被挤成两截），
+      所以内部改成**上下两行居中**：名字在上、数量在下，任何长度的分类名都能容下。 */
+.category-sidebar { flex: 0 0 120rpx; width: 120rpx; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .category-button {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--s-1);
+  justify-content: center;
+  gap: 2rpx;
   min-height: var(--touch-min);
   margin-bottom: var(--s-1);
-  padding: 0 var(--s-2);
+  padding: 10rpx 6rpx;
   border: 2rpx solid var(--c-border);
   border-radius: var(--r-md);
   background: var(--c-surface);
+  text-align: center;
+  box-sizing: border-box;
 }
 /* 选中态：底色 + 边框 + 文字一起变，三重强调。
    在小屏上单靠换个浅底色，用户不容易看出当前选的是哪个 */
@@ -615,9 +622,9 @@ onShow(load);
   border-color: var(--c-primary);
   background: var(--c-primary-bg);
 }
-.category-name { color: var(--c-text-2); font-size: 25rpx; }
+.category-name { color: var(--c-text-2); font-size: 24rpx; line-height: 1.2; word-break: break-all; }
 .category-button.active .category-name { color: var(--c-primary); font-weight: 500; }
-.category-count { color: var(--c-text-3); font-size: 21rpx; }
+.category-count { color: var(--c-text-3); font-size: 20rpx; }
 .category-button.active .category-count { color: var(--c-primary); }
 
 .recipe-area { flex: 1; min-width: 0; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -625,13 +632,16 @@ onShow(load);
 .section-title { color: var(--c-text); font-size: 27rpx; font-weight: 500; }
 .section-count { color: var(--c-text-3); font-size: 22rpx; }
 
+/* 卡片高度 176rpx → 208rpx（2026-09-19）：
+   步进器缩小之后右侧空出一截，把省下的"视觉重量"换成高度——
+   卡片更从容，缩略图也更大，翻菜谱时更好认。 */
 .recipe-card {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  min-height: 176rpx;
+  min-height: 208rpx;
   margin-bottom: var(--s-2);
-  padding: var(--s-2);
+  padding: var(--s-2) var(--s-3);
   border: 2rpx solid var(--c-border);
   border-radius: var(--r-md);
   background: var(--c-surface);
@@ -686,40 +696,59 @@ onShow(load);
 /* 卡片上快速加减：参考小程序菜单页的 .dish-quick-add。
    没加过菜时只显示「+」按钮；加过后显示「− 数量 +」。
    按钮用 64rpx 圆形（和小程序版一致），+ 用实心主色、− 用浅色底。 */
+/* ---------- 数量步进器（紧凑版，2026-09-19 缩小）----------
+   原来按钮 64rpx、间隔 12rpx、数量位 36rpx，整组 188rpx——
+   在卡片里占了近 2/3 的横向空间，把菜名挤得只剩一行半。
+   现在 56 / 10 / 32 = 164rpx（−13%）。
+
+   ⚠️ 触摸区没有跟着缩到 56rpx：用 ::after 透明层把可点范围撑到约 80rpx。
+      视觉变轻、手指仍点得中——这是"看起来小、点起来不小"的标准做法。
+      横向只在**外侧**扩（− 往左、+ 往右），中间不重叠，避免加号误触成减号。 */
 .dish-stepper {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12rpx;
+  gap: 10rpx;
   height: var(--touch-min);
-  margin-right: calc(-1 * var(--s-2));
 }
 .stepper-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 32rpx;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 28rpx;
   background: var(--c-primary);
   color: #fff;
   box-sizing: border-box;
 }
+/* 透明扩展层：把点击范围撑到 80×96rpx，但不占布局宽度 */
+.stepper-btn::after {
+  content: '';
+  position: absolute;
+  top: -20rpx;
+  bottom: -20rpx;
+  left: 0;
+  right: 0;
+}
+.stepper-btn.secondary::after { left: -12rpx; right: 0; } /* − 只往左扩 */
+.stepper-btn:not(.secondary)::after { left: 0; right: -12rpx; } /* + 只往右扩 */
 .stepper-btn.secondary {
   background: var(--c-primary-bg);
   color: var(--c-primary);
 }
 .stepper-icon {
   font-family: sans-serif;
-  font-size: 36rpx;
+  font-size: 32rpx;
   font-weight: 700;
   line-height: 1;
 }
 .stepper-qty {
-  min-width: 36rpx;
+  min-width: 32rpx;
   color: var(--c-primary);
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: 700;
   text-align: center;
   white-space: nowrap;
@@ -748,8 +777,9 @@ onShow(load);
 }
 /* 给底部 tabBar 留出空间，不然最后一张卡片会被盖住 */
 .bottom-space { height: 120rpx; }
-/* 购物车栏出现时要多留一段，否则最后一张卡片会被它压住半截 */
-.bottom-space.with-fab { height: 240rpx; }
+/* 购物车栏出现时要多留一段，否则最后一张卡片会被它压住半截。
+   条形自身 = 96rpx 高 + 与 tabBar 的 8rpx 间距 = 200rpx，这里留 216rpx 稍宽裕 */
+.bottom-space.with-fab { height: 216rpx; }
 
 /* ---------- 底部购物车栏 ----------
    对照小程序版的 .cart-bar：
@@ -759,18 +789,30 @@ onShow(load);
      能用设计令牌控色、任何分辨率都不糊，也不用多带一张图进包。
    bottom 要同时让过 tabBar（约 100rpx）和全面屏手势条（安全区），
    少让一样就会在某个机型上被压住或被挡掉。 */
+/* ⚠️ bottom 必须**分平台**写（2026-09-19 踩过）：两端 tabBar 的实现完全不同。
+   · H5：tabBar 是 DOM 元素、**盖在页面之上**（实测高 96rpx），页面内容延伸到它底下
+         → bottom 要让过整个 tabBar，再加 8rpx 视觉间距 = 104rpx
+   · App / 小程序：tabBar 是**原生控件，页面区域本身就不含它**
+         → bottom 就是"与 tabBar 的真实间距"，取 40rpx（原 120rpx 的 1/3）
+   如果只写一句 104rpx：H5 里贴着 tabBar（对），App 里却会离 tabBar 还有 104rpx——
+   用户反馈"手机上没有变化"就是这个原因。 */
+/* #ifdef H5 */
+.cart-bar { bottom: calc(104rpx + env(safe-area-inset-bottom)); }
+/* #endif */
+/* #ifndef H5 */
+.cart-bar { bottom: calc(40rpx + env(safe-area-inset-bottom)); }
+/* #endif */
 .cart-bar {
   position: fixed;
   left: var(--s-3);
   right: var(--s-3);
-  bottom: calc(120rpx + env(safe-area-inset-bottom));
   z-index: 20;
   display: flex;
   align-items: stretch;
   height: 96rpx;
   overflow: hidden;
   border-radius: 48rpx;
-  /* 深色底借主文字那个暖黑（#1c1917）：比纯黑柔和，又不和主色抢注意力 */
+  /* 深色底借主文字那个近黑：比纯黑柔和，又不和绿色主色抢注意力 */
   background: var(--c-text);
   color: #fff;
   box-shadow: var(--shadow-float);
@@ -809,8 +851,9 @@ onShow(load);
 }
 .cart-icon-wheel.left { left: 31rpx; }
 .cart-icon-wheel.right { left: 55rpx; }
-/* 角标和右侧按钮都用"比主色亮一档"的色：
-   主色 #9a3412 压在近黑底上会陷进去，看着像不可点 */
+/* 角标和右侧按钮都用**主色**而不是"亮一档"：
+   亮一档的绿(#16a34a)压白字只有 3.3:1，过不了 4.5:1；
+   主色 #15803d 压白字 5.02:1，且与近黑条底的边界对比 3.2:1（UI 边界需 ≥3:1）——两头都达标。 */
 .cart-icon-badge {
   position: absolute;
   right: 3rpx;
@@ -819,7 +862,7 @@ onShow(load);
   height: 30rpx;
   padding: 0 7rpx;
   border-radius: 16rpx;
-  background: var(--c-primary-weak);
+  background: var(--c-primary);
   color: #fff;
   font-size: 20rpx;
   font-weight: 700;
@@ -846,7 +889,7 @@ onShow(load);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--c-primary-weak);
+  background: var(--c-primary);
   color: #fff;
   font-size: 30rpx;
   font-weight: 500;
