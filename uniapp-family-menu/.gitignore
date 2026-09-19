@@ -4,6 +4,9 @@ dist/
 .vite/
 unpackage/
 *.log
+# Vite 加载 vite.config.ts 时会生成一份带时间戳的临时配置副本，
+# 跑过 dev server 就会出现在仓库里（未被其它规则覆盖），必须显式忽略
+vite.config.ts.timestamp-*.mjs
 
 # 本地环境变量（后端地址、密钥等），绝不入库
 .env
