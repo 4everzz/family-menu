@@ -5,6 +5,7 @@ Alembic 自动生成迁移时是通过 Base.metadata 发现表的，
 如果某个模型没有被导入过，它就不在 metadata 里，迁移会漏表。
 """
 
+from app.models.ai_chat import ROLE_ASSISTANT, ROLE_USER, AiChatMessage
 from app.models.base import Base
 from app.models.dish_order import (
     ORDER_STATUS_DONE,
@@ -52,4 +53,7 @@ __all__ = [
     "MAX_CATEGORY_NAME_LENGTH",
     "UserProfile",
     "CalorieLog",
+    "AiChatMessage",
+    "ROLE_USER",
+    "ROLE_ASSISTANT",
 ]

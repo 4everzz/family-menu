@@ -1,8 +1,20 @@
 <template>
   <view class="ai-page">
-    <view class="page-head">
-      <text class="page-title">AI 助手</text>
-      <text class="page-subtitle">说一句就记上</text>
+    <!-- 顶部只留一条细工具条（2026-09-19 重排）。
+         ⚠️ 这里**不再重复写「AI 助手」**——原生导航栏已经有这个标题了，
+         页内再写一遍等于同一句话说两遍，还把首屏顶掉 53px（用户反馈"太臃肿"）。
+         换成放**真有用的状态**：今天记了几条；没记录时就是一句引导。
+         底部那条也因此瘦身：只留输入框，不再叠一张"今天已记"的卡片。 -->
+    <view class="page-bar">
+      <text v-if="todayCount > 0" class="bar-stat">
+        今天已记 <text class="bar-num">{{ todayCount }}</text> 条 ·
+        {{ Math.round(todayTotal) }} kcal
+      </text>
+      <text v-else class="bar-stat">说一句就记上</text>
+      <!-- 新对话：清空后端历史。有过对话才显示，空态里点了也没意义 -->
+      <view v-if="messages.length" class="head-btn" hover-class="tap" @click="startNewChat">
+        新对话
+      </view>
     </view>
 
     <!-- 消息区：占满剩余高度，内部滚动。
@@ -67,18 +79,14 @@
     </view>
 
     <!-- 底部浮层：整体固定在 tabBar 之上。
-         ⚠️ 必须用 position:fixed 并显式让过 tabBar（约 120rpx）+ 安全区，
-         否则会被压在 tabBar 底下点不到——这是本项目的既有做法，
-         见 pages/menu/index.vue 的 .cart-bar（那里有同样的注释）。 -->
+         ⚠️ bottom 分平台写（H5 让过 DOM tabBar，App 是原生 tabBar 不占页面区域），
+         见本文件 .bottom-bar 的样式注释与 .cart-bar 的同一处坑。
+         2026-09-19 瘦身：原来这里还叠着一张"今天已记"的卡片，
+         现已上移到顶部工具条——输入区只该有输入框。 -->
     <view class="bottom-bar">
       <!-- 没配 Key 时后端会回占位回复，这里如实说明，别让用户以为记上了 -->
       <view v-if="mock" class="mock-hint">
         演示数据：把可用的 DashScope Key 填进后端 .env 即自动接通真实对话
-      </view>
-
-      <view v-if="todayCount > 0" class="today">
-        <text class="today-label">今天已记</text>
-        <text class="today-value">{{ todayCount }} 条 · {{ Math.round(todayTotal) }} kcal</text>
       </view>
 
       <view class="composer">
@@ -184,13 +192,22 @@
  * 拍照识别热量已从本页移除（用户定的：先专心把对话做好）。后端
  * /vision/recognize-food 保留未动，将来想恢复随时接回来。
  *
- * 历史消息本轮只存内存，关掉页面就没了；每次请求回填最近几轮，让"再加一碗"能懂。
+ * 对话历史（2026-09-18 起）：
+ *   **存在后端**（ai_chat_messages 表），上下文也由后端自己取——前端不再传 history，
+ *   刷新/换设备都不断片。进页面拉一次最近 50 条回放；「新对话」清空后端历史重新开始。
+ *   ⚠️ 回放**只渲染文本气泡、不渲染确认卡片**：卡片的「已记下」是本地状态，
+ *   回放卡片会诱导用户对着已记过的菜再点一次「记下」→ 重复记录。
  */
 
 import { computed, nextTick, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
-import { sendAiMessage, type ActionDraft, type AiChatTurn } from '../../services/ai-chat';
+import {
+  clearAiMessages,
+  fetchAiMessages,
+  sendAiMessage,
+  type ActionDraft,
+} from '../../services/ai-chat';
 import { addCalorieLog, fetchCalorieLogs, updateCalorieLog, type CalorieLog } from '../../services/health';
 import { getCurrentSpaceId } from '../../utils/space-context';
 import { hasValidToken } from '../../utils/token';
@@ -202,8 +219,6 @@ const EXAMPLES = [
   '刚吃了个苹果',
   '晚饭吃了红烧排骨，600千卡',
 ];
-/** 回填给后端的历史轮数上限（和后端 MAX_HISTORY_TURNS 对齐） */
-const MAX_HISTORY = 6;
 
 /** 卡片上的草案：在后端结构上加了几个纯界面状态 */
 interface ChatDraft extends ActionDraft {
@@ -226,6 +241,9 @@ const draftText = ref('');
 const busy = ref(false);
 /** 后端是否返回了占位数据（没配 Key） */
 const mock = ref(false);
+/** 历史是否已经拉过。只拉一次：之后 onShow 再触发也不重放，
+ *  否则切个 tab 回来就把还没处理的确认卡片冲掉了 */
+const historyLoaded = ref(false);
 
 const logs = ref<CalorieLog[]>([]);
 
@@ -270,7 +288,49 @@ async function loadToday(): Promise<void> {
   }
 }
 
-onShow(loadToday);
+onShow(() => {
+  void loadToday();
+  void loadHistory();
+});
+
+/** 拉后端的对话历史回放（每次会话只拉一次，见 historyLoaded 的说明）。
+ *  失败静默：拉不到历史只影响"看不到上次的对话"，不该弹错误打断使用。 */
+async function loadHistory(): Promise<void> {
+  if (historyLoaded.value || !hasValidToken()) return;
+  historyLoaded.value = true;
+  try {
+    const rows = await fetchAiMessages();
+    messages.value = rows.map((row) => ({
+      role: row.role,
+      content: row.content,
+      drafts: [], // 历史不回放确认卡片，理由见文件头的说明
+    }));
+    if (rows.length) await scrollToBottom();
+  } catch {
+    // 保持空态即可，空态里有可点的示例，不碍事
+  }
+}
+
+/** 「新对话」：清空后端历史，上下文从头开始。
+ *  二次确认不能省——点掉就找不回来了。 */
+function startNewChat(): void {
+  if (busy.value) return;
+  uni.showModal({
+    title: '开始新对话',
+    content: '会清空这里的聊天记录，AI 也会忘记之前聊的内容。要继续吗？',
+    confirmText: '清空',
+    success: async (result) => {
+      if (!result.confirm) return;
+      try {
+        await clearAiMessages();
+        messages.value = [];
+        mock.value = false;
+      } catch (error) {
+        showError(error);
+      }
+    },
+  });
+}
 
 /** 点例子：**直接发出去**。
  *  只把它填进输入框的话，用户根本不知道这一页能干什么——他要的是看到效果。 */
@@ -286,12 +346,7 @@ async function scrollToBottom(): Promise<void> {
   uni.pageScrollTo({ scrollTop: 999999, duration: 200 });
 }
 
-/** 把内存里的消息转成后端要的历史（只带最近几轮） */
-function buildHistory(): AiChatTurn[] {
-  return messages.value.slice(-MAX_HISTORY).map((m) => ({ role: m.role, content: m.content }));
-}
-
-/** 发一句话 */
+/** 发一句话（上下文由后端自己取，前端只管把这句话递过去） */
 async function send(): Promise<void> {
   if (!canSend.value) return;
   const text = draftText.value.trim();
@@ -303,14 +358,13 @@ async function send(): Promise<void> {
     return;
   }
 
-  const history = buildHistory();
   messages.value.push({ role: 'user', content: text, drafts: [] });
   draftText.value = '';
   busy.value = true;
   await scrollToBottom();
 
   try {
-    const resp = await sendAiMessage(text, history, getCurrentSpaceId() || undefined);
+    const resp = await sendAiMessage(text, getCurrentSpaceId() || undefined);
     mock.value = resp.mock;
     messages.value.push({
       role: 'assistant',
@@ -464,26 +518,39 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
 .ai-page {
   min-height: 100vh;
   box-sizing: border-box;
-  padding: var(--s-4) var(--s-3) calc(200rpx + env(safe-area-inset-bottom));
+  /* 底部留白要盖过"悬浮底栏 + 它与 tabBar 的间距"：
+     H5 里底栏顶边离底 104+190≈294rpx，App 里 40+190≈230rpx，取 320rpx 两头都够。
+     少了这一截，滚到最底时最后一条消息会被底栏压住。 */
+  padding: var(--s-4) var(--s-3) calc(320rpx + env(safe-area-inset-bottom));
   background: var(--c-bg);
 }
 
-/* 页头：不加边框和底——它是"页面身份"，不是卡片 */
-.page-head {
+/* 顶部细工具条（2026-09-19 取代原来的双行页头）。
+   高度对齐右边那颗 64rpx 的按钮，整条比原页头矮一半；
+   左边是当日状态、右边是新对话——首屏把空间还给对话本身。
+   ⚠️ 不要在这里再放页面标题：原生导航栏已经有了。 */
+.page-bar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--s-3);
+  gap: var(--s-2);
+  min-height: 64rpx;
 }
-.page-title {
-  overflow: hidden;
-  color: var(--c-text);
-  font-size: 40rpx;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.bar-stat { color: var(--c-text-2); font-size: 23rpx; }
+.bar-num { color: var(--c-primary); font-weight: 500; }
+/* 头部右上角动作（新对话）：与 manage 页的批量删除按钮同一套 */
+.head-btn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 64rpx;
+  padding: 0 var(--s-3);
+  border: 2rpx solid var(--c-border-strong);
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  font-size: 24rpx;
 }
-.page-subtitle { flex: 0 0 auto; color: var(--c-text-2); font-size: 23rpx; }
 
 .chat { padding: var(--s-3) 0 0; }
 
@@ -579,14 +646,20 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
 .draft-btn.ghost { border: 2rpx solid var(--c-border-strong); color: var(--c-text-2); }
 
 /* ---------- 底部浮层（提示 + 当日累计 + 输入框） ---------- */
-/* ⚠️ bottom 必须让过 tabBar（约 120rpx）+ 全面屏手势条（安全区），
-   少让一样就会在某个机型上被压在 tabBar 底下点不到。
-   这是本项目的既有做法，见 pages/menu/index.vue 的 .cart-bar。 */
+/* ⚠️ bottom 必须**分平台**写（2026-09-19 踩过，与 menu 页 .cart-bar 同一个坑）：
+   H5 的 tabBar 是 DOM、盖在页面上（实测 96rpx），bottom 得让过它 → 104rpx；
+   App / 小程序的 tabBar 是原生控件、页面区域不含它，bottom 就是真实间距 → 40rpx。
+   只写一句 104rpx 的话，手机（App）上会离 tabBar 还有 104rpx，看着"没有变化"。 */
+/* #ifdef H5 */
+.bottom-bar { bottom: calc(104rpx + env(safe-area-inset-bottom)); }
+/* #endif */
+/* #ifndef H5 */
+.bottom-bar { bottom: calc(40rpx + env(safe-area-inset-bottom)); }
+/* #endif */
 .bottom-bar {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(120rpx + env(safe-area-inset-bottom));
   z-index: 20;
   /* ⚠️ 必须 border-box：left/right:0 + 左右 padding 时，content-box 会让
      实际宽度 = 100% + padding，整条溢出到屏幕外，"发送"按钮就被挤出可视区了。 */
@@ -596,26 +669,16 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
 }
 
 .mock-hint {
-  margin-bottom: var(--s-2);
-  padding: var(--s-2) var(--s-3);
+  margin-bottom: var(--s-1);
+  padding: var(--s-1) var(--s-3);
   border-radius: var(--r-sm);
   background: var(--c-muted);
   color: var(--c-text-2);
   font-size: 22rpx;
   line-height: 1.5;
 }
-.today {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: var(--s-2);
-  padding: var(--s-2) var(--s-3);
-  border: 2rpx solid var(--c-border);
-  border-radius: var(--r-md);
-  background: var(--c-primary-bg);
-}
-.today-label { color: var(--c-text-2); font-size: 23rpx; }
-.today-value { color: var(--c-primary); font-size: 27rpx; font-weight: 500; }
+/* 「今天已记」那张卡片 2026-09-19 已上移到顶部 .page-bar：
+   底部浮层只留输入框，少一层盒子、少 39px 高度 */
 
 /* ---------- 输入区 ---------- */
 .composer {

@@ -13,6 +13,8 @@
    所以只在服务层做这个判断（见 AiChatService.chat）。
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 # 单条消息长度上限。用户描述一顿饭不需要更长，也是防止把 prompt 撑爆。
@@ -68,3 +70,20 @@ class AiChatResponse(BaseModel):
         default_factory=list, description="结构化草案；闲聊时为空数组"
     )
     mock: bool = Field(default=False, description="是否占位数据（没配识别 Key 时为 true）")
+
+
+class AiChatMessageResponse(BaseModel):
+    """一条历史消息（对话页回放用）。
+
+    ⚠️ 刻意**不带 actions**：确认卡片上的「已记下」是前端本地状态，
+    回放历史时若把卡片也渲染出来，用户会对着已经记过的菜再点一次「记下」→ 重复记录。
+    所以回放只回文本气泡；要看重不看重，去热量记录页看（那才是真正落了库的东西）。
+    （actions 仍存在 ai_chat_messages 表里备查，只是不出这个接口。）
+    """
+
+    model_config = {"from_attributes": True}
+
+    id: int = Field(..., description="消息 ID")
+    role: str = Field(..., description="user / assistant")
+    content: str = Field(..., description="消息文本")
+    created_at: datetime = Field(..., description="发送时间")

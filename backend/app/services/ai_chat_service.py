@@ -1,14 +1,21 @@
 """AI 对话（本轮落地：用一句话记账）。
 
-职责很单一：把用户这一句（加少量历史）交给模型，拿回一个结构化 JSON —— 
+职责很单一：把用户这一句（加少量历史）交给模型，拿回一个结构化 JSON ——
 「自然语言回复」+「动作草案」，然后返回给前端。
 
-⭐ **这个服务不写库。**
+⭐ **这个服务不写业务数据。**
    写库发生在用户点确认卡片之后，由前端调**已有的** /users/me/calorie-logs 完成。
    为什么这么切？见 schemas/ai_chat.py 的模块注释——模型只给"提议权"，
    出错了最多是卡片显示错，不会把脏数据写进用户的记录里。
+   （对话消息本身会存进 ai_chat_messages，但那是对话的**记录**，不是业务数据。）
 
-HTTP 调用照抄 vision_service 的形态：httpx 直连 DashScope 的 OpenAI 兼容接口，
+上下文从哪来（2026-09-18 起）：
+    **后端自己从 ai_chat_messages 取最近几条**，前端不再传 history——
+    传的话就变成"前端负责记忆"，换个设备/刷新一下上下文就没了。
+    只有模型调用成功才落库（用户一句 + AI 一句一起存）：
+    失败的那轮不存，不然用户重试一次就多一条重复消息。
+
+HTTP 调用照抄 vision_service 的形态：httpx 直连 OpenAI 兼容接口，
 temperature=0（这里要的是"可解析、不随机"，不是创意），
 HTTP 错误 → BusinessError（不静默失败），没配 Key → 占位 + mock=True（前端会明说是演示）。
 """
@@ -23,12 +30,17 @@ import httpx
 from app.core.config import settings
 from app.core.exceptions import BusinessError
 from app.core.response import CODE_PARAM_INVALID
+from app.models.ai_chat import AiChatMessage
+from app.repositories.ai_chat_repo import AiChatRepository
 from app.schemas.ai_chat import ActionDraft, AiChatRequest, AiChatResponse, AiChatTurn
 
 logger = logging.getLogger(__name__)
 
-# 历史最多带几轮：只用来消解"再加一碗"这类省略句，带太多既费 token 又容易带偏
+# 上下文最多带几条消息：只用来消解"再加一碗"这类省略句，带太多既费 token 又容易带偏。
+# （一条 = 用户一句或 AI 一句；6 条大约等于三轮对话）
 MAX_HISTORY_TURNS = 6
+# 给前端回放用的条数上限：对话页一次拉这么多，够翻也不至于一次拖回几百条
+MAX_LIST_LIMIT = 100
 # 单条历史消息截断长度（防止把 prompt 撑爆）
 MAX_HISTORY_CHARS = 300
 # 热量合理区间。超出基本是听错了或多打个 0，这种值一律不采信。
@@ -109,20 +121,44 @@ def _clean_text(value: object) -> str | None:
 
 
 class AiChatService:
-    """AI 对话服务（只调用模型 + 解析，不碰数据库）。"""
+    """AI 对话服务：调模型 + 解析 + 读写对话历史。业务数据的写入不在这里。"""
 
-    async def chat(self, payload: AiChatRequest) -> AiChatResponse:
-        """处理一轮对话。"""
+    def __init__(self, repo: AiChatRepository) -> None:
+        self.repo = repo
+
+    async def chat(self, user_id: int, payload: AiChatRequest) -> AiChatResponse:
+        """处理一轮对话：取上下文 → 调模型 → 成功后把这一轮存进历史。"""
         message = payload.message.strip()
         if not message:
             raise BusinessError("说点什么吧", code=CODE_PARAM_INVALID)
 
-        if not settings.dashscope_api_key:
-            logger.info("AI 对话未配置 Key，返回占位回复（mock）")
+        if not settings.chat_api_key_effective:
+            logger.info("AI 对话未配置 Key，返回占位回复（mock）。本轮不落库")
             return AiChatResponse(reply=_MOCK_REPLY, intent="chat", actions=[], mock=True)
 
-        body = await self._post_chat(self._build_messages(message, payload.history))
-        return self._parse(body)
+        # 上下文后端自己取：不依赖前端记性，换设备/刷新页面都不断片
+        recent = await self.repo.list_recent(user_id, MAX_HISTORY_TURNS)
+        history = [AiChatTurn(role=m.role, content=m.content) for m in recent]
+
+        body = await self._post_chat(self._build_messages(message, history))
+        result = self._parse(body)
+
+        # 成功才落库，两句一起存（user 一句 + assistant 一句）
+        await self.repo.add_user_message(user_id, message)
+        await self.repo.add_assistant_message(
+            user_id,
+            result.reply,
+            [action.model_dump() for action in result.actions],
+        )
+        return result
+
+    async def list_messages(self, user_id: int, limit: int) -> list[AiChatMessage]:
+        """取某用户的最近对话（给前端回放）。limit 做了上限保护。"""
+        return await self.repo.list_recent(user_id, max(1, min(limit, MAX_LIST_LIMIT)))
+
+    async def clear_messages(self, user_id: int) -> int:
+        """清空某用户的全部对话（「新对话」）。返回删掉的条数。"""
+        return await self.repo.delete_all(user_id)
 
     # ---------------- 请求组装 ----------------
 
@@ -142,7 +178,11 @@ class AiChatService:
         return messages
 
     async def _post_chat(self, messages: list[dict]) -> dict:
-        """调 DashScope 的 OpenAI 兼容接口（文本模型）。"""
+        """调对话模型的 OpenAI 兼容接口。
+
+        接入点/密钥用 chat 专属配置（缺省回落 DashScope 共用值）——
+        将来"对话走本地模型、识图走云"时就改这两个配置，这里不用动。
+        """
         payload = {
             "model": settings.chat_model,
             "messages": messages,
@@ -151,13 +191,13 @@ class AiChatService:
             "max_tokens": 800,
         }
         headers = {
-            "Authorization": f"Bearer {settings.dashscope_api_key}",
+            "Authorization": f"Bearer {settings.chat_api_key_effective}",
             "Content-Type": "application/json",
         }
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
-                    f"{settings.dashscope_base_url}/chat/completions",
+                    f"{settings.chat_base_url_effective}/chat/completions",
                     json=payload,
                     headers=headers,
                 )

@@ -85,8 +85,24 @@ class Settings(BaseSettings):
     # 2026-09 实测在售：qwen-plus / qwen-max / qwen-turbo / qwen-flash。
     # 选 plus 是因为它够聪明又便宜，做"从一句话里抽结构化字段"这类活很够用。
     chat_model: str = "qwen-plus"
+    # 对话模型的接入点与密钥：**缺省回落到上面 DashScope 的共用值**。
+    # 拆出来的目的：将来"对话走本地模型、识图继续走云"——把 CHAT_BASE_URL / CHAT_API_KEY
+    # 指到本地 OpenAI 兼容服务（Ollama / vLLM 等）即可，识图的配置一行不用动。
+    # 本地服务通常不需要真 key，随便填个非空字符串（如 "ollama"）就能通过下面的空值检查。
+    chat_base_url: str = ""
+    chat_api_key: str = ""
 
     # ==================== 派生属性 ====================
+    @property
+    def chat_base_url_effective(self) -> str:
+        """对话模型实际使用的接入点：独立配置优先，否则回落 DashScope 共用值。"""
+        return self.chat_base_url or self.dashscope_base_url
+
+    @property
+    def chat_api_key_effective(self) -> str:
+        """对话模型实际使用的密钥：独立配置优先，否则回落 DashScope 共用值。"""
+        return self.chat_api_key or self.dashscope_api_key
+
     @property
     def is_prod(self) -> bool:
         """是否生产环境。"""
