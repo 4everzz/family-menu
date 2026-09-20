@@ -20,6 +20,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import engine
 from app.core.exceptions import register_exception_handlers
+from app.mcp.gateway import shutdown_all
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -33,8 +34,8 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """应用启动与关闭时的动作。
 
-    启动时打印环境信息；关闭时释放数据库连接池，
-    避免服务重启过程中残留连接把数据库连接数占满。
+    启动时打印环境信息；关闭时释放数据库连接池与 MCP 子进程，
+    避免服务重启过程中残留连接把数据库连接数占满、或留下孤儿 Node 进程。
     """
     logger.info("服务启动 | 环境=%s | 接口前缀=%s", settings.app_env, settings.api_prefix)
 
@@ -44,7 +45,21 @@ async def lifespan(app: FastAPI):
         logger.warning("⚠️  AUTH_DEV_MODE 已开启：登录不校验微信，仅供本地联调！")
         logger.warning("=" * 64)
 
+    if settings.mcp_enabled:
+        logger.info(
+            "MCP 已启用 | 超时=%.1fs | 首次调用可能要下载 MCP Server 包，会稍慢",
+            settings.mcp_call_timeout,
+        )
+    else:
+        logger.info("MCP 未启用（热量将走大模型估算；改用权威数据源请设 MCP_ENABLED=true）")
+
     yield
+
+    # ⚠️ MCP 子进程必须在**这条事件循环**里关闭。
+    #    anyio 的 cancel scope 绑定创建时的事件循环，换循环去关会抛
+    #    "Attempted to exit cancel scope in a different task"。
+    #    所以放在 lifespan 而不是 atexit（详见 app/mcp/gateway.py 的说明）。
+    await shutdown_all()
 
     await engine.dispose()
     logger.info("服务已关闭，数据库连接池已释放")

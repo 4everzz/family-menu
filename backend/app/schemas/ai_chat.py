@@ -59,6 +59,26 @@ class ActionDraft(BaseModel):
         default=False, description="热量是否为模型估算（用户没给热量时为 true）"
     )
     eaten_at: str = Field(..., description="食用日期 yyyy-mm-dd，只到天（不区分餐段）")
+    # ⭐ 可信度分级：这个热量是"查的"还是"猜的"。
+    #
+    # 为什么要有这个字段？
+    #   以前热量全是大模型凭常识估的——同一个红烧肉今天 400、明天 520，
+    #   用户既看不出这是估的，也无从判断准不准。
+    #   现在接了 MCP 查《中国食物成分表》，热量可能是查出来的。
+    #   用 source 如实标出来，前端可以显示"数据来源：中国食物成分表"之类。
+    #
+    # 取值：
+    #   mcp_exact    —— MCP 精确命中（食材名对上了）      → 查的，最可信
+    #   mcp_derived  —— MCP 基准 + AI 按烹饪方式修正      → 有依据的推算
+    #   llm_estimate —— 纯 AI 估算                        → 猜的（默认值）
+    source: str = Field(
+        default="llm_estimate",
+        description="热量来源：mcp_exact / mcp_derived / llm_estimate",
+    )
+    #: 命中的食材名（如"红烧肉"→"猪肉"）。让用户知道这个数是"拿什么查的"
+    matched_food: str | None = Field(
+        default=None, description="MCP 命中的食材名；未命中为 null"
+    )
 
 
 class AiChatResponse(BaseModel):
