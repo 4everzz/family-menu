@@ -16,6 +16,7 @@
    因为这里要验证的是"决策逻辑"，不是"能不能起 npx"（那个在 gateway 测试里）。
 """
 
+import re
 from datetime import date
 
 import pytest
@@ -129,6 +130,63 @@ class TestPickBestFood:
         ]
         assert ns._pick_best_food(foods, "大米")["name"] == "大米(粳米)"
 
+    def test_generic_bracket_marker_wins_over_shortest(self):
+        """⭐ 真实事故（2026-09-21）：`猪肉` 挑中了「猪肉(肥)」816 kcal。
+
+        `猪肉(肥)` 只有 6 个字符，比 `猪肉(瘦)`/`猪肉(肥,瘦)` 都短，
+        于是被"取最短名"选中——把「红烧肉 500g」估成了 2120 kcal（实际约 500~800）。
+
+        括号里是**并列词**（`肥,瘦`）是成分表的"整体/代表值"写法，
+        这个**结构性信号**必须优先于"名字长度"。
+        """
+        foods = [
+            {"name": "猪肉(肥)", "energy_kcal": 816},
+            {"name": "猪肉(瘦)", "energy_kcal": 143},
+            {"name": "猪肉(肥,瘦)", "energy_kcal": 395},
+        ]
+        picked = ns._pick_best_food(foods, "猪肉")
+        assert picked is not None
+        assert picked["name"] == "猪肉(肥,瘦)", "应当优先'整体代表值'，而不是最短名"
+
+    def test_generic_marker_result_is_order_independent(self):
+        """多个通用标记同时出现时，按标记优先级取，**不依赖上游返回的顺序**。
+
+        ⚠️ 如果实现写成"遍历候选、谁先碰到谁赢"，结果就会随数据源排序抖动——
+        同样的查询今天返回 395、明天返回别的。这种不确定性最难查。
+        """
+        foods = [
+            {"name": "牛肉(鲜)", "energy_kcal": 100},
+            {"name": "牛肉(肥,瘦)", "energy_kcal": 190},
+        ]
+        assert ns._pick_best_food(foods, "牛肉")["name"] == "牛肉(肥,瘦)"
+        assert ns._pick_best_food(list(reversed(foods)), "牛肉")["name"] == "牛肉(肥,瘦)"
+
+    def test_without_generic_marker_still_falls_back_to_shortest(self):
+        """没有通用标记时，仍退回"取最短"——比乱猜好（`鸡蛋` 的真实场景）。
+
+        ⚠️ 这一条是**防止修过头**：新加的通用标记只是"优先"，不该把
+           原来的兜底路径整条换掉。
+
+        ⚠️ 顺带钉住"长度相同时顺序稳定"：`鸡蛋(白皮)` 和 `鸡蛋(红皮)`
+           都是 6 个字，只按长度排的话结果会随上游返回顺序抖动
+           （今天 138、明天 156）。写这个测试时就是这么发现问题的。
+        """
+        foods = [
+            {"name": "鸡蛋(红皮)", "energy_kcal": 156},
+            {"name": "鸡蛋(白皮)", "energy_kcal": 138},
+        ]
+        assert ns._pick_best_food(foods, "鸡蛋")["name"] == "鸡蛋(白皮)"
+        # 顺序反过来，结果必须一样
+        assert ns._pick_best_food(list(reversed(foods)), "鸡蛋")["name"] == "鸡蛋(白皮)"
+
+    def test_part_words_still_excluded_even_with_marker(self):
+        """通用标记不能把"部位词排除"这条规则顶掉（两条是并且的关系）。"""
+        foods = [
+            {"name": "鸡蛋白(肥,瘦)", "energy_kcal": 60},  # 造一个带标记的部位词
+            {"name": "鸡蛋(白皮)", "energy_kcal": 138},
+        ]
+        assert ns._pick_best_food(foods, "鸡蛋")["name"] == "鸡蛋(白皮)"
+
     def test_no_match_returns_none(self):
         """完全不像 → 不猜。"""
         foods = [{"name": "白菜", "energy_kcal": 20}]
@@ -231,8 +289,13 @@ class TestCache:
         key = ns._cache_key("豆腐")
         assert key.startswith(ns._CACHE_PREFIX)
         assert "豆腐" in key
-        # 版本号在 key 里 → 将来改了数据结构，改一下版本号即可让旧缓存自然失效
-        assert "v1" in key
+        # 版本号在 key 里 → 改了**匹配规则**或数据结构时把它 +1，
+        # 旧缓存自然失效，不用手动清 Redis。
+        #
+        # ⚠️ 这里刻意**不写死 v1**：写死的话每次升版本都要改测试，
+        #    而"测试因为版本号变了而红"是个假警报，会让人开始无视测试。
+        #    只要保证"有个 vN 版本号"这个**性质**就够了。
+        assert re.search(r"v\d+", key), "缓存 key 里必须带版本号"
 
     def test_key_strips_whitespace(self):
         assert ns._cache_key("  豆腐  ") == ns._cache_key("豆腐")

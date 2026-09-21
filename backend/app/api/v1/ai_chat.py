@@ -2,14 +2,20 @@
 
 接口层保持"薄"：只收参数、调 Service、返回结果。规则都在 Service 层。
 
+⭐ 改造后（2026-09-21）AI 是一个**会用工具的 Agent**：
+   它能自己去查冰箱、查菜单、查热量，所以响应里多了 `steps`
+   （本轮调了哪些工具、各自什么结果）。**但它依然不写业务数据。**
+
 ⭐ 模型**不写业务数据**。
    模型只产出"动作草案"（actions），用户在确认卡片上点「记下」之后，
    前端才去调**已有的** /users/me/calorie-logs 写入。
    好处是 AI 没有直接改数据的能力——它抽错了，最多是卡片显示错，不会脏库。
+   工具清单里也**一个写操作都没有**，这条边界是一致的。
    （对话消息本身存进 ai_chat_messages，那是对话的记录，不是业务数据。）
 
 ⭐ 身份只从令牌解析（CurrentUser），**不接受客户端传 user_id**。
    前端把按钮藏起来不是安全边界，别人可以直接调接口。
+   同理，`space_id` 是客户端传的，服务端**必须**再过一次 ensure_member。
 
 ⭐ 上下文（history）由后端自己从库里取，前端不传。
    传的话就等于让前端负责记忆——刷新/换设备上下文就断了。
@@ -28,11 +34,17 @@ router = APIRouter(tags=["AI对话"])
 
 
 def _build_service(session: AsyncSession) -> AiChatService:
-    """装配：对话服务只需要历史仓储（模型调用走配置，不依赖注入）。"""
-    return AiChatService(AiChatRepository(session))
+    """装配：对话服务要历史仓储 + 数据库会话。
+
+    ⚠️ 为什么现在要 session 了？
+       改造后 AI 是个会用工具的 Agent，工具要查冰箱、查菜单——
+       那些数据在库里。改造前不需要（那时 AI 只做"从一句话抽字段"，
+       碰不到业务数据）。
+    """
+    return AiChatService(AiChatRepository(session), session)
 
 
-@router.post("/ai/chat", summary="AI 对话（用一句话记账）")
+@router.post("/ai/chat", summary="AI 对话（记账 + 查冰箱/菜单推荐）")
 async def ai_chat(
     payload: AiChatRequest,
     current_user: CurrentUser,
@@ -40,9 +52,11 @@ async def ai_chat(
 ) -> dict:
     """处理一轮对话：自动带上最近的上下文，并把这一轮存进历史。
 
-    返回自然语言回复 + 待用户确认的动作草案。
+    返回自然语言回复 + 待用户确认的动作草案 + 本轮调用了哪些工具。
     """
-    result = await _build_service(session).chat(current_user.id, payload)
+    # ⚠️ 传整个 User 对象而不是 user_id：Agent 的工具要拿它去过 ensure_member
+    #    （不能只凭一个 ID——那样工具层就得自己再查一次用户，等于两份实现）。
+    result = await _build_service(session).chat(current_user, payload)
     await session.commit()  # 落库这一轮的两条消息
     return success(result.model_dump())
 

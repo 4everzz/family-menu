@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     # 本地服务通常不需要真 key，随便填个非空字符串（如 "ollama"）就能通过下面的空值检查。
     chat_base_url: str = ""
     chat_api_key: str = ""
+    # 对话模型的采样温度。
+    # ⚠️ 为什么做成配置而不是像以前那样硬编码 0？
+    #   因为不同模型对温度的要求不一样：qwen 系列做"抽结构化字段"这类活，
+    #   0 最稳；而 DeepSeek 官方建议非思考模式用 0.0~0.3、
+    #   思考模式推荐 0.6（且思考模式下 temperature 实际不生效）。
+    #   将来把 CHAT_MODEL 换成 deepseek-flash 时，改这一行就行，不用动代码。
+    chat_temperature: float = 0.0
 
     # ==================== Redis（缓存 + 计数） ====================
     # 本机 Redis 是**原生安装**（E:\Apps\Redis-8.4.6-Windows-x64-...），

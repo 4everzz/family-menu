@@ -70,6 +70,10 @@ app/
 ├─ schemas/        请求与响应的数据结构
 ├─ repositories/   数据访问：只负责查/存
 ├─ services/       业务规则
+├─ agent/          App 内置的 AI Agent（会用工具的那一层）
+│  ├─ tools.py     工具声明（OpenAI tools schema）+ 执行（走 service 层）
+│  ├─ react.py     ReAct 循环：模型决定调什么、我们执行、结果回给它
+│  └─ prompts.py   系统提示词 + 输出契约的补救指令
 ├─ mcp/            MCP 集成（Model Context Protocol）
 │  ├─ servers.py   外部 MCP Server 的注册表
 │  ├─ gateway.py   MCP **客户端**：连外部 Server 拿数据
@@ -86,6 +90,22 @@ run_mcp_server.py  MCP Server 启动入口（stdio，由 AI 客户端拉起）
 
 分层调用方向是单向的：`api → services → repositories → 数据库`。
 反向调用（比如 repositories 去调 services）会让依赖关系混乱，属于禁忌。
+
+### `agent/` 和 `mcp/` 的区别（三个东西，方向不同，别搞混）
+
+| | 方向 | 干什么 |
+| --- | --- | --- |
+| `mcp/gateway.py` | 出 | 我们的服务去调**别人的** MCP Server（查食物成分表） |
+| `mcp/server/` | 入 | 把**我们的**数据暴露给外面的 AI 客户端（Claude Desktop 等） |
+| `agent/` | 内 | **App 自己的 AI 对话**怎么变成一个会用工具的 Agent |
+
+⚠️ **App 内的 Agent 刻意不走 MCP**：MCP 那套协议是为**跨进程**而存在的
+（要起子进程、走 JSON-RPC、收 token 做鉴权）。Agent 和 service 层在同一个进程里，
+绕 MCP 一圈等于凭空多一个进程、多一层序列化、多一处故障点
+（stdio 编码、握手超时、stdout 不能 print 这些坑一个都跑不掉），换不来任何东西。
+
+**两条路共用的是「数据口径」**，见 `services/menu_query_service.py` 的说明：
+协议可以有两套，权限校验和数据整形只能有一套。
 
 ## 接口一览（v1）
 
@@ -117,6 +137,7 @@ run_mcp_server.py  MCP Server 启动入口（stdio，由 AI 客户端拉起）
 | `MCP_CALL_TIMEOUT` | 单次 MCP 工具调用超时（秒），默认 15 |
 | `MAX_AI_CALLS_PER_DAY` | 每用户每日 AI 对话上限，默认 50 |
 | `CHAT_MODEL` / `CHAT_BASE_URL` / `CHAT_API_KEY` | 对话模型配置；后两项留空时自动沿用 `DASHSCOPE_*` |
+| `CHAT_TEMPERATURE` | 对话采样温度，默认 0.0。不同模型要求不同（见 `.env.example` 注释） |
 
 `.env` 已在 `.gitignore` 中，不会被提交。新增配置项时请同步更新 `.env.example`。
 
@@ -232,3 +253,52 @@ MCP 让 AI 用统一协议去调外部能力。本项目**两个方向都做了*
 **判断标准**：这个能力是不是来自项目之外、且未来可能被替换。
 食材营养数据符合（在项目之外、将来可能换数据源），所以才值得抽象；
 自己家的数据库不符合。
+
+## AI Agent（对话怎么会用工具）
+
+AI 对话不是"一次调用出结果"，而是一个**会用工具的 Agent**。
+
+### 为什么改成 Agent
+
+改造前是一条写死的流水线：正则抠菜名 → 查热量 → 拼 prompt → 调一次模型。
+每一步都由代码决定，模型没有选择权。所以用户问「今天吃什么」，
+它只能回「推荐功能我还在学」——不是它不想答，是它**手里根本没有工具**。
+而那个用来抠菜名的正则，前后改了三版还有漏。
+
+改造后把工具交出去，调不调、调哪个、调几次**由模型决定**，正则整块删掉了。
+**能用模型判断的事，就别拿正则硬凑。**
+
+### 工具清单（5 个，全部只读）
+
+| 工具 | 干什么 | 复用什么 |
+| --- | --- | --- |
+| `list_fridge_items` | 冰箱里有什么 | `MenuQueryService.fridge` |
+| `get_expiring_items` | 什么快过期了 | `MenuQueryService.expiring` |
+| `list_recipes` | 菜单上有哪些菜 | `MenuQueryService.recipes` |
+| `list_categories` | 有哪些分类 | `MenuQueryService.categories` |
+| `lookup_nutrition` | 食材每 100g 热量 | MCP 客户端（外部数据源） |
+
+⚠️ **一个写操作都没有**。记账、点菜一律走前端的确认卡片——
+模型只有"提议权"，出错了最多是卡片显示错，不会脏库。
+
+### 三条设计红线
+
+1. **工具不能绕过权限**。工具执行严格走 service 层，
+   `ensure_member` 那一道必须过；工具参数里**不暴露 `space_id`**，
+   否则模型就能自己指定要查哪个家。
+2. **循环必须有上限**。`MAX_STEPS = 4`（3 轮工具 + 1 次收口），
+   最后一轮**不给工具**，逼它用已有信息出结果。不设限的话模型可能一直"再查一次"。
+3. **工具失败不能炸掉对话**。异常一律转成 `{"ok": false, "error": "人话"}` 还给模型，
+   让它自己决定怎么跟用户解释。同时区分「工具坏了」和「查了但没有」——
+   混成一个的话，模型会对着一件正常的事跟用户道歉。
+
+### 验证
+
+```bash
+cd backend
+./.venv/Scripts/python.exe -m pytest                  # 含 agent 的单测（假模型，不打真 API）
+./.venv/Scripts/python.exe -m tools.check_agent       # 端到端：真模型 + 真数据 + 真工具
+```
+
+`check_agent` 会打印每个用例**调了哪些工具、查到什么、最终怎么答**，
+跑完自动清掉自己产生的对话记录（免得混进用户 App 里的真实聊天）。

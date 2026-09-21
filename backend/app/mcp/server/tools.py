@@ -20,12 +20,19 @@
 4. **返回值是纯数据，不是 ORM 对象**。MCP 的返回要序列化成 JSON 传给客户端，
    SQLAlchemy 的模型对象带一堆内部状态（会话关联、懒加载引用），
    直接塞进去既序列化不了，也会在会话关闭后炸掉。
-   所以统一过一道 `_clean()`，把字段挑出来。
+
+⭐ 5. **「查什么、怎么整形」不在这里**——那是 `MenuQueryService` 的活。
+   理由：App 自己的 Agent（`app/agent/tools.py`）要问同样几个问题、
+   要同样形状的答案。两边各写一份，早晚会出现
+   "App 里说还能放 5 天、MCP 那边算成 6 天"这种极难发现的不一致。
+   **协议可以有两套，数据口径只能有一套。**
+
+   所以这个文件剩下的职责只有一个：**怎么用 MCP 的方式把数据暴露出去**
+   （收 token 做跨进程鉴权、包 `ok/error` 信封）。
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 from typing import Any
 
 import jwt
@@ -34,15 +41,8 @@ from app.core.database import AsyncSessionLocal
 from app.core.exceptions import BusinessError
 from app.core.security import decode_access_token
 from app.models.user import User
-from app.repositories.category_repo import CategoryRepository
-from app.repositories.fridge_repo import FridgeRepository
-from app.repositories.recipe_repo import RecipeRepository
-from app.repositories.space_repo import SpaceRepository
 from app.repositories.user_repo import UserRepository
-from app.services.category_service import CategoryService
-from app.services.fridge_service import EXPIRING_WITHIN_DAYS, FridgeService
-from app.services.recipe_service import RecipeService
-from app.services.space_service import SpaceService
+from app.services.menu_query_service import MenuQueryService, clamp_expiring_days
 
 # ============================================================================
 # 鉴权
@@ -94,54 +94,6 @@ async def _resolve_user(session: Any, token: str) -> User:
 
 
 # ============================================================================
-# 序列化
-# ============================================================================
-
-#: 只输出这些字段。为什么不用 `model.__dict__` 全量吐出去？
-#:   模型看的是 token 预算——一个冰箱条目带上 space_id、created_by、
-#:   created_at、updated_at 这些它对不上的内部字段，纯属浪费上下文；
-#:   而且 created_by 这类内部主键泄漏出去也没有任何好处。
-_FRIDGE_FIELDS = ("id", "name", "quantity", "unit", "category", "storage", "expiry_date", "note")
-_RECIPE_FIELDS = ("id", "name", "category_name", "description", "spice_options", "is_sold_out")
-_CATEGORY_FIELDS = ("id", "name", "recipe_count")
-
-
-def _clean(obj: Any, fields: tuple[str, ...]) -> dict:
-    """把 ORM 对象挑字段转成纯字典（值转成 JSON 友好的类型）。
-
-    日期转成 ISO 字符串（`2026-09-20`），模型读起来比时间戳自然得多。
-    """
-    data: dict[str, Any] = {}
-    for name in fields:
-        if name == "category_name":
-            # 分类名不存在模型上，是 service 从关联查询里带出来的，单独取
-            continue
-        value = getattr(obj, name, None)
-        if isinstance(value, date):
-            value = value.isoformat()
-        data[name] = value
-    return data
-
-
-def _clean_fridge_item(item: Any, today: date) -> dict:
-    """冰箱条目：额外算一个 `days_left`。
-
-    为什么在服务端算好、而不是让模型自己拿 expiry_date 减今天？
-    因为模型不知道"今天"是哪天（它的时间概念不可靠），
-    让它算必然算错。这种确定的算术，服务端给结果最省事也最准。
-    """
-    data = _clean(item, _FRIDGE_FIELDS)
-    if item.expiry_date is None:
-        data["days_left"] = None
-        data["is_expiring"] = False
-    else:
-        days_left = (item.expiry_date - today).days
-        data["days_left"] = days_left
-        data["is_expiring"] = days_left <= EXPIRING_WITHIN_DAYS
-    return data
-
-
-# ============================================================================
 # 工具：家庭冰箱
 # ============================================================================
 
@@ -164,13 +116,10 @@ async def list_fridge_items(
     """
     async with AsyncSessionLocal() as session:
         user = await _resolve_user(session, token)
-        service = _build_fridge_service(session)
-        # service 内部会 ensure_member：不是这家人就抛 AppError，不会读到别人的数据
-        rows, expiring_count = await service.list_items(
+        # service 内部会 ensure_member：不是这家人就抛 BusinessError，不会读到别人的数据
+        items, expiring_count = await MenuQueryService(session).fridge(
             user, space_id, category, storage, keyword
         )
-        today = date.today()
-        items = [_clean_fridge_item(item, today) for item, _nickname in rows]
         return {
             "ok": True,
             "space_id": space_id,
@@ -192,23 +141,10 @@ async def get_expiring_items(token: str, space_id: int, days: int = 7) -> dict:
         days: 往后看几天，默认 7。已过期的永远会包含在内。
     """
     # 上限保护：模型可能传个 3650，那不是"临期"是"全库"
-    window = max(1, min(int(days), 30))
+    window = clamp_expiring_days(days)
     async with AsyncSessionLocal() as session:
         user = await _resolve_user(session, token)
-        service = _build_fridge_service(session)
-        # 关键词不传，取全家食材，再在内存里按保质期筛——
-        # repo 只提供了"未来 N 天内"的计数，没有"未来 N 天内的列表"，
-        # 为了一个工具去改 repo 不划算，而一个家的食材量（几十条）内存筛毫无压力。
-        rows, _ = await service.list_items(user, space_id)
-        today = date.today()
-        deadline = today + timedelta(days=window)
-        items = [
-            _clean_fridge_item(item, today)
-            for item, _nickname in rows
-            if item.expiry_date is not None and item.expiry_date <= deadline
-        ]
-        # 最急的排前面：已过期（负数）自然排到最前，模型转述时顺序就是对的
-        items.sort(key=lambda entry: entry["days_left"])
+        items = await MenuQueryService(session).expiring(user, space_id, window)
         return {
             "ok": True,
             "space_id": space_id,
@@ -239,13 +175,7 @@ async def list_recipes(
     """
     async with AsyncSessionLocal() as session:
         user = await _resolve_user(session, token)
-        service = _build_recipe_service(session)
-        rows = await service.list_recipes(user, space_id, category_id, keyword)
-        recipes: list[dict] = []
-        for recipe, _nickname, category_name in rows:
-            data = _clean(recipe, _RECIPE_FIELDS)
-            data["category_name"] = category_name
-            recipes.append(data)
+        recipes = await MenuQueryService(session).recipes(user, space_id, category_id, keyword)
         return {
             "ok": True,
             "space_id": space_id,
@@ -266,54 +196,13 @@ async def list_categories(token: str, space_id: int) -> dict:
     """
     async with AsyncSessionLocal() as session:
         user = await _resolve_user(session, token)
-        service = _build_category_service(session)
-        rows = await service.list_categories(user, space_id)
-        categories: list[dict] = []
-        for category, recipe_count in rows:
-            data = _clean(category, _CATEGORY_FIELDS)
-            data["recipe_count"] = recipe_count
-            categories.append(data)
+        categories = await MenuQueryService(session).categories(user, space_id)
         return {
             "ok": True,
             "space_id": space_id,
             "count": len(categories),
             "categories": categories,
         }
-
-
-# ============================================================================
-# service 组装
-# ============================================================================
-#
-# 每个工具自己组装需要的 service，而不是共用一个全局的。
-# 原因：service 绑定在 session 上（构造函数第一个参数），而 session 是每个工具调用
-# 开一个、用完就关。共用一个跨调用的 service 就等于让一个 session 活很久，
-# 连接一直占着不放，且并发调用会互相干扰。
-
-
-def _build_space_service(session: Any) -> SpaceService:
-    """组装家庭组服务。
-
-    SpaceService 构造要一个 CategoryRepository，那是"建家庭组时顺手建默认分类"用的。
-    这里的工具都不建组，传进去只是满足依赖装配，不会被调用。
-    """
-    return SpaceService(SpaceRepository(session), CategoryRepository(session))
-
-
-def _build_fridge_service(session: Any) -> FridgeService:
-    return FridgeService(FridgeRepository(session), _build_space_service(session))
-
-
-def _build_category_service(session: Any) -> CategoryService:
-    return CategoryService(CategoryRepository(session), _build_space_service(session))
-
-
-def _build_recipe_service(session: Any) -> RecipeService:
-    return RecipeService(
-        RecipeRepository(session),
-        _build_space_service(session),
-        _build_category_service(session),
-    )
 
 
 # ============================================================================

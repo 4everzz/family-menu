@@ -42,6 +42,17 @@
         <view class="bubble" :class="m.role">
           <text class="bubble-text">{{ m.content }}</text>
 
+          <!-- AI 的查询过程：把"它真的去看了"亮出来。
+               ⚠️ 为什么值得占一行：AI 现在会自己去查冰箱和菜单，
+                  只显示最后那句话的话，用户会觉得"它怎么知道我冰箱里有什么"。
+                  空数组（闲聊）不显示——那本身也是个信息，但没必要专门说一句。 -->
+          <view v-if="m.steps && m.steps.length" class="trace">
+            <view v-for="(s, si) in m.steps" :key="si" class="trace-row">
+              <text class="trace-dot" :class="s.ok ? 'ok' : 'fail'"></text>
+              <text class="trace-text">{{ toolLabel(s.tool) }} · {{ s.detail }}</text>
+            </view>
+          </view>
+
           <!-- 待确认的动作卡片：后端只给"草案"，点「记下」才真的写入。
                整块可点 → 打开详情弹层改数值（AI 从大白话里抽字段一定会错，得留个改的地方）。 -->
           <view v-for="(d, di) in m.drafts" :key="di" class="draft">
@@ -60,7 +71,11 @@
               <text v-if="d.portion" class="draft-portion">· {{ d.portion }}</text>
               <text v-if="d.calories !== null" class="draft-kcal">
                 · {{ Math.round(d.calories) }} kcal
-                <text v-if="d.calories_estimated" class="draft-tag">估算</text>
+                <!-- 来源标签：这个数字是"查到的"还是"估的"，必须让用户看得见。
+                     以前只有「估算」一种，现在分三档（见 sourceLabel）。 -->
+                <text v-if="sourceLabel(d)" class="draft-tag" :class="sourceTagClass(d)">
+                  {{ sourceLabel(d) }}
+                </text>
               </text>
               <text v-else class="draft-kcal empty">· 未填热量</text>
             </view>
@@ -207,17 +222,24 @@ import {
   fetchAiMessages,
   sendAiMessage,
   type ActionDraft,
+  type AgentStepInfo,
 } from '../../services/ai-chat';
 import { addCalorieLog, fetchCalorieLogs, updateCalorieLog, type CalorieLog } from '../../services/health';
 import { getCurrentSpaceId } from '../../utils/space-context';
 import { hasValidToken } from '../../utils/token';
 import { showError } from '../../utils/format';
 
-/** 空态里给的可点例子：让用户一眼知道可以怎么说话 */
+/** 空态里给的可点例子：让用户一眼知道可以怎么说话。
+ *
+ * ⚠️ 2026-09-21 加了后两条：AI 现在能**自己去查冰箱和菜单**了，
+ *    光放"记账"的例子，用户根本不知道它还会这个。
+ *    例子点一下就直接发出去（不是只填进输入框），这样用户立刻能看到
+ *    "它真的去查了"（气泡下面会显示查了什么）。 */
 const EXAMPLES = [
   '中午吃了红烧肉500g，550kcal',
   '刚吃了个苹果',
-  '晚饭吃了红烧排骨，600千卡',
+  '我冰箱里还有什么',
+  '今天吃什么好',
 ];
 
 /** 卡片上的草案：在后端结构上加了几个纯界面状态 */
@@ -230,10 +252,65 @@ interface ChatDraft extends ActionDraft {
   logId: number | null;
 }
 
+/** 热量来源标签（可信度分级）。
+ *
+ * ⭐ 这是这次改造在界面上的落点：以前热量全是模型估的，
+ *    同一个红烧肉今天 400 明天 520，用户既看不出是估的、也无从判断准不准。
+ *    现在后端会告诉我们这个数是怎么来的，就如实标出来。
+ *
+ * 取值由后端定（见 app/schemas/ai_chat.py 的 ActionDraft.source）：
+ *   mcp_exact    —— 和权威数据源精确对上了
+ *   mcp_derived  —— 查到了主料，但按烹饪方式做了修正
+ *   llm_estimate —— 纯模型估算
+ */
+const SOURCE_LABELS: Record<string, string> = {
+  mcp_exact: '已核对',
+  mcp_derived: '按主料推算',
+  llm_estimate: '估算',
+};
+
+/** 工具名 → 给人看的说法（后端给的是英文函数名）。 */
+const TOOL_LABELS: Record<string, string> = {
+  list_fridge_items: '查冰箱',
+  get_expiring_items: '查临期',
+  list_recipes: '查菜单',
+  list_categories: '查分类',
+  lookup_nutrition: '查热量',
+};
+
+function toolLabel(tool: string): string {
+  // 认不出来就原样显示——总比什么都不显示好，也方便我们发现后端加了新工具
+  return TOOL_LABELS[tool] ?? tool;
+}
+
+/** 算这一条该显示什么来源标签；空字符串 = 不显示。
+ *
+ * ⚠️ 用户自己改过热量之后就不该再标来源了（那时数字是用户填的），
+ *    所以 saveEditor 里会把 source 清空，这里跟着就不显示了。
+ */
+function sourceLabel(d: ChatDraft): string {
+  if (!d.source) {
+    // 兜底：老数据可能没有 source 字段，退回按"是不是估的"判断
+    return d.calories_estimated ? '估算' : '';
+  }
+  return SOURCE_LABELS[d.source] ?? '';
+}
+
+/** 来源标签的配色。三档用三种颜色，让用户**一眼分出可信度**：
+ *  绿=已核对（最好的）／蓝绿=按主料推算（有依据但不精确）／琥珀=纯估算（提醒）*/
+function sourceTagClass(d: ChatDraft): string {
+  if (d.source === 'mcp_exact') return 'exact';
+  if (d.source === 'mcp_derived') return 'derived';
+  return '';
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   drafts: ChatDraft[];
+  /** 这一轮 AI 调用了哪些工具（查冰箱/查菜单/查热量）。
+   *  用户消息永远是空数组；助手消息里空数组表示"它一次都没查"（闲聊）。 */
+  steps: AgentStepInfo[];
 }
 
 const messages = ref<ChatMessage[]>([]);
@@ -304,6 +381,7 @@ async function loadHistory(): Promise<void> {
       role: row.role,
       content: row.content,
       drafts: [], // 历史不回放确认卡片，理由见文件头的说明
+      steps: [], // 历史也不回放"查了什么"——它是当轮的过程，翻上去看反而干扰
     }));
     if (rows.length) await scrollToBottom();
   } catch {
@@ -358,7 +436,7 @@ async function send(): Promise<void> {
     return;
   }
 
-  messages.value.push({ role: 'user', content: text, drafts: [] });
+  messages.value.push({ role: 'user', content: text, drafts: [], steps: [] });
   draftText.value = '';
   busy.value = true;
   await scrollToBottom();
@@ -370,11 +448,17 @@ async function send(): Promise<void> {
       role: 'assistant',
       content: resp.reply,
       drafts: resp.actions.map((a) => ({ ...a, done: false, ignored: false, logId: null })),
+      steps: resp.steps ?? [],
     });
   } catch (error) {
     showError(error);
     // 出错时把用户那句话留在列表里，方便他复制重发；同时给一句失败的回应
-    messages.value.push({ role: 'assistant', content: '刚才没处理过来，再说一次试试？', drafts: [] });
+    messages.value.push({
+      role: 'assistant',
+      content: '刚才没处理过来，再说一次试试？',
+      drafts: [],
+      steps: [],
+    });
   } finally {
     busy.value = false;
   }
@@ -469,9 +553,12 @@ async function saveEditor(): Promise<void> {
   target.portion = next.portion;
   target.calories = next.calories;
   target.eaten_at = next.eaten_at;
-  // 用户自己改过热量，那它就不再是"模型估算"了——「估算」这个标签必须摘掉，
-  // 否则界面在说假话（明明是用户填的，还标着估算）。
-  if (kcalChanged) target.calories_estimated = false;
+  // 用户自己改过热量，那它就不再是"模型估算"了——来源标签必须摘掉，
+  // 否则界面在说假话（明明是用户填的，还标着「估算」/「按主料推算」）。
+  if (kcalChanged) {
+    target.calories_estimated = false;
+    target.source = '';
+  }
 
   editing.value = null;
   uni.showToast({ title: target.done ? '已更新记录' : '已保存', icon: 'none' });
@@ -619,7 +706,8 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
 .draft-date { color: var(--c-text-2); font-size: 23rpx; }
 .draft-portion { color: var(--c-text-2); font-size: 23rpx; }
 .draft-kcal { color: var(--c-primary); font-size: 26rpx; font-weight: 500; }
-/* 「估算」标签：热量是模型估的时候必须标出来，别让用户以为是自己的数 */
+/* 来源标签：这个热量是"查到的"还是"估的"必须标出来，别让用户以为是自己的数。
+   三档三种颜色（见 sourceTagClass），一眼能分出可信度。 */
 .draft-tag {
   margin-left: var(--s-1);
   padding: 2rpx var(--s-1);
@@ -629,6 +717,33 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
   font-size: 20rpx;
   font-weight: 400;
 }
+/* 已核对：和权威数据源精确对上了——最好的情况，用主色 */
+.draft-tag.exact { background: var(--c-primary-bg); color: var(--c-primary); }
+/* 按主料推算：查到了主料，但按烹饪方式修正过——有依据，但不是精确值 */
+.draft-tag.derived { background: var(--c-tint-sage); color: var(--c-sage-text); }
+
+/* ---------- AI 的查询过程 ---------- */
+/* 显示"它去查了什么"。刻意做得很轻：这是过程提示，不是内容本身——
+   抢了回复的注意力就本末倒置了。 */
+.trace {
+  margin-top: var(--s-2);
+  padding-top: var(--s-2);
+  border-top: 2rpx dashed var(--c-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+.trace-row { display: flex; align-items: center; gap: var(--s-2); }
+/* 用一个小圆点表示成功/失败（不用 emoji，也不用图标字体） */
+.trace-dot {
+  flex: 0 0 auto;
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: var(--c-primary-weak);
+}
+.trace-dot.fail { background: var(--c-warn); }
+.trace-text { color: var(--c-text-3); font-size: 22rpx; line-height: 1.5; }
 /* 热量还没填：用弱化的文字提示，不再是内联输入框——
    改数值统一走详情弹层，只有一个编辑入口，不会两处各说各话。 */
 .draft-kcal.empty { color: var(--c-text-3); font-weight: 400; }
