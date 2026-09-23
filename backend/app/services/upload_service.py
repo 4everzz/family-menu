@@ -54,6 +54,17 @@ class UploadService:
         content 是接口层已经读进内存的字节。
         大小校验在这里做（接口层只负责把文件读出来），逻辑收在一处好维护。
         """
+        self.validate_image(filename, content)
+        ext = Path(filename).suffix.lower()
+        target = self._target_path(ext)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+
+        url = f"/uploads/{target.relative_to(self.base_dir).as_posix()}"
+        return {"url": url, "size": len(content), "contentType": ALLOWED_IMAGE_TYPES[ext][0]}
+
+    def validate_image(self, filename: str, content: bytes) -> str:
+        """校验图片内容并返回扩展名，不写入磁盘。"""
         if not content:
             raise BusinessError("文件内容为空")
 
@@ -61,13 +72,7 @@ class UploadService:
             limit_mb = settings.max_upload_bytes / 1024 / 1024
             raise BusinessError(f"图片太大，最大 {limit_mb:g}MB")
 
-        ext = self._allowed_extension(filename, content)
-        target = self._target_path(ext)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
-
-        url = f"/uploads/{target.relative_to(self.base_dir).as_posix()}"
-        return {"url": url, "size": len(content), "contentType": ALLOWED_IMAGE_TYPES[ext][0]}
+        return self._allowed_extension(filename, content)
 
     def _allowed_extension(self, filename: str, content: bytes) -> str:
         """返回校验通过的扩展名（带点）；不通过就抛业务异常。

@@ -16,7 +16,7 @@ from app.core.response import success
 from app.models.recipe_category import DEFAULT_CATEGORY_NAME, RecipeCategory
 from app.repositories.category_repo import CategoryRepository
 from app.repositories.space_repo import SpaceRepository
-from app.schemas.category import CategoryCreateRequest, CategoryInfo, CategoryUpdateRequest
+from app.schemas.category import CategoryCreateRequest, CategoryInfo, CategoryReorderRequest, CategoryUpdateRequest
 from app.services.category_service import CategoryService
 from app.services.space_service import SpaceService
 
@@ -78,6 +78,20 @@ async def create_category(
     await session.commit()
     # 新建的分类下面一道菜都没有，所以数量固定是 0
     return success(_to_category_info(category, 0).model_dump())
+
+
+@router.post("/spaces/{space_id}/categories/reorder", summary="调整分类顺序")
+async def reorder_categories(
+    space_id: int,
+    payload: CategoryReorderRequest,
+    current_user: CurrentUser,
+    session: DbSession,
+) -> dict:
+    """保存当前家庭的完整分类顺序，避免部分提交造成重复或断档。"""
+    service = _build_service(session)
+    rows = await service.reorder_categories(current_user, space_id, payload.category_ids)
+    await session.commit()
+    return success([_to_category_info(category, count).model_dump() for category, count in rows])
 
 
 # 同一个处理函数挂两个路由，原因是平台限制，不是设计冗余：

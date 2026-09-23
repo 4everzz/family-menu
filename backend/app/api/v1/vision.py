@@ -4,10 +4,11 @@
 后端按相对路径读回图片字节，交给 VisionService（没配 Key 时返回占位结果）。
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, DbSession
+from app.core.config import settings
 from app.core.response import success
 from app.schemas.user_profile import FoodEstimate as FoodEstimateSchema, RecognizeFoodResponse
 from app.services.upload_service import UploadService
@@ -42,6 +43,33 @@ async def recognize_food(
                 kcal_per_100g=i.kcal_per_100g,
             )
             for i in items
+        ],
+        mock=mock,
+    )
+    return success(response.model_dump())
+
+
+@router.post("/vision/recognize-food/image", summary="临时识别食物照片")
+async def recognize_food_image(
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> dict:
+    """在内存中校验并识别图片，不写入 uploads 目录或数据库。"""
+    content = await file.read(settings.max_upload_bytes + 1)
+    service = UploadService()
+    service.validate_image(file.filename or "", content)
+    items, mock = await VisionService().recognize_food(content)
+    response = RecognizeFoodResponse(
+        items=[
+            FoodEstimateSchema(
+                food_name=item.food_name,
+                calories=item.calories,
+                portion=item.portion,
+                confidence=item.confidence,
+                grams=item.grams,
+                kcal_per_100g=item.kcal_per_100g,
+            )
+            for item in items
         ],
         mock=mock,
     )

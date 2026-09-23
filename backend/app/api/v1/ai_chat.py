@@ -21,7 +21,11 @@
    传的话就等于让前端负责记忆——刷新/换设备上下文就断了。
 """
 
+import json
+import logging
+
 from fastapi import APIRouter, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession
@@ -29,6 +33,8 @@ from app.core.response import success
 from app.repositories.ai_chat_repo import AiChatRepository
 from app.schemas.ai_chat import AiChatMessageResponse, AiChatRequest
 from app.services.ai_chat_service import AiChatService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["AI对话"])
 
@@ -59,6 +65,57 @@ async def ai_chat(
     result = await _build_service(session).chat(current_user, payload)
     await session.commit()  # 落库这一轮的两条消息
     return success(result.model_dump())
+
+
+def _sse(event: str, data: dict) -> str:
+    """把一个事件编成一条 SSE 帧。
+
+    SSE 的帧边界是**空行**（\n\n）；json.dumps 不会产出真实换行
+    （字符串里的换行会被转义成 \\n），所以每帧必然完整落在两行以内，
+    前端按空行切帧永远不会切坏。
+    """
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+
+
+@router.post("/ai/chat/stream", summary="AI 对话（SSE 流式：工具步骤实时推，最后给整包）")
+async def ai_chat_stream(
+    payload: AiChatRequest,
+    current_user: CurrentUser,
+    session: DbSession,
+) -> StreamingResponse:
+    """流式版 /ai/chat，事件序列：`start` → `step`* → `message` → `done`（失败时 `error`）。
+
+    ⭐ 为什么步骤要走流：一轮 Agent 最多 4 次串行模型调用，前后 10 秒起步；
+       "查冰箱 · 4 条食材"在**发生时**就推到界面上，
+       等待从黑盒变成看得见的进度。总时长没变，感知完全不同。
+
+    ⚠️ 业务错误走 `event: error` 而不是 HTTP 4xx/5xx：
+       流式响应的 HTTP 头在第一个字节前就必须发出（那时还不知道业务上会不会失败），
+       前端按事件类型区分成功与失败。
+
+    ⚠️ 会话在流式期间保持可用：FastAPI 的 yield 依赖在**响应（含流式体）完整发完
+       之后**才执行收尾（0.106+ 行为），所以生成器结束后可以照常 commit。
+    """
+    service = _build_service(session)
+
+    async def gen():
+        async for event, data in service.chat_stream(current_user, payload):
+            yield _sse(event, data)
+        try:
+            await session.commit()  # 落库这一轮的两条消息（与非流式路径一致）
+        except Exception:
+            # 回复已经发出去了，落库失败不能假装能补救——留下日志供排查
+            logger.exception("流式对话落库失败（回复已发出）")
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # 关掉反向代理的响应缓冲（上线挂 nginx 后有用；本地直连无感）
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/ai/chat/messages", summary="对话历史")

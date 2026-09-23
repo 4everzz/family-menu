@@ -120,6 +120,65 @@ async def test_create_category_appends_to_the_end(client: AsyncClient, login_as)
     ]
 
 
+async def test_reorder_categories_updates_menu_order(client: AsyncClient, login_as) -> None:
+    """完整排序后，分类接口按新顺序返回且菜品归属不变。"""
+    token, _ = await login_as("category-reorder")
+    space = await _create_space(client, token)
+    categories = await _categories(client, token, space["id"])
+    ordered = [item["id"] for item in categories]
+    ordered[0], ordered[1] = ordered[1], ordered[0]
+
+    response = await client.post(
+        f"/api/v1/spaces/{space['id']}/categories/reorder",
+        json={"category_ids": ordered},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 200, response.text
+    assert [item["id"] for item in response.json()["data"]] == ordered
+    assert [item["sort_order"] for item in response.json()["data"]] == list(range(len(ordered)))
+
+
+async def test_reorder_categories_rejects_incomplete_or_duplicate_ids(client: AsyncClient, login_as) -> None:
+    """缺分类或重复 ID 不能让顺序数据被部分覆盖。"""
+    token, _ = await login_as("category-reorder-invalid")
+    space = await _create_space(client, token)
+    categories = await _categories(client, token, space["id"])
+    ids = [item["id"] for item in categories]
+
+    for invalid_ids in (ids[:-1], [*ids[:-1], ids[0]]):
+        response = await client.post(
+            f"/api/v1/spaces/{space['id']}/categories/reorder",
+            json={"category_ids": invalid_ids},
+            headers=_auth(token),
+        )
+        assert response.status_code == 400, response.text
+
+    assert [item["id"] for item in await _categories(client, token, space["id"])] == ids
+
+
+async def test_non_owner_cannot_reorder_categories(client: AsyncClient, login_as) -> None:
+    """分类顺序与菜单设置一样，只允许家庭创建人修改。"""
+    owner_token, _ = await login_as("category-reorder-owner")
+    space = await _create_space(client, owner_token)
+    categories = await _categories(client, owner_token, space["id"])
+
+    member_token, _ = await login_as("category-reorder-member")
+    joined = await client.post(
+        "/api/v1/spaces/join",
+        json={"invite_code": space["invite_code"]},
+        headers=_auth(member_token),
+    )
+    assert joined.status_code == 200, joined.text
+
+    response = await client.post(
+        f"/api/v1/spaces/{space['id']}/categories/reorder",
+        json={"category_ids": [item["id"] for item in reversed(categories)]},
+        headers=_auth(member_token),
+    )
+    assert response.status_code == 403, response.text
+
+
 async def test_rename_category_keeps_recipes_attached(client: AsyncClient, login_as) -> None:
     """改了分类名，原来挂在这个分类下的菜要跟着显示新名字。
 

@@ -47,6 +47,9 @@ MAX_STEPS = 4
 #: OpenAI 兼容接口对显式的 `"tools": null` 反应不一致，有的直接报错。
 ModelCaller = Callable[[list[dict[str, Any]], list[dict[str, Any]] | None], Awaitable[dict]]
 
+#: 步骤回调的签名：每执行完一个工具就回调一次（流式接口靠它把过程实时推给前端）。
+StepCallback = Callable[["AgentStep"], Awaitable[None]]
+
 
 @dataclass
 class AgentStep:
@@ -80,11 +83,16 @@ async def run(
     ctx: ToolContext,
     call_model: ModelCaller,
     max_steps: int = MAX_STEPS,
+    on_step: StepCallback | None = None,
 ) -> AgentResult:
     """跑完一轮完整的 Agent 对话。
 
     ⚠️ `messages` **会被就地修改**（往里追加 assistant / tool 消息）。
        这是有意的：调用方如果想保留原始消息，自己传一份副本进来。
+
+    `on_step`（可选）：每执行完一个工具就回调一次，参数是那一步的 `AgentStep`。
+       流式接口（/ai/chat/stream）靠它把"查冰箱 · 4 条食材"在**发生时**推给前端，
+       而不是等整轮跑完才一次性给。传 None 就完全不回调，行为与非流式完全一致。
     """
     steps: list[AgentStep] = []
 
@@ -102,7 +110,7 @@ async def run(
             return AgentResult(content=_content_of(message), steps=steps)
 
         messages.append(_assistant_message(message, tool_calls))
-        steps.extend(await _run_tool_calls(tool_calls, ctx, messages))
+        steps.extend(await _run_tool_calls(tool_calls, ctx, messages, on_step=on_step))
 
     # 走到这里说明"最后一轮（已经不给工具了）它还要调工具"——
     # 属于反常情况，但得有兜底：再要一次回答，不再给工具。
@@ -119,6 +127,7 @@ async def _run_tool_calls(
     tool_calls: list[dict[str, Any]],
     ctx: ToolContext,
     messages: list[dict[str, Any]],
+    on_step: StepCallback | None = None,
 ) -> list[AgentStep]:
     """执行这一轮模型要的所有工具，并把结果**按协议格式**追加回 messages。
 
@@ -157,6 +166,10 @@ async def _run_tool_calls(
                 data=result,
             )
         )
+
+        # 流式通道：步骤在**发生时**就回调出去（不等整轮跑完）
+        if on_step is not None:
+            await on_step(steps[-1])
 
         messages.append(
             {

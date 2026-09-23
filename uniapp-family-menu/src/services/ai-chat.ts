@@ -22,7 +22,8 @@
  *    「新对话」= 调 clearAiMessages 清空后端历史，上下文从头开始。
  */
 
-import { request } from './http';
+import { ApiError, BASE_URL, request } from './http';
+import { getToken } from '../utils/token';
 
 /** 待用户确认的动作草案 */
 export interface ActionDraft {
@@ -112,6 +113,216 @@ export async function sendAiMessage(message: string, spaceId?: string): Promise<
   const data: Record<string, unknown> = { message };
   if (spaceId) data.space_id = spaceId;
   return await request<AiChatResponse>({ url: '/ai/chat', method: 'POST', data });
+}
+
+/* ==================== 流式（SSE）版本 ====================
+ *
+ * 一轮 Agent 最多 4 次串行模型调用，前后 10 秒起步，用户全程只看到"思考中…"。
+ * 流式通道把"查冰箱 → 查到了"这类步骤**在发生时**推给界面，
+ * 等待从黑盒变成看得见的进度。最终结果仍是一次性给整包，
+ * 所以确认卡片、落库、回放的逻辑与非流式完全一致。
+ */
+
+/** 增量 UTF-8 解码器。
+ *
+ * 为什么不直接用 TextDecoder：
+ *   ① App 端的 JS 引擎里**没有** TextDecoder，而 onChunkReceived 给的是 ArrayBuffer；
+ *   ② 一个汉字（3 字节）可能被切在两块 chunk 的交界处，
+ *      不完整的尾部必须留到下一块一起解，否则会解出乱码。
+ * 有 TextDecoder 的环境（H5）直接用它的 stream 模式，行为等价。
+ */
+type TextDecoderLike = { decode(input: Uint8Array, options?: { stream?: boolean }): string };
+
+class Utf8StreamDecoder {
+  /** 上一块结尾没解完的半截多字节字符 */
+  private pending: number[] = [];
+  private td: TextDecoderLike | null;
+
+  constructor() {
+    // 不直接引用 TextDecoder 类型名：App 编译目标的 TS lib 里未必有它
+    const ctor = (globalThis as Record<string, unknown>).TextDecoder as
+      | (new (label: string) => TextDecoderLike)
+      | undefined;
+    this.td = ctor ? new ctor('utf-8') : null;
+  }
+
+  decode(chunk: string | ArrayBuffer): string {
+    if (typeof chunk === 'string') return chunk;
+    const bytes = new Uint8Array(chunk);
+    if (this.td) return this.td.decode(bytes, { stream: true });
+
+    // 手写增量 UTF-8 解码（App 端路径）
+    const all = this.pending.length ? [...this.pending, ...bytes] : [...bytes];
+    this.pending = [];
+    let out = '';
+    let i = 0;
+    while (i < all.length) {
+      const b = all[i];
+      let need: number; // 还差几个续字节
+      let cp: number;
+      if (b < 0x80) { need = 0; cp = b; }
+      else if ((b & 0xe0) === 0xc0) { need = 1; cp = b & 0x1f; }
+      else if ((b & 0xf0) === 0xe0) { need = 2; cp = b & 0x0f; }
+      else if ((b & 0xf8) === 0xf0) { need = 3; cp = b & 0x07; }
+      else { out += '\uFFFD'; i += 1; continue; } // 孤立的续字节：替换符，跳过
+      if (i + need >= all.length) {
+        this.pending = all.slice(i); // 尾巴是半截字符，等下一块
+        break;
+      }
+      let ok = true;
+      for (let k = 1; k <= need; k += 1) {
+        const cont = all[i + k];
+        if ((cont & 0xc0) !== 0x80) { ok = false; break; }
+        cp = (cp << 6) | (cont & 0x3f);
+      }
+      if (!ok) { out += '\uFFFD'; i += 1; continue; }
+      i += need + 1;
+      if (cp > 0xffff) {
+        // > U+FFFF 要拆成代理对（JS 字符串是 UTF-16）
+        const v = cp - 0x10000;
+        out += String.fromCharCode(0xd800 + (v >> 10), 0xdc00 + (v & 0x3ff));
+      } else {
+        out += String.fromCharCode(cp);
+      }
+    }
+    return out;
+  }
+}
+
+/** 从缓冲里按空行切出**完整的** SSE 帧；最后一段可能不完整，留在缓冲里等下一块。 */
+function extractSseFrames(
+  buffer: string,
+): { frames: { event: string; data: string }[]; rest: string } {
+  const frames: { event: string; data: string }[] = [];
+  let rest = buffer;
+  for (;;) {
+    const idx = rest.indexOf('\n\n');
+    if (idx === -1) break;
+    const block = rest.slice(0, idx);
+    rest = rest.slice(idx + 2);
+    let event = 'message';
+    const dataLines: string[] = [];
+    for (const rawLine of block.split('\n')) {
+      const line = rawLine.trim();
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+    }
+    frames.push({ event, data: dataLines.join('\n') });
+  }
+  return { frames, rest };
+}
+
+/** 发起一条流式请求（不做任何回落——那是 sendAiMessageStream 的事）。 */
+function streamAiChat(
+  message: string,
+  spaceId: string | undefined,
+  onStep: (step: AgentStepInfo) => void,
+): Promise<AiChatResponse> {
+  const body: Record<string, unknown> = { message };
+  if (spaceId) body.space_id = spaceId;
+
+  return new Promise<AiChatResponse>((resolve, reject) => {
+    const header: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = getToken();
+    if (token) header.Authorization = `Bearer ${token}`;
+
+    const decoder = new Utf8StreamDecoder();
+    let buffer = '';
+    let settled = false;
+
+    const fail = (err: ApiError): void => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
+    const handleFrame = (event: string, data: string): void => {
+      if (event === 'step') {
+        try {
+          onStep(JSON.parse(data) as AgentStepInfo);
+        } catch {
+          // 单帧坏了就丢掉这一帧，不能让一次解析失败炸掉整轮对话
+        }
+        return;
+      }
+      if (event === 'error') {
+        // 后端明确拒绝（额度用完、参数不对等）。原样抛给上层——
+        // ⚠️ 这种错误绝不能触发"回落重试"，重试等于再扣一次额度
+        try {
+          const err = JSON.parse(data) as { code?: number; message?: string };
+          fail(new ApiError(err.message || 'AI 处理失败', err.code ?? -1));
+        } catch {
+          fail(new ApiError('AI 处理失败', -1));
+        }
+        return;
+      }
+      if (event === 'message') {
+        try {
+          const resp = JSON.parse(data) as AiChatResponse;
+          settled = true;
+          resolve(resp);
+        } catch {
+          fail(new ApiError('服务端返回格式异常', -1));
+        }
+      }
+      // start / done：对调用方没有意义，不处理
+    };
+
+    const options = {
+      url: `${BASE_URL}/ai/chat/stream`,
+      method: 'POST',
+      data: body,
+      header,
+      // ⭐ 开启 chunked 收流。较新基础库里 App / H5 / 小程序都支持；
+      //    老平台忽略这个标志 → 走下面 success 里的"整包兜底"，行为照样正确
+      enableChunked: true,
+      success: (res: { statusCode: number; data: unknown }) => {
+        // 兜底：onChunkReceived 一次都没触发（平台不支持 chunked）
+        // → 把整个响应体当完整 SSE 解析一遍
+        if (!settled && typeof res.data === 'string') {
+          const whole = extractSseFrames(buffer + res.data);
+          for (const f of whole.frames) handleFrame(f.event, f.data);
+        }
+        if (!settled) fail(new ApiError('服务端返回格式异常', -1, res.statusCode));
+      },
+      fail: () => fail(new ApiError('无法连接到服务器，请确认后端已启动', -2, 0)),
+    };
+
+    const task = uni.request(options as unknown as Parameters<typeof uni.request>[0]);
+    const chunkTask = task as unknown as {
+      onChunkReceived?: (cb: (res: { data: string | ArrayBuffer }) => void) => void;
+    };
+    chunkTask.onChunkReceived?.((res) => {
+      if (settled) return;
+      buffer += decoder.decode(res.data ?? '');
+      const parsed = extractSseFrames(buffer);
+      buffer = parsed.rest;
+      for (const f of parsed.frames) handleFrame(f.event, f.data);
+    });
+  });
+}
+
+/**
+ * 流式发一句话：工具步骤通过 `onStep` **实时**回调（"查冰箱 · 4 条食材"当场出现），
+ * 最终 resolve 整包结果（结构和 {@link sendAiMessage} 完全一致）。
+ *
+ * ⭐ 兜底策略（流式是新链路，不能让它变成单点故障）：
+ *   · 连不上 / 后端还没有流式端点（HTTP ≥ 400）→ 自动回落到一次性接口，
+ *     行为与从前完全一致；
+ *   · 后端明确拒绝（额度用完等，走 `event: error`）→ 原样抛出，**不重试**。
+ */
+export async function sendAiMessageStream(
+  message: string,
+  spaceId: string | undefined,
+  onStep: (step: AgentStepInfo) => void,
+): Promise<AiChatResponse> {
+  try {
+    return await streamAiChat(message, spaceId, onStep);
+  } catch (error) {
+    const transport = error instanceof ApiError && (error.code === -2 || error.httpStatus >= 400);
+    if (!transport) throw error;
+    return await sendAiMessage(message, spaceId);
+  }
 }
 
 /** 拉最近的对话历史（时间正序），进页面时回放 */

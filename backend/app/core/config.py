@@ -82,9 +82,11 @@ class Settings(BaseSettings):
     # ⚠️ 默认值只是占位：实现时请核对 DashScope 当前在售的 VL 模型 id
     vision_model: str = "qwen-vl-max"
     # AI 对话用的**文本**模型（不是 VL）。与上面共用 key 和 base_url。
-    # 2026-09 实测在售：qwen-plus / qwen-max / qwen-turbo / qwen-flash。
-    # 选 plus 是因为它够聪明又便宜，做"从一句话里抽结构化字段"这类活很够用。
-    chat_model: str = "qwen-plus"
+    # 2026-09 实测在售：qwen-plus / qwen-max / qwen-turbo / qwen-flash / qwen3.7-plus 等。
+    # 原默认 qwen-plus（够聪明又便宜），2026-09-23 因 qwen-plus 额度耗尽改为 qwen3.7-plus。
+    # ⚠️ **这一行只是兜底默认值**。真正生效的是 .env 的 `CHAT_MODEL`；
+    #    换模型只改 .env 那一行 + 重启后端，**运行时代码（含本默认值）一律不碰**。
+    chat_model: str = "qwen3.7-plus"
     # 对话模型的接入点与密钥：**缺省回落到上面 DashScope 的共用值**。
     # 拆出来的目的：将来"对话走本地模型、识图继续走云"——把 CHAT_BASE_URL / CHAT_API_KEY
     # 指到本地 OpenAI 兼容服务（Ollama / vLLM 等）即可，识图的配置一行不用动。

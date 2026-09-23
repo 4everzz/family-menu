@@ -36,8 +36,10 @@ temperature 走配置（不同模型要求不一样），
 HTTP 错误 → BusinessError（不静默失败），没配 Key → 占位 + mock=True（前端会明说是演示）。
 """
 
+import asyncio
 import json
 import logging
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import date, datetime, timedelta
 
 import httpx
@@ -47,7 +49,7 @@ from app.agent.prompts import REFORMAT_INSTRUCTION, build_system_prompt
 from app.agent.tools import ToolContext
 from app.core.config import settings
 from app.core.exceptions import BusinessError
-from app.core.response import CODE_PARAM_INVALID
+from app.core.response import CODE_PARAM_INVALID, CODE_SERVER_ERROR
 from app.models.ai_chat import AiChatMessage
 from app.models.user import User
 from app.repositories.ai_chat_repo import AiChatRepository
@@ -111,8 +113,17 @@ class AiChatService:
         #    改造前不需要它——那时候 AI 只做"从一句话抽字段"，碰不到业务数据。
         self.session = session
 
-    async def chat(self, user: User, payload: AiChatRequest) -> AiChatResponse:
-        """处理一轮对话：校验家庭组 → 跑 Agent → 成功后把这一轮存进历史。"""
+    async def chat(
+        self,
+        user: User,
+        payload: AiChatRequest,
+        on_step: react.StepCallback | None = None,
+    ) -> AiChatResponse:
+        """处理一轮对话：校验家庭组 → 跑 Agent → 成功后把这一轮存进历史。
+
+        `on_step`（可选）：透传给 Agent 循环，每执行完一个工具回调一次
+        （流式通道用；传 None 行为与非流式完全一致）。
+        """
         message = payload.message.strip()
         if not message:
             raise BusinessError("说点什么吧", code=CODE_PARAM_INVALID)
@@ -138,7 +149,7 @@ class AiChatService:
 
         # ③ 跑 Agent：模型自己决定查什么。
         ctx = ToolContext(session=self.session, user=user, space_id=space_id)
-        run_result = await react.run(messages, ctx, self._call_model)
+        run_result = await react.run(messages, ctx, self._call_model, on_step=on_step)
 
         # ④ 兜住输出契约：模型偶尔会用大白话回答（调完工具之后尤其容易），
         #    这里补一次把话"重排版"成 JSON。理由见 _ensure_json 的注释。
@@ -158,6 +169,84 @@ class AiChatService:
             [action.model_dump() for action in result.actions],
         )
         return result
+
+    async def chat_stream(
+        self,
+        user: User,
+        payload: AiChatRequest,
+    ) -> AsyncGenerator[tuple[str, dict], None]:
+        """流式版的一轮对话：**工具步骤在发生时就吐出来**，最后再给整包结果。
+
+        ⭐ 为什么值得单独一条流式通道：
+           一轮 Agent 最多 4 次串行模型调用，前后 10 秒起步，用户全程只看到一个转圈。
+           把"查冰箱 → 查到了"这类步骤**实时**推给前端，
+           等待就从黑盒变成了看得见的进度——总时长没变，感知完全不同。
+
+        产出与传输无关的 `(event, data)` 二元组（SSE 编码交给接口层）：
+          · start    连接建立（首字节立刻到，前端据此知道"接上了"）
+          · step     一步工具执行完成（形状与 AgentStepInfo 一致）
+          · message  最终整包（**与 /ai/chat 的返回结构完全一致**，
+                     所以前端渲染、落库、回放逻辑零改动）
+          · error    失败（流式响应的 HTTP 头在开始时就以 200 发出，
+                     业务错误只能走事件通道告诉前端）
+          · done     收尾
+
+        ⭐ asyncio.Queue 是"回调 → 生成器"的桥：
+           Python 的生成器不能从普通回调里 yield，
+           所以 on_step 把步骤事件推进队列，由本生成器作为唯一消费者往外吐。
+        """
+        yield "start", {}
+
+        queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
+
+        async def on_step(step: react.AgentStep) -> None:
+            await queue.put((
+                "step",
+                {
+                    "tool": step.tool,
+                    "ok": step.ok,
+                    "detail": step.detail,
+                    "arguments": step.arguments,
+                },
+            ))
+
+        async def runner() -> AiChatResponse | None:
+            """跑完整轮对话；异常在这里就地转成 error 事件，不让它炸掉流。"""
+            try:
+                return await self.chat(user, payload, on_step=on_step)
+            except BusinessError as exc:
+                await queue.put(("error", {"code": exc.code, "message": exc.message}))
+                return None
+            except Exception:
+                logger.exception("流式对话失败")
+                await queue.put((
+                    "error",
+                    {"code": CODE_SERVER_ERROR, "message": "AI 服务暂时不可用，请稍后重试"},
+                ))
+                return None
+            finally:
+                await queue.put(None)  # 哨兵：消费循环据此收尾
+
+        task = asyncio.create_task(runner())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+
+            # 循环正常走完才取结果；runner 已经把异常都转成了 error 事件
+            result = await task
+        finally:
+            # 客户端中途断开时，本生成器会被 CancelledError / GeneratorExit 打断——
+            # 必须把 runner 一并取消，否则它会变成无人认领的孤儿任务，
+            # 拿着用户的额度把剩下的模型调用烧完。
+            if not task.done():
+                task.cancel()
+
+        if result is not None:
+            yield "message", result.model_dump()
+            yield "done", {}
 
     async def _resolve_space_id(self, user: User, raw: object) -> int | None:
         """把客户端传的家庭组解析成 int 并校验成员身份。

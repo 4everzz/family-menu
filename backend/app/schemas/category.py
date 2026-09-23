@@ -37,6 +37,12 @@ class CategoryUpdateRequest(BaseModel):
     )
 
 
+class CategoryReorderRequest(BaseModel):
+    """当前家庭分类的完整排序；必须包含每个分类且不能重复。"""
+
+    category_ids: list[int] = Field(..., description="按目标顺序排列的全部分类 ID")
+
+
 class CategoryInfo(BaseModel):
     """分类信息（返回给前端）。
 

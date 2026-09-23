@@ -5,7 +5,8 @@
  * 这和 services/user.ts 的约定一致：只要能传 ID，别人就能传别人的 ID 读到别人的数据。
  */
 
-import { request } from './http';
+import { ApiError, BASE_URL, request } from './http';
+import { clearToken, getToken } from '../utils/token';
 
 export type Gender = 'male' | 'female' | 'other';
 export type Goal = 'lose' | 'maintain' | 'gain';
@@ -157,12 +158,38 @@ export async function deleteCalorieLog(id: number): Promise<void> {
 
 /**
  * 拍照识别食物热量。
- * @param imageUrl 上传接口返回的相对路径（/uploads/...）
+ * @param filePath uni.chooseImage 返回的本地临时图片路径；服务端只临时识别，不永久保存。
  */
-export async function recognizeFood(imageUrl: string): Promise<RecognizeFoodResponse> {
-  return await request<RecognizeFoodResponse>({
-    url: '/vision/recognize-food',
-    method: 'POST',
-    data: { image_url: imageUrl },
+export async function recognizeFoodImage(filePath: string): Promise<RecognizeFoodResponse> {
+  return await new Promise<RecognizeFoodResponse>((resolve, reject) => {
+    const token = getToken();
+    uni.uploadFile({
+      url: `${BASE_URL}/vision/recognize-food/image`,
+      filePath,
+      name: 'file',
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      success: (res) => {
+        try {
+          const body = JSON.parse(res.data) as { code?: number; message?: string; data?: RecognizeFoodResponse };
+          if (res.statusCode === 401) {
+            clearToken();
+            reject(new ApiError(body.message || '登录已过期，请重新登录', body.code ?? 1001, 401));
+            return;
+          }
+          if (!body || typeof body.code !== 'number') {
+            reject(new ApiError('服务端返回格式异常', -1, res.statusCode));
+            return;
+          }
+          if (body.code !== 0 || !body.data) {
+            reject(new ApiError(body.message || '识别失败', body.code, res.statusCode));
+            return;
+          }
+          resolve(body.data);
+        } catch {
+          reject(new ApiError('服务端返回格式异常', -1, res.statusCode));
+        }
+      },
+      fail: () => reject(new ApiError('无法连接到服务器，请确认后端已启动', -2, 0)),
+    });
   });
 }

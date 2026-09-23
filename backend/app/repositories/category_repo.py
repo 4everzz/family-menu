@@ -80,6 +80,24 @@ class CategoryRepository:
         value = result.scalar_one()
         return int(value) if value is not None else -1
 
+    async def list_by_space_for_update(self, space_id: int) -> list[RecipeCategory]:
+        """读取并锁定一个家庭的分类，避免重排期间被其他写入同时修改。"""
+        stmt = (
+            select(RecipeCategory)
+            .where(RecipeCategory.space_id == space_id)
+            .order_by(RecipeCategory.sort_order, RecipeCategory.id)
+            .with_for_update()
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def reorder(self, categories: list[RecipeCategory], ordered_ids: list[int]) -> None:
+        """按完整 ID 顺序重排，并压紧为从 0 开始的连续序号。"""
+        by_id = {category.id: category for category in categories}
+        for sort_order, category_id in enumerate(ordered_ids):
+            by_id[category_id].sort_order = sort_order
+        await self.session.flush()
+
     # ==================== 写 ====================
 
     async def create_defaults(self, space_id: int) -> list[RecipeCategory]:

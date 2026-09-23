@@ -11,6 +11,15 @@
             <text class="identity-desc">{{ identityDesc }}</text>
           </view>
         </view>
+        <!-- 账号密码：老账号（微信登录进来的）在这里补设，
+             已有账号的在这里改用户名 / 改密码 -->
+        <view class="entry-item account-entry" hover-class="tap" @click="goCredentials">
+          <view class="entry-main">
+            <text class="entry-name">{{ credentialTitle }}</text>
+            <text class="entry-desc">{{ credentialDesc }}</text>
+          </view>
+          <text class="entry-arrow">›</text>
+        </view>
       </view>
     </view>
 
@@ -77,6 +86,17 @@ const identityDesc = computed(() => {
   return username.value ? `@${username.value}` : '微信登录的账号，还没有用户名';
 });
 
+/** 账号密码入口的文案：没有用户名 = 首次设置，有 = 修改 */
+const credentialTitle = computed(() =>
+  hasValidToken() && !username.value ? '设置账号密码' : '账号密码',
+);
+const credentialDesc = computed(() => {
+  if (!hasValidToken()) return '登录后可设置';
+  return username.value
+    ? '修改登录用户名或密码'
+    : '补一套用户名和密码，之后也能用它在 App 登录';
+});
+
 async function refresh(): Promise<void> {
   // 先用本地缓存把界面填上，避免进页面先空一下
   spaceName.value = getCurrentSpaceName();
@@ -103,6 +123,11 @@ async function refresh(): Promise<void> {
 /** 切换/创建/加入家庭组都在家庭组页面里 */
 function goSpace(): void {
   uni.navigateTo({ url: '/pages/space/index' });
+}
+
+/** 账号密码入口：老账号是"去设置"，已有账号是"去修改" */
+function goCredentials(): void {
+  uni.navigateTo({ url: '/pages/auth/credentials' });
 }
 
 /**
@@ -206,6 +231,8 @@ onShow(refresh);
   border-bottom: 2rpx solid var(--c-border);
 }
 .entry-item:last-child { border-bottom: none; }
+/* 身份卡片下面的条目需要一条分隔线——.identity 自己没有下边框 */
+.account-entry { border-top: 2rpx solid var(--c-border); }
 .entry-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .entry-name { color: var(--c-text); font-size: 29rpx; font-weight: 500; }
 .entry-desc {

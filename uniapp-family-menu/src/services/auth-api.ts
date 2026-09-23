@@ -117,6 +117,47 @@ export function loginWithWechat(): Promise<LoginResult> {
   }).then((code) => submitCredentials('/auth/login/wechat', { code }));
 }
 
+/** `setCredentials` 的参数。只传要改的字段；不传的保持原值。 */
+export interface CredentialsInput {
+  /** 新用户名；不传表示不改 */
+  username?: string;
+  /** 新密码；不传表示不改 */
+  password?: string;
+  /** 再输一遍新密码，必须与 password 一致 */
+  passwordConfirm?: string;
+  /** 当前密码。账号**已有密码**时，改任何凭据都必须提供，用来证明是本人 */
+  currentPassword?: string;
+}
+
+/**
+ * 设置 / 修改**自己**的账号凭据（用户名、密码）。返回最新的用户信息。
+ *
+ * 三种用法（由"传了哪些字段"决定）：
+ *   · 只传 password + passwordConfirm + currentPassword → 改密码
+ *   · 只传 username + currentPassword                    → 改用户名
+ *   · 首次设置（微信登录进来的老账号）→ username + password + passwordConfirm，**不用** currentPassword
+ *
+ * ⚠️ 身份只从令牌来：**不要**、也没办法传 user_id。
+ *    服务端也只认令牌——前端把入口藏起来不是安全边界，别人可以直接调接口。
+ *
+ * ⚠️ 用 POST 而不是 PATCH：
+ *    微信小程序的 `wx.request` 合法 method 里没有 PATCH（见 http.ts 的说明），
+ *    后端为此额外开了一个行为完全一致的 POST 入口。这里走的就是那个入口。
+ */
+export function setCredentials(input: CredentialsInput): Promise<BackendUser> {
+  // 只把"真的传了"的字段放进去。
+  // ⚠️ 不能图省事写成 `data = {...input}`：那样 username 会以 undefined 出现，
+  //    JSON 序列化后变成 null，而后端的语义是"null 表示不改"——
+  //    这次正好没事，但只要以后哪个字段用 null 表示"清空"，就会悄悄出问题。
+  const data: Record<string, unknown> = {};
+  if (input.username !== undefined) data.username = input.username;
+  if (input.password !== undefined) data.password = input.password;
+  if (input.passwordConfirm !== undefined) data.password_confirm = input.passwordConfirm;
+  if (input.currentPassword !== undefined) data.current_password = input.currentPassword;
+
+  return request<BackendUser>({ url: '/auth/me/credentials', method: 'POST', data });
+}
+
 /**
  * 当前页面栈里是不是已经有登录页了。
  *

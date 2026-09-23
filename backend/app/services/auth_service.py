@@ -123,6 +123,90 @@ class AuthService:
         logger.info("密码登录成功 | id=%s", user.id)
         return user, create_access_token(user.id)
 
+    # ==================== 自建账号：设置 / 修改凭据 ====================
+
+    async def set_credentials(
+        self,
+        user: User,
+        *,
+        username: str | None,
+        password: str | None,
+        current_password: str | None,
+    ) -> User:
+        """给**当前登录的用户**设置或修改用户名 / 密码。
+
+        为什么需要它？
+            改造前只有"注册"能设置账号密码，注册之后就再也改不了——
+            改密码是任何有账号的产品的基本能力，缺了它用户被撞库了都没法自救。
+            另外微信登录进来的用户（username / password_hash 都是 NULL）
+            一直没法改用账号密码登录，这里也一并补上。
+
+        规则分两种情况，"有没有密码"决定了要不要验旧密码：
+          · **已有密码**（自建账号）→ 改任何凭据都要先验当前密码（证明是本人）
+          · **没有密码**（微信登录用户首次补设）→ 不用验，但用户名和密码必须**一起给**
+
+        ⚠️ 已知限制：改密码**不会让已经签发的旧令牌失效**。
+           我们的令牌是无状态 JWT、没有版本号，签出去就管到过期为止。
+           要根治得加 token 版本号或"密码修改时间"校验，属于独立的一件事。
+        """
+        # 已经登录的用户理论上一定是启用状态，这里再挡一次是防御性写法——
+        # 万一管理员在用户持着令牌期间把他停用了，这一步能拦住。
+        self._ensure_active(user)
+
+        if user.password_hash:
+            # 已有密码 = 这是"修改"，必须证明你是本人
+            if not current_password:
+                raise BusinessError("请输入当前密码")
+            if not verify_password(current_password, user.password_hash):
+                raise BusinessError("当前密码不正确", code=CODE_BAD_CREDENTIALS)
+        else:
+            # 首次设置：只给用户名没法登录（没密码），只给密码也没有登录名。
+            # 所以要求两个一起给，避免出现"设了半天还是登不了"的中间状态。
+            if not username or not password:
+                raise BusinessError("请同时设置用户名和密码")
+
+        # 算出"改完之后"的用户名。下面的判重和弱密码检查都要用它——
+        # 这次可能没改用户名，但把密码改成了老用户名，那种账号撞库时最先失守。
+        target_username = username or user.username
+
+        # 真的改了用户名才查重（没改就跳过，省一次查询）
+        if username and username != user.username:
+            existing = await self.repo.get_by_username(username)
+            if existing is not None and existing.id != user.id:
+                raise BusinessError("该用户名已被占用，换一个试试", code=CODE_USERNAME_TAKEN)
+
+        if password and target_username and password == target_username:
+            raise BusinessError("密码不能与用户名相同")
+
+        username_changed = bool(username and username != user.username)
+        user_id = user.id
+        try:
+            updated = await self.repo.update_credentials(
+                user,
+                # 传 None 表示"这项不变"，所以"新用户名和旧的相同"要收敛成 None，
+                # 免得白写一次库、白改一次 updated_at。
+                username=username if username_changed else None,
+                password_hash=hash_password(password) if password else None,
+            )
+        except IntegrityError as exc:
+            # 先查重只是给出友好提示；两个请求仍可能同时通过查询，随后争抢同一用户名。
+            # 数据库唯一索引才是最终防线，并发冲突必须在这里翻译成与注册相同的错误。
+            await self.repo.session.rollback()
+            if username_changed:
+                logger.info("并发修改用户名撞上唯一索引 | id=%s | username=%s", user_id, username)
+                raise BusinessError(
+                    "该用户名已被占用，换一个试试",
+                    code=CODE_USERNAME_TAKEN,
+                ) from exc
+            raise
+        logger.info(
+            "账号凭据已更新 | id=%s | username=%s | 是否改密码=%s",
+            user.id,
+            target_username,
+            bool(password),
+        )
+        return updated
+
     # ==================== 微信小程序静默登录 ====================
 
     async def login_with_wechat(self, code: str) -> tuple[User, str]:

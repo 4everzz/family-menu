@@ -40,6 +40,28 @@ USERNAME_FORMAT_MESSAGE = (
 )
 
 
+# ⭐ 下面两个校验抽成模块级函数，是因为**有两处需要同一套规则**：
+#    注册（RegisterRequest）和设置/修改凭据（SetCredentialsRequest）。
+#    ⚠️ 别复制一份过去——两份规则迟早分叉，而且是"改密码时能过、注册时过不了"
+#       这种最难发现的分叉（两个入口不会同时打开来对照）。
+def validate_username_format(value: str) -> str:
+    """用户名格式校验。"""
+    if not value:
+        raise ValueError("请填写用户名")
+    if not USERNAME_RE.fullmatch(value):
+        raise ValueError(USERNAME_FORMAT_MESSAGE)
+    return value
+
+
+def validate_password_length(value: str) -> str:
+    """密码长度校验。"""
+    if len(value) < PASSWORD_MIN_LENGTH:
+        raise ValueError(f"密码至少 {PASSWORD_MIN_LENGTH} 位")
+    if len(value) > PASSWORD_MAX_LENGTH:
+        raise ValueError(f"密码最多 {PASSWORD_MAX_LENGTH} 位")
+    return value
+
+
 def _strip_lower(value: object) -> object:
     """用户名归一化：去掉首尾空格并统一转小写。
 
@@ -111,22 +133,14 @@ class RegisterRequest(_UsernameFieldMixin, _PasswordFieldMixin):
     @field_validator("username")
     @classmethod
     def _check_username(cls, value: str) -> str:
-        """用户名格式校验。"""
-        if not value:
-            raise ValueError("请填写用户名")
-        if not USERNAME_RE.fullmatch(value):
-            raise ValueError(USERNAME_FORMAT_MESSAGE)
-        return value
+        """用户名格式校验（规则与「设置凭据」共用）。"""
+        return validate_username_format(value)
 
     @field_validator("password")
     @classmethod
     def _check_password(cls, value: str) -> str:
-        """密码长度校验。"""
-        if len(value) < PASSWORD_MIN_LENGTH:
-            raise ValueError(f"密码至少 {PASSWORD_MIN_LENGTH} 位")
-        if len(value) > PASSWORD_MAX_LENGTH:
-            raise ValueError(f"密码最多 {PASSWORD_MAX_LENGTH} 位")
-        return value
+        """密码长度校验（规则与「设置凭据」共用）。"""
+        return validate_password_length(value)
 
     @field_validator("password_confirm", mode="before")
     @classmethod
@@ -159,6 +173,87 @@ class RegisterRequest(_UsernameFieldMixin, _PasswordFieldMixin):
         # 再查弱密码：用户名 zhangsan、密码也填 zhangsan，这种账号在撞库时最先失守
         if self.password == self.username:
             raise ValueError("密码不能与用户名相同")
+
+        return self
+
+
+class SetCredentialsRequest(_UsernameFieldMixin, _PasswordFieldMixin):
+    """设置 / 修改**自己**的账号凭据（用户名、密码）。
+
+    ⭐ 为什么字段全部可选？
+       三种真实诉求都要支持：
+         · 只想改密码（最常见）
+         · 只想改用户名
+         · 微信登录进来的用户**首次**补一套账号密码（两个要一起给）
+       用"哪些字段有值"来表达诉求，比开三个端点简单，前端也只需要一个表单。
+
+    ⚠️ 这里只做**字段级**校验：格式、长度、两次密码是否一致。
+       "要不要验当前密码""新用户名有没有被占用""密码能不能等于用户名"
+       全都放在 Service 层判断——因为那三件事都要先知道**当前用户是谁**、
+       **改完之后用户名是什么**，请求模型拿不到这些信息。
+       （尤其是"密码不能与用户名相同"：这次可能没改用户名，
+         但把密码改成了老用户名——只有 Service 层才看得见。）
+    """
+
+    username: str | None = Field(
+        default=None,
+        description=f"新用户名，{USERNAME_MIN_LENGTH}-{USERNAME_MAX_LENGTH} 位字母、数字或下划线；不传表示不改",
+    )
+    password: str | None = Field(
+        default=None,
+        description=f"新密码，{PASSWORD_MIN_LENGTH}-{PASSWORD_MAX_LENGTH} 位；不传表示不改",
+    )
+    password_confirm: str | None = Field(
+        default=None,
+        description="再输一遍新密码，服务端会比对两者是否一致",
+    )
+    current_password: str | None = Field(
+        default=None,
+        description="当前密码。账号**已有密码**时，改任何凭据都必须提供，用来证明是本人",
+    )
+
+    @field_validator("username")
+    @classmethod
+    def _check_username(cls, value: str | None) -> str | None:
+        # None = "这次不改用户名"，不是"填了个空的用户名"
+        return None if value is None else validate_username_format(value)
+
+    @field_validator("password")
+    @classmethod
+    def _check_password(cls, value: str | None) -> str | None:
+        return None if value is None else validate_password_length(value)
+
+    @field_validator("password_confirm", "current_password", mode="before")
+    @classmethod
+    def _normalize(cls, value: object) -> object:
+        """这两个字段走和 password 一样的去空格规则。
+
+        否则"两次输入的密码一致"这个前提就不成立了：
+        密码去了空格、确认密码没去，用户明明输的一样却报不一致。
+        """
+        return _strip(value)
+
+    @model_validator(mode="after")
+    def _cross_field_checks(self) -> "SetCredentialsRequest":
+        """跨字段校验。
+
+        ⚠️ 不在这里判"密码不能与用户名相同"——那要等 Service 层算出
+           "改完之后用户名是什么"才能判，见类注释。
+        """
+        if self.username is None and self.password is None:
+            # 两个都没给，这次请求什么也做不了。明确拒绝，
+            # 不要让一个"成功的空操作"悄悄返回，那会让前端以为改成功了。
+            raise ValueError("没有要修改的内容")
+
+        if self.password is not None:
+            # ⚠️ "没填确认密码"放在这里查、而不是写成独立的字段校验器：
+            #    password_confirm 带默认值 None，而 Pydantic **默认不对"用了默认值"的
+            #    字段运行校验器**，独立校验器在字段缺失时压根不会触发，
+            #    提示会变成含糊的"两次输入的密码不一致"。这个坑注册那边也踩过。
+            if not self.password_confirm:
+                raise ValueError("请再输入一次新密码")
+            if self.password != self.password_confirm:
+                raise ValueError("两次输入的密码不一致")
 
         return self
 

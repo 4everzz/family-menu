@@ -1,17 +1,20 @@
 """注册与登录接口。
 
-三个入口的分工：
-    POST /auth/register      自建账号注册 —— App / H5 / 小程序通用
-    POST /auth/login         自建账号登录 —— App / H5 / 小程序通用
-    POST /auth/login/wechat  微信小程序静默登录 —— 只有小程序端用得到
-                             （App 端接微信登录需要企业认证，个人开发者申请不了）
+入口分工：
+    POST  /auth/register          自建账号注册 —— App / H5 / 小程序通用
+    POST  /auth/login             自建账号登录 —— App / H5 / 小程序通用
+    PATCH /auth/me/credentials    设置 / 修改自己的账号凭据（改用户名、改密码）
+    POST  /auth/login/wechat      微信小程序静默登录 —— 只有小程序端用得到
+                                  （App 端接微信登录需要企业认证，个人开发者申请不了）
 
 "当前登录用户"这个接口不在这里，它属于用户资源，放在 api/v1/users.py 的 GET /users/me。
+「修改个人资料」（昵称、头像）同理，也在 users.py —— 那是**资料**，这里是**凭据**，
+两件事分开，别混在一个接口里。
 """
 
 from fastapi import APIRouter
 
-from app.api.deps import DbSession
+from app.api.deps import CurrentUser, DbSession
 from app.core.config import settings
 from app.core.response import success
 from app.models.user import User
@@ -21,6 +24,7 @@ from app.schemas.auth import (
     LoginResponse,
     PasswordLoginRequest,
     RegisterRequest,
+    SetCredentialsRequest,
     WechatLoginRequest,
 )
 from app.schemas.user import UserInfo
@@ -82,6 +86,44 @@ async def login(payload: PasswordLoginRequest, session: DbSession) -> dict:
     # 登录本身不改数据，但事务里可能有过期状态需要收尾，统一提交一次
     await session.commit()
     return _login_payload(user, token)
+
+
+@router.patch("/auth/me/credentials", summary="设置 / 修改账号凭据")
+@router.post(
+    "/auth/me/credentials",
+    summary="设置 / 修改账号凭据（小程序端入口）",
+    description=(
+        "与 PATCH 行为完全一致，仅因微信小程序的 wx.request 不支持 PATCH 而额外开放。"
+        "小程序端请使用本入口，App / H5 端用标准的 PATCH。"
+    ),
+)
+async def set_credentials(
+    payload: SetCredentialsRequest,
+    current_user: CurrentUser,
+    session: DbSession,
+) -> dict:
+    """给当前登录用户设置或修改用户名 / 密码。
+
+    三种用法（由"传了哪些字段"决定）：
+      · 只传 password + password_confirm + current_password → 改密码
+      · 只传 username + current_password                    → 改用户名
+      · 微信登录用户首次补设 → username + password + password_confirm（不用 current_password）
+
+    ⚠️ 身份**只从令牌来**，绝不接受客户端传 user_id ——
+       否则任何人都能改别人的密码，这是最严重的一类漏洞。
+       前端把入口藏起来不是安全边界，别人可以直接调接口。
+
+    返回最新的用户信息（含新用户名），让前端能立刻更新界面、不用再拉一次。
+    """
+    user = await _build_service(session).set_credentials(
+        current_user,
+        username=payload.username,
+        password=payload.password,
+        current_password=payload.current_password,
+    )
+    await session.commit()
+    await session.refresh(user)  # 取回 updated_at 之类由数据库生成的字段
+    return success(UserInfo.model_validate(user).model_dump())
 
 
 @router.post("/auth/login/wechat", summary="微信小程序登录")

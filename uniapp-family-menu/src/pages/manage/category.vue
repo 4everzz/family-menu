@@ -51,6 +51,18 @@
             </text>
           </view>
           <view v-if="!selectMode" class="row-actions">
+            <view
+              class="action order-action"
+              :class="{ disabled: pending || categories[categoryIndex(item.id)] === categories[0] }"
+              hover-class="tap"
+              @click.stop="move(item.id, -1)"
+            >上移</view>
+            <view
+              class="action order-action"
+              :class="{ disabled: pending || categories[categoryIndex(item.id)] === categories[categories.length - 1] }"
+              hover-class="tap"
+              @click.stop="move(item.id, 1)"
+            >下移</view>
             <view class="action" hover-class="tap" @click.stop="rename(item)">改名</view>
           </view>
         </view>
@@ -98,7 +110,7 @@ import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
 import type { Category } from '../../services/category';
-import { createCategory, deleteCategory, fetchCategories, renameCategory } from '../../services/category';
+import { createCategory, deleteCategory, fetchCategories, renameCategory, reorderCategories } from '../../services/category';
 import { getCurrentSpaceId } from '../../utils/space-context';
 import { showError } from '../../utils/format';
 import { DANGER } from '../../utils/theme';
@@ -125,6 +137,29 @@ const selectable = computed(() => categories.value.filter((item) => item.recipeC
 const allPicked = computed(
   () => selectable.value.length > 0 && selectable.value.every((item) => pickedIds.value.includes(item.id)),
 );
+
+function categoryIndex(id: string): number {
+  return categories.value.findIndex((item) => item.id === id);
+}
+
+async function move(categoryId: string, direction: -1 | 1): Promise<void> {
+  if (pending.value) return;
+  const from = categoryIndex(categoryId);
+  const to = from + direction;
+  if (from < 0 || to < 0 || to >= categories.value.length) return;
+
+  const reordered = [...categories.value];
+  [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
+  pending.value = true;
+  try {
+    categories.value = await reorderCategories(spaceId.value, reordered.map((item) => item.id));
+    uni.showToast({ title: '顺序已更新', icon: 'success' });
+  } catch (error) {
+    showError(error instanceof Error ? error.message : '调整失败，请重试');
+  } finally {
+    pending.value = false;
+  }
+}
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -422,7 +457,7 @@ onShow(() => {
 }
 .row-meta { color: var(--c-text-2); font-size: 23rpx; }
 
-.row-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--s-1); }
+.row-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 6rpx; }
 /* 行内动作只剩下「改名」——删除收进右上角的批量入口了。
    88rpx 的点击区保留：比小按钮好点，也不差这点宽 */
 .action {
@@ -438,6 +473,8 @@ onShow(() => {
   color: var(--c-text-2);
   font-size: 25rpx;
 }
+.order-action { min-width: 72rpx; padding: 0 8rpx; font-size: 22rpx; }
+.action.disabled { opacity: 0.4; }
 
 /* 勾中的行加一层浅底 */
 .row.picked { background: var(--c-primary-bg); }

@@ -15,6 +15,24 @@
     </view>
 
     <!--
+      账号密码：改用户名 / 改密码 / 给老账号补一套账号。
+      为什么单独放一条入口——在此之前卡片上那句「还没有设置用户名」是个**死胡同**：
+      用户看得见自己缺什么，却没有任何地方能去补。
+    -->
+    <view v-if="user" class="group">
+      <text class="group-title">账号</text>
+      <view class="entry-group">
+        <view class="entry-item" hover-class="tap" @click="goCredentials">
+          <view class="entry-main">
+            <text class="entry-name">{{ credentialTitle }}</text>
+            <text class="entry-desc">{{ credentialDesc }}</text>
+          </view>
+          <text class="entry-arrow">›</text>
+        </view>
+      </view>
+    </view>
+
+    <!--
       菜单管理：只有创建人能改菜单（后端也会拦，这里隐藏只是体验），
       所以普通成员整块不显示，换成一句说明——否则他会点进去、填完表单才被拒绝，
       那是最难查的一种体验问题。
@@ -195,6 +213,21 @@ const userSubText = computed(() => {
   // 改造前用微信登录的老账号还没有用户名，如实说明，别显示成一片空白
   return user.value.username ? `@${user.value.username}` : '还没有设置用户名';
 });
+
+/** 账号密码入口的文案：没有用户名 = 首次设置，有 = 修改 */
+const credentialTitle = computed(() => (user.value?.username ? '账号密码' : '设置账号密码'));
+
+const credentialDesc = computed(() => {
+  if (!user.value) return '';
+  return user.value.username
+    ? '修改登录用户名或密码'
+    : '补一套用户名和密码，之后也能用它在 App 登录';
+});
+
+/** 去账号密码页（改用户名 / 改密码 / 老账号首次补设） */
+function goCredentials(): void {
+  uni.navigateTo({ url: '/pages/auth/credentials' });
+}
 
 /** 头像显示地址：本地占位图直接显示，服务端上传的相对路径拼完整地址 */
 const displayAvatar = computed(() => resolveAvatarUrl(user.value?.avatarUrl));

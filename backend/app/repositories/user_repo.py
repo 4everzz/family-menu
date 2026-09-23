@@ -61,6 +61,30 @@ class UserRepository:
         await self.session.flush()
         return user
 
+    async def update_credentials(
+        self,
+        user: User,
+        *,
+        username: str | None,
+        password_hash: str | None,
+    ) -> User:
+        """更新登录凭据。**只写传进来的字段**（None 表示这一项不改）。
+
+        调用方必须传入**已归一化**的用户名，理由同 get_by_username。
+
+        ⚠️ flush 之后必须 refresh：
+            `updated_at` 是数据库那边生成的列，flush 只把语句发出去，
+            对象上的这个属性还是旧的（甚至触发一次懒加载）。
+            紧接着读它就会撞上 MissingGreenlet——这个坑项目里踩过好几次了。
+        """
+        if username is not None:
+            user.username = username
+        if password_hash is not None:
+            user.password_hash = password_hash
+        await self.save(user)
+        await self.session.refresh(user)
+        return user
+
     async def save(self, user: User) -> User:
         """把对象上已修改的字段写回数据库。
 

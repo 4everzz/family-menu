@@ -92,6 +92,16 @@ export async function renameCategory(
   return toCategory(dto);
 }
 
+/** 保存当前家庭的完整分类顺序。 */
+export async function reorderCategories(spaceId: string, categoryIds: string[]): Promise<Category[]> {
+  const list = await request<CategoryDto[]>({
+    url: `/spaces/${spaceId}/categories/reorder`,
+    method: 'POST',
+    data: { category_ids: categoryIds.map(Number) },
+  });
+  return (Array.isArray(list) ? list : []).map(toCategory);
+}
+
 /**
  * 删除一个分类。
  *

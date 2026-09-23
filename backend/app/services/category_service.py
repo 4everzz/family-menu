@@ -76,6 +76,18 @@ class CategoryService:
 
         return category
 
+    async def reorder_categories(self, user: User, space_id: int, ordered_ids: list[int]) -> list[tuple[RecipeCategory, int]]:
+        """按客户端提交的完整顺序重排当前家庭分类（仅创建人）。"""
+        await self.space_service.ensure_owner(space_id, user.id)
+        categories = await self.repo.list_by_space_for_update(space_id)
+        current_ids = {category.id for category in categories}
+
+        if len(ordered_ids) != len(set(ordered_ids)) or set(ordered_ids) != current_ids:
+            raise BusinessError("分类顺序已变化，请刷新后重试")
+
+        await self.repo.reorder(categories, ordered_ids)
+        return await self.repo.list_by_space_with_count(space_id)
+
     async def rename_category(
         self,
         user: User,

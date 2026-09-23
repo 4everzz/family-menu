@@ -80,7 +80,7 @@
               <text v-else class="draft-kcal empty">· 未填热量</text>
             </view>
 
-            <view v-if="!d.done && !d.ignored" class="draft-actions">
+            <view v-if="!d.done && !d.ignored && !d.mock" class="draft-actions">
               <view class="draft-btn primary" hover-class="tap" @click="confirmDraft(d)">记下</view>
               <view class="draft-btn ghost" hover-class="tap" @click="d.ignored = true">忽略</view>
             </view>
@@ -89,7 +89,21 @@
       </view>
 
       <view v-if="busy" class="msg assistant">
-        <view class="bubble assistant typing">思考中…</view>
+        <view class="bubble assistant typing">
+          <text>思考中…</text>
+          <!-- 流式步骤（SSE）：AI 每查完一个工具就当场亮出来。
+               等待总时长没变，但"看得见的进度"和干等转圈完全是两种体感。 -->
+          <view v-if="liveSteps.length" class="trace live">
+            <view v-for="(s, si) in liveSteps" :key="si" class="trace-row">
+              <text class="trace-dot" :class="s.ok ? 'ok' : 'fail'"></text>
+              <text class="trace-text">{{ toolLabel(s.tool) }} · {{ s.detail }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view v-if="recognizing" class="msg assistant">
+        <view class="bubble assistant typing">正在识别照片，仅用于本次识别…</view>
       </view>
     </view>
 
@@ -105,13 +119,19 @@
       </view>
 
       <view class="composer">
+        <view
+          class="composer-photo"
+          :class="{ disabled: busy || recognizing }"
+          hover-class="tap"
+          @click="chooseFoodPhoto"
+        >{{ recognizing ? '识别中' : '拍照' }}</view>
         <input
           v-model="draftText"
           class="composer-input"
           placeholder="比如：中午吃了红烧肉500g，550kcal"
           placeholder-class="field-placeholder"
           confirm-type="send"
-          :disabled="busy"
+          :disabled="busy || recognizing"
           @confirm="send"
         />
         <view
@@ -204,8 +224,7 @@
  * 日期一定要显示出来：AI 会把"昨天吃的"正确记成昨天，
  * 但用户看不见这个字段就没法确认，所以卡片上露出来、弹层里也能改。
  *
- * 拍照识别热量已从本页移除（用户定的：先专心把对话做好）。后端
- * /vision/recognize-food 保留未动，将来想恢复随时接回来。
+ * 拍照识别只生成待确认草案，只有用户确认后才写入热量记录；演示结果不可写入。
  *
  * 对话历史（2026-09-18 起）：
  *   **存在后端**（ai_chat_messages 表），上下文也由后端自己取——前端不再传 history，
@@ -220,11 +239,12 @@ import { ensureLogin } from '../../services/auth-api';
 import {
   clearAiMessages,
   fetchAiMessages,
-  sendAiMessage,
+  sendAiMessageStream,
   type ActionDraft,
   type AgentStepInfo,
 } from '../../services/ai-chat';
-import { addCalorieLog, fetchCalorieLogs, updateCalorieLog, type CalorieLog } from '../../services/health';
+import { addCalorieLog, fetchCalorieLogs, recognizeFoodImage, updateCalorieLog, type CalorieLog } from '../../services/health';
+import { chooseImageFromAlbum } from '../../services/upload';
 import { getCurrentSpaceId } from '../../utils/space-context';
 import { hasValidToken } from '../../utils/token';
 import { showError } from '../../utils/format';
@@ -250,6 +270,10 @@ interface ChatDraft extends ActionDraft {
   ignored: boolean;
   /** 已写入记录的主键。有了它，「已记下」的卡片再改就能回写数据库（而不是只改界面） */
   logId: number | null;
+  /** 记录写入来源；区别于热量可信度 source。 */
+  recordSource?: string;
+  /** 后端未配置视觉模型时返回的占位结果，只能查看，不能记入正式记录。 */
+  mock?: boolean;
 }
 
 /** 热量来源标签（可信度分级）。
@@ -316,6 +340,9 @@ interface ChatMessage {
 const messages = ref<ChatMessage[]>([]);
 const draftText = ref('');
 const busy = ref(false);
+const recognizing = ref(false);
+/** 本轮已收到的流式步骤（SSE 实时推来的），回复出来后清空 */
+const liveSteps = ref<AgentStepInfo[]>([]);
 /** 后端是否返回了占位数据（没配 Key） */
 const mock = ref(false);
 /** 历史是否已经拉过。只拉一次：之后 onShow 再触发也不重放，
@@ -426,7 +453,7 @@ async function scrollToBottom(): Promise<void> {
 
 /** 发一句话（上下文由后端自己取，前端只管把这句话递过去） */
 async function send(): Promise<void> {
-  if (!canSend.value) return;
+  if (!canSend.value || recognizing.value) return;
   const text = draftText.value.trim();
   if (!text) return;
 
@@ -439,10 +466,16 @@ async function send(): Promise<void> {
   messages.value.push({ role: 'user', content: text, drafts: [], steps: [] });
   draftText.value = '';
   busy.value = true;
+  liveSteps.value = [];
   await scrollToBottom();
 
   try {
-    const resp = await sendAiMessage(text, getCurrentSpaceId() || undefined);
+    // 流式：步骤实时亮出来；链路不可用时内部自动回落一次性接口
+    // （回落条件见 sendAiMessageStream——业务错误不回落，避免重复扣额度）
+    const resp = await sendAiMessageStream(text, getCurrentSpaceId() || undefined, (s) => {
+      liveSteps.value.push(s);
+      void scrollToBottom();
+    });
     mock.value = resp.mock;
     messages.value.push({
       role: 'assistant',
@@ -461,8 +494,57 @@ async function send(): Promise<void> {
     });
   } finally {
     busy.value = false;
+    liveSteps.value = [];
   }
   await scrollToBottom();
+}
+
+/** 拍照或从相册选图识别；图片通过 multipart 直接发送到后端内存处理，不留服务器文件。 */
+async function chooseFoodPhoto(): Promise<void> {
+  if (busy.value || recognizing.value) return;
+  try {
+    await ensureLogin();
+    const filePath = await chooseImageFromAlbum();
+    recognizing.value = true;
+    const result = await recognizeFoodImage(filePath);
+    if (!result.items.length) {
+      uni.showToast({ title: '没有识别到食物，请换张照片试试', icon: 'none' });
+      return;
+    }
+
+    const drafts: ChatDraft[] = result.items.map((item) => ({
+      kind: 'create_calorie_log',
+      food_name: item.food_name,
+      portion: item.portion,
+      calories: item.calories > 0 ? item.calories : null,
+      calories_estimated: true,
+      eaten_at: todayStr(),
+      source: 'llm_estimate',
+      recordSource: 'vision',
+      mock: result.mock,
+      matched_food: null,
+      done: false,
+      ignored: false,
+      logId: null,
+    }));
+    messages.value.push({
+      role: 'user',
+      content: '我拍了一张食物照片，请帮我识别。',
+      drafts: [],
+      steps: [],
+    });
+    messages.value.push({
+      role: 'assistant',
+      content: result.mock ? '这是演示占位结果，不会写入记录；配置视觉模型后才能识别真实食物。' : '识别完成，请核对食物名称和热量，确认后才会保存。',
+      drafts,
+      steps: [],
+    });
+    await scrollToBottom();
+  } catch (error) {
+    if (error instanceof Error && !/取消|cancel/i.test(error.message)) showError(error);
+  } finally {
+    recognizing.value = false;
+  }
 }
 
 /* ---------------- 详情编辑弹层 ---------------- */
@@ -484,6 +566,10 @@ const form = ref({ food_name: '', portion: '', calories: '', eaten_at: '' });
  */
 function openEditor(d: ChatDraft): void {
   if (d.ignored) return;
+  if (d.mock) {
+    uni.showToast({ title: '演示占位结果不能编辑', icon: 'none' });
+    return;
+  }
   editing.value = d;
   form.value = {
     food_name: d.food_name,
@@ -566,6 +652,10 @@ async function saveEditor(): Promise<void> {
 
 /** 点「记下」：真正写库的一步，走的是已有的热量记录接口 */
 async function confirmDraft(d: ChatDraft): Promise<void> {
+  if (d.mock) {
+    uni.showToast({ title: '演示识别结果不能记入记录', icon: 'none' });
+    return;
+  }
   const kcal = d.calories;
   if (kcal === null) {
     uni.showToast({ title: '先点卡片把热量填上', icon: 'none' });
@@ -583,7 +673,7 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
       // 用户没说重量就传 null —— 记录里不会凭空多出一个份量
       portion: d.portion,
       eaten_at: d.eaten_at,
-      source: 'ai_text',
+      source: d.recordSource ?? 'ai_text',
     });
     // 记住主键：之后用户再点卡片改，要靠它回写这条记录
     d.logId = created.id;
@@ -744,6 +834,9 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
 }
 .trace-dot.fail { background: var(--c-warn); }
 .trace-text { color: var(--c-text-3); font-size: 22rpx; line-height: 1.5; }
+/* "思考中…"气泡里的实时步骤：不用再画分隔线（气泡本身就小），
+   紧凑一点，别让它长得像一条完整回复 */
+.trace.live { margin-top: var(--s-1); padding-top: 0; border-top: none; }
 /* 热量还没填：用弱化的文字提示，不再是内联输入框——
    改数值统一走详情弹层，只有一个编辑入口，不会两处各说各话。 */
 .draft-kcal.empty { color: var(--c-text-3); font-weight: 400; }
@@ -815,6 +908,20 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
   font-size: 26rpx;
   box-sizing: border-box;
 }
+.composer-photo {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--touch-min);
+  padding: 0 var(--s-3);
+  border: 2rpx solid var(--c-border-strong);
+  border-radius: var(--r-pill);
+  color: var(--c-text-2);
+  font-size: 24rpx;
+  box-sizing: border-box;
+}
+.composer-photo.disabled { opacity: 0.55; }
 .composer-send {
   flex: 0 0 auto;
   display: flex;
