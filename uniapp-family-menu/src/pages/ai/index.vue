@@ -23,7 +23,18 @@
     <view class="chat">
       <!-- 空态：直接给可点的例子，比讲一堆用法强。
            点一下就直接发出去（不是只填进输入框）——否则用户不知道这个页面到底能干什么。 -->
-      <view v-if="!messages.length" class="intro">
+      <view v-if="historyLoading && !messages.length" class="history-state">
+        <text class="history-state-title">正在加载聊天记录…</text>
+        <text class="history-state-copy">正在读取当前家庭的对话，请稍候。</text>
+      </view>
+
+      <view v-else-if="historyError && !messages.length" class="history-state error">
+        <text class="history-state-title">聊天记录加载失败</text>
+        <text class="history-state-copy">{{ historyError }}</text>
+        <view class="history-retry" hover-class="tap" @click="retryHistory">重试</view>
+      </view>
+
+      <view v-else-if="!messages.length" class="intro">
         <text class="intro-title">跟我说你吃了什么</text>
         <text class="intro-copy">我会整理成一条记录，你确认一下才真正记上。</text>
         <text class="intro-hint">点下面的例子就能试：</text>
@@ -38,51 +49,59 @@
         </view>
       </view>
 
-      <view v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
-        <view class="bubble" :class="m.role">
-          <text class="bubble-text">{{ m.content }}</text>
+      <view v-for="(m, i) in messages" :key="i">
+        <view v-if="m.switchNotice" class="space-switch-divider">
+          <view class="space-switch-line"></view>
+          <text class="space-switch-text">{{ m.switchNotice }}</text>
+          <view class="space-switch-line"></view>
+        </view>
+
+        <view v-else class="msg" :class="m.role">
+          <view class="bubble" :class="m.role">
+            <text class="bubble-text">{{ m.content }}</text>
 
           <!-- AI 的查询过程：把"它真的去看了"亮出来。
                ⚠️ 为什么值得占一行：AI 现在会自己去查冰箱和菜单，
                   只显示最后那句话的话，用户会觉得"它怎么知道我冰箱里有什么"。
                   空数组（闲聊）不显示——那本身也是个信息，但没必要专门说一句。 -->
           <view v-if="m.steps && m.steps.length" class="trace">
-            <view v-for="(s, si) in m.steps" :key="si" class="trace-row">
+            <view v-for="(s, si) in visibleSteps(m.steps)" :key="si" class="trace-row">
               <text class="trace-dot" :class="s.ok ? 'ok' : 'fail'"></text>
-              <text class="trace-text">{{ toolLabel(s.tool) }} · {{ s.detail }}</text>
+              <text class="trace-text">{{ stepLabel(s, false) }}</text>
             </view>
           </view>
 
           <!-- 待确认的动作卡片：后端只给"草案"，点「记下」才真的写入。
                整块可点 → 打开详情弹层改数值（AI 从大白话里抽字段一定会错，得留个改的地方）。 -->
-          <view v-for="(d, di) in m.drafts" :key="di" class="draft">
-            <view class="draft-head" hover-class="tap" @click="openEditor(d)">
-              <text class="draft-name">{{ d.food_name }}</text>
-              <text v-if="d.done" class="draft-state">已记下</text>
-              <text v-else-if="d.ignored" class="draft-state">已忽略</text>
-              <!-- 已记下的也能改：改完会同步更新那条记录（见 saveEditor） -->
-              <text v-if="!d.ignored" class="draft-edit">{{ d.done ? '改 ›' : '点这里改 ›' }}</text>
-            </view>
+            <view v-for="(d, di) in m.drafts" :key="di" class="draft">
+              <view class="draft-head" hover-class="tap" @click="openEditor(d)">
+                <text class="draft-name">{{ d.food_name }}</text>
+                <text v-if="d.done" class="draft-state">已记下</text>
+                <text v-else-if="d.ignored" class="draft-state">已忽略</text>
+                <!-- 已记下的也能改：改完会同步更新那条记录（见 saveEditor） -->
+                <text v-if="!d.ignored" class="draft-edit">{{ d.done ? '改 ›' : '点这里改 ›' }}</text>
+              </view>
 
-            <view class="draft-meta" hover-class="tap" @click="openEditor(d)">
-              <!-- 日期必须露出来：AI 把"昨天"记成昨天时，用户得能看见并确认 -->
-              <text class="draft-date">{{ dateLabel(d.eaten_at) }}</text>
-              <!-- 用户没说重量就不显示重量（后端给的 portion 为 null） -->
-              <text v-if="d.portion" class="draft-portion">· {{ d.portion }}</text>
-              <text v-if="d.calories !== null" class="draft-kcal">
-                · {{ Math.round(d.calories) }} kcal
-                <!-- 来源标签：这个数字是"查到的"还是"估的"，必须让用户看得见。
-                     以前只有「估算」一种，现在分三档（见 sourceLabel）。 -->
-                <text v-if="sourceLabel(d)" class="draft-tag" :class="sourceTagClass(d)">
-                  {{ sourceLabel(d) }}
+              <view class="draft-meta" hover-class="tap" @click="openEditor(d)">
+                <!-- 日期必须露出来：AI 把"昨天"记成昨天时，用户得能看见并确认 -->
+                <text class="draft-date">{{ dateLabel(d.eaten_at) }}</text>
+                <!-- 用户没说重量就不显示重量（后端给的 portion 为 null） -->
+                <text v-if="d.portion" class="draft-portion">· {{ d.portion }}</text>
+                <text v-if="d.calories !== null" class="draft-kcal">
+                  · {{ Math.round(d.calories) }} kcal
+                  <!-- 来源标签：这个数字是"查到的"还是"估的"，必须让用户看得见。
+                       以前只有「估算」一种，现在分三档（见 sourceLabel）。 -->
+                  <text v-if="sourceLabel(d)" class="draft-tag" :class="sourceTagClass(d)">
+                    {{ sourceLabel(d) }}
+                  </text>
                 </text>
-              </text>
-              <text v-else class="draft-kcal empty">· 未填热量</text>
-            </view>
+                <text v-else class="draft-kcal empty">· 未填热量</text>
+              </view>
 
-            <view v-if="!d.done && !d.ignored && !d.mock" class="draft-actions">
-              <view class="draft-btn primary" hover-class="tap" @click="confirmDraft(d)">记下</view>
-              <view class="draft-btn ghost" hover-class="tap" @click="d.ignored = true">忽略</view>
+              <view v-if="!d.done && !d.ignored && !d.mock" class="draft-actions">
+                <view class="draft-btn primary" hover-class="tap" @click="confirmDraft(d)">记下</view>
+                <view class="draft-btn ghost" hover-class="tap" @click="d.ignored = true">忽略</view>
+              </view>
             </view>
           </view>
         </view>
@@ -94,9 +113,9 @@
           <!-- 流式步骤（SSE）：AI 每查完一个工具就当场亮出来。
                等待总时长没变，但"看得见的进度"和干等转圈完全是两种体感。 -->
           <view v-if="liveSteps.length" class="trace live">
-            <view v-for="(s, si) in liveSteps" :key="si" class="trace-row">
+            <view v-for="(s, si) in visibleSteps(liveSteps)" :key="si" class="trace-row">
               <text class="trace-dot" :class="s.ok ? 'ok' : 'fail'"></text>
-              <text class="trace-text">{{ toolLabel(s.tool) }} · {{ s.detail }}</text>
+              <text class="trace-text">{{ stepLabel(s, true) }}</text>
             </view>
           </view>
         </view>
@@ -118,19 +137,33 @@
         演示数据：把可用的 DashScope Key 填进后端 .env 即自动接通真实对话
       </view>
 
-      <view class="composer">
+      <!-- 发送区的附加操作默认收起，避免把输入框和聊天内容挤得太满。 -->
+      <view v-if="actionExpanded" class="action-panel">
         <view
-          class="composer-photo"
+          class="action-item"
           :class="{ disabled: busy || recognizing }"
           hover-class="tap"
           @click="chooseFoodPhoto"
-        >{{ recognizing ? '识别中' : '拍照' }}</view>
+        >
+          <view class="action-icon camera-icon"><view class="camera-lens"></view></view>
+          <text class="action-label">拍照识图</text>
+          <text class="action-desc">识别照片里的食物</text>
+        </view>
+      </view>
+
+      <view class="composer">
+        <view
+          class="composer-plus"
+          :class="{ active: actionExpanded, disabled: busy || recognizing }"
+          hover-class="tap"
+          @click="toggleActions"
+        >+</view>
         <input
           v-model="draftText"
+          type="text"
           class="composer-input"
           placeholder="比如：中午吃了红烧肉500g，550kcal"
           placeholder-class="field-placeholder"
-          confirm-type="send"
           :disabled="busy || recognizing"
           @confirm="send"
         />
@@ -163,6 +196,7 @@
           <text class="edit-label">餐品名称</text>
           <input
             v-model="form.food_name"
+            type="text"
             class="edit-input"
             placeholder="如 红烧肉"
             placeholder-class="field-placeholder"
@@ -174,6 +208,7 @@
           <text class="edit-label">份量</text>
           <input
             v-model="form.portion"
+            type="text"
             class="edit-input"
             placeholder="如 500g / 一碗（留空就不显示）"
             placeholder-class="field-placeholder"
@@ -245,7 +280,10 @@ import {
 } from '../../services/ai-chat';
 import { addCalorieLog, fetchCalorieLogs, recognizeFoodImage, updateCalorieLog, type CalorieLog } from '../../services/health';
 import { chooseImageFromAlbum } from '../../services/upload';
-import { getCurrentSpaceId } from '../../utils/space-context';
+import {
+  consumeSpaceSwitchNotice,
+  getCurrentSpaceId,
+} from '../../utils/space-context';
 import { hasValidToken } from '../../utils/token';
 import { showError } from '../../utils/format';
 
@@ -293,18 +331,30 @@ const SOURCE_LABELS: Record<string, string> = {
   llm_estimate: '估算',
 };
 
-/** 工具名 → 给人看的说法（后端给的是英文函数名）。 */
-const TOOL_LABELS: Record<string, string> = {
-  list_fridge_items: '查冰箱',
-  get_expiring_items: '查临期',
-  list_recipes: '查菜单',
-  list_categories: '查分类',
-  lookup_nutrition: '查热量',
+/** 工具名转换成面向用户的短状态，不把函数名、参数或后端错误详情暴露到聊天气泡。 */
+const TOOL_PROGRESS_LABELS: Record<string, { active: string; done: string; failed: string }> = {
+  list_fridge_items: { active: '正在查看冰箱', done: '已查看冰箱', failed: '冰箱查询未完成' },
+  get_expiring_items: { active: '正在查看临期食材', done: '已查看临期食材', failed: '临期食材查询未完成' },
+  list_recipes: { active: '正在查找菜单', done: '已查找菜单', failed: '菜单查询未完成' },
+  list_categories: { active: '正在整理菜单', done: '已整理菜单', failed: '菜单查询未完成' },
+  lookup_nutrition: { active: '正在核对营养信息', done: '已核对营养信息', failed: '营养信息查询未完成' },
 };
 
-function toolLabel(tool: string): string {
-  // 认不出来就原样显示——总比什么都不显示好，也方便我们发现后端加了新工具
-  return TOOL_LABELS[tool] ?? tool;
+function stepLabel(step: AgentStepInfo, active: boolean): string {
+  const label = TOOL_PROGRESS_LABELS[step.tool];
+  if (!label) return active ? '正在整理回答' : '已整理回答';
+  if (active) return label.active;
+  return step.ok ? label.done : label.failed;
+}
+
+/** 同一工具一轮内只展示一次，避免 Agent 重试时把进度区撑成长列表。 */
+function visibleSteps(steps: AgentStepInfo[]): AgentStepInfo[] {
+  const seen = new Set<string>();
+  return steps.filter((step) => {
+    if (seen.has(step.tool)) return false;
+    seen.add(step.tool);
+    return true;
+  });
 }
 
 /** 算这一条该显示什么来源标签；空字符串 = 不显示。
@@ -332,6 +382,8 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   drafts: ChatDraft[];
+  /** 家庭切换提示不是 AI 气泡，只在消息流里占一条分隔线。 */
+  switchNotice?: string;
   /** 这一轮 AI 调用了哪些工具（查冰箱/查菜单/查热量）。
    *  用户消息永远是空数组；助手消息里空数组表示"它一次都没查"（闲聊）。 */
   steps: AgentStepInfo[];
@@ -341,6 +393,8 @@ const messages = ref<ChatMessage[]>([]);
 const draftText = ref('');
 const busy = ref(false);
 const recognizing = ref(false);
+/** 底部加号是否展开附加操作。 */
+const actionExpanded = ref(false);
 /** 本轮已收到的流式步骤（SSE 实时推来的），回复出来后清空 */
 const liveSteps = ref<AgentStepInfo[]>([]);
 /** 后端是否返回了占位数据（没配 Key） */
@@ -348,6 +402,14 @@ const mock = ref(false);
 /** 历史是否已经拉过。只拉一次：之后 onShow 再触发也不重放，
  *  否则切个 tab 回来就把还没处理的确认卡片冲掉了 */
 const historyLoaded = ref(false);
+/** 当前页面已加载的家庭上下文；切换家庭后允许重新拉取对应历史。 */
+const loadedSpaceId = ref<string | undefined>(getCurrentSpaceId() || undefined);
+/** 历史加载状态：切换家庭后给用户明确反馈，不把网络等待误认为没有记录。 */
+const historyLoading = ref(false);
+/** 历史加载失败信息：失败时提供可重复操作的入口，而不是静默显示空态。 */
+const historyError = ref('');
+/** 每次加载历史递增；旧家庭请求晚返回时不能覆盖新家庭内容。 */
+let historyRequestId = 0;
 
 const logs = ref<CalorieLog[]>([]);
 
@@ -382,6 +444,11 @@ function dateLabel(iso: string): string {
 
 const canSend = computed(() => !busy.value && draftText.value.trim().length > 0);
 
+function toggleActions(): void {
+  if (busy.value || recognizing.value) return;
+  actionExpanded.value = !actionExpanded.value;
+}
+
 /** 拉当天累计（拉不到就维持空态，不打断对话） */
 async function loadToday(): Promise<void> {
   if (!hasValidToken()) return;
@@ -394,26 +461,86 @@ async function loadToday(): Promise<void> {
 
 onShow(() => {
   void loadToday();
-  void loadHistory();
+  const currentSpaceId = getCurrentSpaceId() || undefined;
+  const changed = loadedSpaceId.value !== currentSpaceId;
+
+  if (changed) {
+    loadedSpaceId.value = currentSpaceId;
+    historyLoaded.value = false;
+    historyError.value = '';
+    messages.value = [];
+  }
+
+  void loadHistory(currentSpaceId, changed);
 });
 
 /** 拉后端的对话历史回放（每次会话只拉一次，见 historyLoaded 的说明）。
  *  失败静默：拉不到历史只影响"看不到上次的对话"，不该弹错误打断使用。 */
-async function loadHistory(): Promise<void> {
-  if (historyLoaded.value || !hasValidToken()) return;
-  historyLoaded.value = true;
+async function loadHistory(
+  spaceId = getCurrentSpaceId() || undefined,
+  force = false,
+): Promise<void> {
+  if ((!force && (historyLoaded.value || historyLoading.value)) || !hasValidToken()) return;
+
+  const requestId = ++historyRequestId;
+  historyLoading.value = true;
+  historyError.value = '';
+
+  // 只有仍然对应当前页面家庭的请求，才允许写入界面状态。
+  const isActiveRequest = (): boolean =>
+    requestId === historyRequestId
+    && loadedSpaceId.value === spaceId
+    && (getCurrentSpaceId() || undefined) === spaceId;
+
   try {
-    const rows = await fetchAiMessages();
-    messages.value = rows.map((row) => ({
+    const rows = await fetchAiMessages(50, spaceId);
+    if (!isActiveRequest()) return;
+
+    const nextMessages: ChatMessage[] = rows.map((row) => ({
       role: row.role,
       content: row.content,
       drafts: [], // 历史不回放确认卡片，理由见文件头的说明
       steps: [], // 历史也不回放"查了什么"——它是当轮的过程，翻上去看反而干扰
     }));
-    if (rows.length) await scrollToBottom();
-  } catch {
-    // 保持空态即可，空态里有可点的示例，不碍事
+
+    const notice = consumeSpaceSwitchNotice();
+    if (notice && notice.toId === (spaceId || '')) {
+      nextMessages.unshift({
+        role: 'assistant',
+        content: '',
+        drafts: [],
+        steps: [],
+        switchNotice: `已从「${notice.fromName}」切换到「${notice.toName}」`,
+      });
+      if (!notice.toastShown) {
+        uni.showToast({
+          title: `已从${notice.fromName}切换到${notice.toName}`,
+          icon: 'none',
+        });
+      }
+    }
+
+    // 先完成整批数据，再一次性替换消息列表，避免请求失败时留下半成品空态。
+    messages.value = nextMessages;
+    historyLoaded.value = true;
+    if (rows.length || notice) await scrollToBottom();
+  } catch (error) {
+    if (!isActiveRequest()) return;
+    // 请求失败后允许重试；不能把“加载失败”误记成“已经加载完成”。
+    historyLoaded.value = false;
+    historyError.value = error instanceof Error ? error.message : '请检查后端连接后重试';
+  } finally {
+    if (isActiveRequest()) historyLoading.value = false;
   }
+}
+
+/** 当前家庭历史加载失败时重试；旧请求仍在路上也会被 requestId 自动作废。 */
+function retryHistory(): void {
+  const spaceId = getCurrentSpaceId() || undefined;
+  loadedSpaceId.value = spaceId;
+  historyLoaded.value = false;
+  messages.value = [];
+  void loadHistory(spaceId, true);
 }
 
 /** 「新对话」：清空后端历史，上下文从头开始。
@@ -427,7 +554,7 @@ function startNewChat(): void {
     success: async (result) => {
       if (!result.confirm) return;
       try {
-        await clearAiMessages();
+        await clearAiMessages(getCurrentSpaceId() || undefined);
         messages.value = [];
         mock.value = false;
       } catch (error) {
@@ -477,11 +604,17 @@ async function send(): Promise<void> {
       void scrollToBottom();
     });
     mock.value = resp.mock;
+    // 正常情况下以后端最终整包里的 steps 为准；兼容旧后端或平台回落时，
+    // 如果最终响应没有带 steps，就保留本轮已经实时收到的步骤，避免它们
+    // 只出现在“思考中…”气泡里，回复完成后又消失。
+    const finalSteps = resp.steps && resp.steps.length
+      ? resp.steps
+      : liveSteps.value.slice();
     messages.value.push({
       role: 'assistant',
       content: resp.reply,
       drafts: resp.actions.map((a) => ({ ...a, done: false, ignored: false, logId: null })),
-      steps: resp.steps ?? [],
+      steps: finalSteps,
     });
   } catch (error) {
     showError(error);
@@ -502,6 +635,7 @@ async function send(): Promise<void> {
 /** 拍照或从相册选图识别；图片通过 multipart 直接发送到后端内存处理，不留服务器文件。 */
 async function chooseFoodPhoto(): Promise<void> {
   if (busy.value || recognizing.value) return;
+  actionExpanded.value = false;
   try {
     await ensureLogin();
     const filePath = await chooseImageFromAlbum();
@@ -731,6 +865,49 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
 
 .chat { padding: var(--s-3) 0 0; }
 
+/* 历史加载状态：明确区分“正在读取”“读取失败”和“确实没有记录”。 */
+.history-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-6) var(--s-3);
+  text-align: center;
+}
+.history-state-title { color: var(--c-text-2); font-size: 28rpx; }
+.history-state-copy { color: var(--c-text-3); font-size: 23rpx; line-height: 1.6; }
+.history-state.error .history-state-title { color: var(--c-danger); }
+.history-retry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 160rpx;
+  height: var(--touch-min);
+  padding: 0 var(--s-4);
+  border-radius: var(--r-pill);
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 25rpx;
+}
+
+/* 家庭切换后保留一条轻量分隔线，提醒用户聊天上下文已经改变。 */
+.space-switch-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: var(--s-4) 0;
+}
+.space-switch-line {
+  flex: 1;
+  height: 2rpx;
+  background: var(--c-border);
+}
+.space-switch-text {
+  flex: 0 0 auto;
+  color: var(--c-text-3);
+  font-size: 22rpx;
+}
+
 /* ---------- 空态 ---------- */
 .intro { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-5) var(--s-2); }
 .intro-title { color: var(--c-text); font-size: 30rpx; font-weight: 500; }
@@ -823,7 +1000,12 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
   flex-direction: column;
   gap: 6rpx;
 }
-.trace-row { display: flex; align-items: center; gap: var(--s-2); }
+.trace-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
 /* 用一个小圆点表示成功/失败（不用 emoji，也不用图标字体） */
 .trace-dot {
   flex: 0 0 auto;
@@ -833,7 +1015,15 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
   background: var(--c-primary-weak);
 }
 .trace-dot.fail { background: var(--c-warn); }
-.trace-text { color: var(--c-text-3); font-size: 22rpx; line-height: 1.5; }
+.trace-text {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--c-text-3);
+  font-size: 22rpx;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* "思考中…"气泡里的实时步骤：不用再画分隔线（气泡本身就小），
    紧凑一点，别让它长得像一条完整回复 */
 .trace.live { margin-top: var(--s-1); padding-top: 0; border-top: none; }
@@ -853,7 +1043,7 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
 .draft-btn.primary { background: var(--c-primary); color: #fff; font-weight: 500; }
 .draft-btn.ghost { border: 2rpx solid var(--c-border-strong); color: var(--c-text-2); }
 
-/* ---------- 底部浮层（提示 + 当日累计 + 输入框） ---------- */
+/* ---------- 底部浮层（提示 + 附加操作 + 输入框） ---------- */
 /* ⚠️ bottom 必须**分平台**写（2026-09-19 踩过，与 menu 页 .cart-bar 同一个坑）：
    H5 的 tabBar 是 DOM、盖在页面上（实测 96rpx），bottom 得让过它 → 104rpx；
    App / 小程序的 tabBar 是原生控件、页面区域不含它，bottom 就是真实间距 → 40rpx。
@@ -885,8 +1075,55 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
   font-size: 22rpx;
   line-height: 1.5;
 }
-/* 「今天已记」那张卡片 2026-09-19 已上移到顶部 .page-bar：
-   底部浮层只留输入框，少一层盒子、少 39px 高度 */
+/* 附加操作面板：只在点击加号后出现，未来可继续增加操作而不改输入框结构。 */
+.action-panel {
+  display: flex;
+  padding: var(--s-2) 0 0;
+}
+.action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 168rpx;
+  min-height: 136rpx;
+  padding: var(--s-2) var(--s-1);
+  border: 2rpx solid var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-sizing: border-box;
+}
+.action-item.disabled { opacity: 0.55; }
+.action-icon {
+  position: relative;
+  width: 56rpx;
+  height: 42rpx;
+  margin-bottom: 8rpx;
+  border: 4rpx solid var(--c-primary);
+  border-radius: 10rpx;
+  box-sizing: border-box;
+}
+.camera-icon::before {
+  content: '';
+  position: absolute;
+  left: 10rpx;
+  top: -12rpx;
+  width: 22rpx;
+  height: 10rpx;
+  border-radius: 5rpx 5rpx 0 0;
+  background: var(--c-primary);
+}
+.camera-lens {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16rpx;
+  height: 16rpx;
+  border: 3rpx solid var(--c-primary);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.action-label { color: var(--c-text); font-size: 24rpx; font-weight: 500; }
+.action-desc { margin-top: 4rpx; color: var(--c-text-3); font-size: 20rpx; }
 
 /* ---------- 输入区 ---------- */
 .composer {
@@ -908,20 +1145,23 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
   font-size: 26rpx;
   box-sizing: border-box;
 }
-.composer-photo {
+.composer-plus {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: var(--touch-min);
   height: var(--touch-min);
-  padding: 0 var(--s-3);
   border: 2rpx solid var(--c-border-strong);
-  border-radius: var(--r-pill);
+  border-radius: 50%;
   color: var(--c-text-2);
-  font-size: 24rpx;
+  font-size: 40rpx;
+  font-weight: 300;
+  line-height: 1;
   box-sizing: border-box;
 }
-.composer-photo.disabled { opacity: 0.55; }
+.composer-plus.active { background: var(--c-primary-bg); color: var(--c-primary); transform: rotate(45deg); }
+.composer-plus.disabled { opacity: 0.55; }
 .composer-send {
   flex: 0 0 auto;
   display: flex;
