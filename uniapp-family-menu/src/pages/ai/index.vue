@@ -1,5 +1,5 @@
 <template>
-  <view class="ai-page">
+  <view class="ai-page" :class="{ 'actions-open': actionExpanded }">
     <!-- 顶部只留一条细工具条（2026-09-19 重排）。
          ⚠️ 这里**不再重复写「AI 助手」**——原生导航栏已经有这个标题了，
          页内再写一遍等于同一句话说两遍，还把首屏顶掉 53px（用户反馈"太臃肿"）。
@@ -109,7 +109,7 @@
 
       <view v-if="busy" class="msg assistant">
         <view class="bubble assistant typing">
-          <text>思考中…</text>
+          <text>{{ thinkingText }}</text>
           <!-- 流式步骤（SSE）：AI 每查完一个工具就当场亮出来。
                等待总时长没变，但"看得见的进度"和干等转圈完全是两种体感。 -->
           <view v-if="liveSteps.length" class="trace live">
@@ -124,6 +124,9 @@
       <view v-if="recognizing" class="msg assistant">
         <view class="bubble assistant typing">正在识别照片，仅用于本次识别…</view>
       </view>
+
+      <!-- 消息结束占位：把可滚动终点推到固定输入栏的上沿，避免最后一条消息被盖住。 -->
+      <view class="chat-bottom-spacer" aria-hidden="true"></view>
     </view>
 
     <!-- 底部浮层：整体固定在 tabBar 之上。
@@ -268,12 +271,13 @@
  *   回放卡片会诱导用户对着已记过的菜再点一次「记下」→ 重复记录。
  */
 
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, onUnmounted, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { ensureLogin } from '../../services/auth-api';
 import {
   clearAiMessages,
   fetchAiMessages,
+  sendAiMessage,
   sendAiMessageStream,
   type ActionDraft,
   type AgentStepInfo,
@@ -393,6 +397,9 @@ const messages = ref<ChatMessage[]>([]);
 const draftText = ref('');
 const busy = ref(false);
 const recognizing = ref(false);
+/** App 端不使用 SSE 时，用动态省略号表示请求仍在处理中。 */
+const thinkingText = ref('思考中');
+let thinkingTimer: ReturnType<typeof setInterval> | null = null;
 /** 底部加号是否展开附加操作。 */
 const actionExpanded = ref(false);
 /** 本轮已收到的流式步骤（SSE 实时推来的），回复出来后清空 */
@@ -444,9 +451,34 @@ function dateLabel(iso: string): string {
 
 const canSend = computed(() => !busy.value && draftText.value.trim().length > 0);
 
+/** 启动 App 端的轻量等待提示，不伪造具体的工具进度。 */
+function startThinkingAnimation(): void {
+  stopThinkingAnimation();
+  let dots = 0;
+  thinkingText.value = '思考中';
+  thinkingTimer = setInterval(() => {
+    dots = (dots + 1) % 4;
+    thinkingText.value = `思考中${'.'.repeat(dots)}`;
+  }, 420);
+}
+
+function stopThinkingAnimation(): void {
+  if (thinkingTimer !== null) {
+    clearInterval(thinkingTimer);
+    thinkingTimer = null;
+  }
+  thinkingText.value = '思考中';
+}
+
+onUnmounted(() => {
+  stopThinkingAnimation();
+});
+
 function toggleActions(): void {
   if (busy.value || recognizing.value) return;
   actionExpanded.value = !actionExpanded.value;
+  // 操作面板改变了底部占位高度，重新滚到底部后最后一条消息才不会被面板盖住。
+  void scrollToBottom();
 }
 
 /** 拉当天累计（拉不到就维持空态，不打断对话） */
@@ -575,6 +607,8 @@ function sendExample(text: string): void {
  *  消息变长后不滚的话，新一轮的回复会藏在输入框后面。 */
 async function scrollToBottom(): Promise<void> {
   await nextTick();
+  // 等固定输入栏和底部占位完成一次布局，再滚动到真实的消息终点。
+  await new Promise<void>((resolve) => setTimeout(resolve, 40));
   uni.pageScrollTo({ scrollTop: 999999, duration: 200 });
 }
 
@@ -594,15 +628,23 @@ async function send(): Promise<void> {
   draftText.value = '';
   busy.value = true;
   liveSteps.value = [];
+  startThinkingAnimation();
   await scrollToBottom();
 
   try {
-    // 流式：步骤实时亮出来；链路不可用时内部自动回落一次性接口
-    // （回落条件见 sendAiMessageStream——业务错误不回落，避免重复扣额度）
-    const resp = await sendAiMessageStream(text, getCurrentSpaceId() || undefined, (s) => {
-      liveSteps.value.push(s);
-      void scrollToBottom();
-    });
+    let resp;
+    // App 原生运行器目前不会稳定触发 onChunkReceived，暂时使用普通请求，
+    // 避免用户看不到中间步骤，也避免平台差异导致流式请求重复回落。
+    // #ifdef APP-PLUS
+    resp = await sendAiMessage(text, getCurrentSpaceId() || undefined);
+    // #endif
+    // H5 保留 SSE 流式输出；链路不可用时由服务层自动回落一次性接口。
+    // #ifndef APP-PLUS
+    resp = await sendAiMessageStream(text, getCurrentSpaceId() || undefined, (s) => {
+        liveSteps.value.push(s);
+        void scrollToBottom();
+      });
+    // #endif
     mock.value = resp.mock;
     // 正常情况下以后端最终整包里的 steps 为准；兼容旧后端或平台回落时，
     // 如果最终响应没有带 steps，就保留本轮已经实时收到的步骤，避免它们
@@ -628,6 +670,7 @@ async function send(): Promise<void> {
   } finally {
     busy.value = false;
     liveSteps.value = [];
+    stopThinkingAnimation();
   }
   await scrollToBottom();
 }
@@ -825,14 +868,14 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
    原因：底部输入框用 flex 钉在 100vh 的末端时，会被 tabBar 压住点不到
    （tabBar 是页面容器之外的一层）。本项目的做法是——底部控件用 position:fixed
    并显式让过 tabBar，见 pages/menu/index.vue 的 .cart-bar。
-   所以这里给页面留出底部浮层的高度，别让最后一条消息被盖住。 */
+   所以这里给页面留出底部浮层的高度，别让最后一条消息被盖住。
+   收起操作面板时只预留输入栏和 tabBar 的真实高度；否则固定的 320rpx
+   会在页面底部制造一段用户可以滑进去的空白。展开加号后再增加拍照识图面板的高度。 */
 .ai-page {
   min-height: 100vh;
   box-sizing: border-box;
-  /* 底部留白要盖过"悬浮底栏 + 它与 tabBar 的间距"：
-     H5 里底栏顶边离底 104+190≈294rpx，App 里 40+190≈230rpx，取 320rpx 两头都够。
-     少了这一截，滚到最底时最后一条消息会被底栏压住。 */
-  padding: var(--s-4) var(--s-3) calc(320rpx + env(safe-area-inset-bottom));
+  /* 底部空间由 .chat-bottom-spacer 明确管理，避免页面最小高度吞掉滚动余量。 */
+  padding: var(--s-4) var(--s-3) 0;
   background: var(--c-bg);
 }
 
@@ -864,6 +907,27 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
 }
 
 .chat { padding: var(--s-3) 0 0; }
+
+/*
+ * 固定输入栏不会参与页面自然布局，因此必须在消息流末尾放一个等高占位。
+ * 占位本身位于输入栏下方，不会制造可见空白；它只负责让最后一条消息能滚到输入栏上沿。
+ */
+.chat-bottom-spacer {
+  height: calc(144rpx + env(safe-area-inset-bottom));
+}
+.ai-page.actions-open .chat-bottom-spacer {
+  height: calc(300rpx + env(safe-area-inset-bottom));
+}
+
+/* H5 的 tabBar 是 DOM 元素，需要额外让过约 96rpx。 */
+/* #ifdef H5 */
+.chat-bottom-spacer {
+  height: calc(240rpx + env(safe-area-inset-bottom));
+}
+.ai-page.actions-open .chat-bottom-spacer {
+  height: calc(396rpx + env(safe-area-inset-bottom));
+}
+/* #endif */
 
 /* 历史加载状态：明确区分“正在读取”“读取失败”和“确实没有记录”。 */
 .history-state {
@@ -1044,16 +1108,16 @@ async function confirmDraft(d: ChatDraft): Promise<void> {
 .draft-btn.ghost { border: 2rpx solid var(--c-border-strong); color: var(--c-text-2); }
 
 /* ---------- 底部浮层（提示 + 附加操作 + 输入框） ---------- */
-/* ⚠️ bottom 必须**分平台**写（2026-09-19 踩过，与 menu 页 .cart-bar 同一个坑）：
-   H5 的 tabBar 是 DOM、盖在页面上（实测 96rpx），bottom 得让过它 → 104rpx；
-   App / 小程序的 tabBar 是原生控件、页面区域不含它，bottom 就是真实间距 → 40rpx。
-   只写一句 104rpx 的话，手机（App）上会离 tabBar 还有 104rpx，看着"没有变化"。 */
-/* #ifdef H5 */
-.bottom-bar { bottom: calc(104rpx + env(safe-area-inset-bottom)); }
-/* #endif */
-/* #ifndef H5 */
-.bottom-bar { bottom: calc(40rpx + env(safe-area-inset-bottom)); }
-/* #endif */
+/* ⚠️ bottom 必须**分平台**写：
+   H5 的 tabBar 是 DOM、盖在页面上（实测约 96rpx），输入栏要让过它；
+   App / 小程序的 tabBar 是原生控件、页面区域不含它，bottom:0 就会紧贴 tabBar。
+   之前 App 使用 40rpx 视觉间距，正是截图中输入栏与底部 UI 之间空隙的来源。 */
+ /* #ifdef H5 */
+.bottom-bar { bottom: calc(96rpx + env(safe-area-inset-bottom)); }
+ /* #endif */
+ /* #ifndef H5 */
+.bottom-bar { bottom: 0; }
+ /* #endif */
 .bottom-bar {
   position: fixed;
   left: 0;
