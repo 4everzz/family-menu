@@ -28,12 +28,12 @@
         <text class="field-label">用户名</text>
         <input
           v-model="username"
+          type="text"
           class="field"
           :disabled="submitting"
           placeholder="字母、数字或下划线"
           placeholder-class="field-placeholder"
           :maxlength="USERNAME_MAX_LENGTH"
-          confirm-type="next"
         />
         <text v-if="isRegister" class="field-tip">
           {{ USERNAME_MIN_LENGTH }}-{{ USERNAME_MAX_LENGTH }} 位，只能用字母、数字、下划线
@@ -50,7 +50,6 @@
           placeholder="请输入密码"
           placeholder-class="field-placeholder"
           :maxlength="PASSWORD_MAX_LENGTH"
-          :confirm-type="isRegister ? 'next' : 'done'"
           @confirm="submit"
         />
         <text v-if="isRegister" class="field-tip">
@@ -73,7 +72,6 @@
           placeholder="再输入一次密码"
           placeholder-class="field-placeholder"
           :maxlength="PASSWORD_MAX_LENGTH"
-          confirm-type="done"
           @confirm="submit"
         />
         <text class="field-tip">两次要一致，避免手滑打错后自己都进不去。</text>

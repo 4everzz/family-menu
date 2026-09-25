@@ -20,6 +20,14 @@
 
     <view v-if="loading" class="tip">正在读取菜谱…</view>
 
+    <view v-else-if="!authenticated" class="empty-card">
+      <text class="empty-title">登录后查看家庭菜单</text>
+      <text class="empty-copy">
+        登录或注册后即可创建/加入家庭组，和家人一起管理菜谱、冰箱与点单。
+      </text>
+      <view class="empty-btn" hover-class="tap" @click="goLogin">登录 / 注册</view>
+    </view>
+
     <view v-else-if="errorMessage" class="error-card">
       <text class="error-text">{{ errorMessage }}</text>
       <text class="error-hint">
@@ -40,10 +48,10 @@
       <view class="search-row">
         <input
           v-model="keyword"
+          type="text"
           class="search-input"
           placeholder="搜索菜名或简介"
           placeholder-class="search-placeholder"
-          confirm-type="search"
         />
         <text v-if="keyword" class="clear-search" hover-class="tap" @click="keyword = ''">清除</text>
       </view>
@@ -232,7 +240,7 @@
 
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
-import { ensureLogin } from '../../services/auth-api';
+import { LOGIN_PATH } from '../../services/auth-api';
 import type { Category } from '../../services/category';
 import { resolveFileUrl } from '../../services/http';
 import { fetchRecipes } from '../../services/recipe';
@@ -241,9 +249,11 @@ import { addDish, decreaseDish, getCart } from '../../utils/dish-cart';
 import type { CartItem } from '../../utils/dish-cart';
 import { showError } from '../../utils/format';
 import { getCurrentSpaceId, getCurrentSpaceName, resolveCurrentSpace } from '../../utils/space-context';
+import { hasValidToken } from '../../utils/token';
 
 const spaceId = ref('');
 const spaceName = ref('');
+const authenticated = ref(false);
 const categories = ref<Category[]>([]);
 const recipes = ref<Recipe[]>([]);
 /** 当前选中的分类 ID。空字符串代表「全部」，不是后端给的真实分类 */
@@ -331,9 +341,22 @@ const filtered = computed(() =>
 async function load(): Promise<void> {
   loading.value = !loadedOnce.value;
   errorMessage.value = '';
+  authenticated.value = hasValidToken();
+
+  // 未登录时仍让菜单首页正常呈现，不在 Tab 页 onShow 阶段自动跳转。
+  // 需要账号的功能由用户主动点击后再进入登录页，避免启动阶段跳转造成空白。
+  if (!authenticated.value) {
+    spaceId.value = '';
+    spaceName.value = '';
+    categories.value = [];
+    recipes.value = [];
+    loadedOnce.value = true;
+    loading.value = false;
+    refreshCart();
+    return;
+  }
+
   try {
-    // 先确保登录态：首次进入或令牌过期时会自动静默登录
-    await ensureLogin();
     // 校正「当前家庭」：缓存里的家庭组可能已经不存在了（被解散、自己被移出），
     // 这里会自动回退到另一个可用的家庭组，或者清空
     await resolveCurrentSpace();
@@ -379,6 +402,11 @@ async function load(): Promise<void> {
  */
 function goSettings(): void {
   uni.navigateTo({ url: '/pages/settings/index' });
+}
+
+/** 未登录首页上的明确入口；登录成功后登录页会返回本菜单 Tab。 */
+function goLogin(): void {
+  uni.navigateTo({ url: LOGIN_PATH });
 }
 
 /** 打开菜谱详情（只读）。要改的话去「我的 → 菜单管理 → 菜品管理」 */

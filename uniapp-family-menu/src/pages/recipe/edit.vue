@@ -13,6 +13,7 @@
           <text class="field-label">菜名</text>
           <input
             v-model="form.name"
+            type="text"
             class="field-input"
             :class="{ focused: focusedField === 'name' }"
             placeholder="例如：番茄炒蛋"

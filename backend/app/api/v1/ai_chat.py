@@ -73,6 +73,7 @@ def _sse(event: str, data: dict) -> str:
     SSE 的帧边界是**空行**（\n\n）；json.dumps 不会产出真实换行
     （字符串里的换行会被转义成 \\n），所以每帧必然完整落在两行以内，
     前端按空行切帧永远不会切坏。
+
     """
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
 
@@ -123,18 +124,27 @@ async def list_ai_messages(
     current_user: CurrentUser,
     session: DbSession,
     limit: int = Query(default=50, ge=1, le=100, description="最多取多少条"),
+    space_id: int | None = Query(default=None, description="家庭组 ID；为空表示个人聊天"),
 ) -> dict:
-    """取当前用户的最近对话（时间正序），对话页进页面时回放。
+    """取当前用户当前家庭的最近对话（时间正序），对话页进页面时回放。
 
     只回文本气泡，不带动作卡片——理由见 AiChatMessageResponse 的注释。
     """
-    messages = await _build_service(session).list_messages(current_user.id, limit)
+    service = _build_service(session)
+    resolved_space_id = await service._resolve_space_id(current_user, space_id)
+    messages = await service.list_messages(current_user.id, limit, resolved_space_id)
     return success([AiChatMessageResponse.model_validate(m).model_dump() for m in messages])
 
 
 @router.delete("/ai/chat/messages", summary="清空对话（开始新对话）")
-async def clear_ai_messages(current_user: CurrentUser, session: DbSession) -> dict:
-    """清空当前用户的全部对话历史，上下文从此从头开始。"""
-    cleared = await _build_service(session).clear_messages(current_user.id)
+async def clear_ai_messages(
+    current_user: CurrentUser,
+    session: DbSession,
+    space_id: int | None = Query(default=None, description="家庭组 ID；为空表示个人聊天"),
+) -> dict:
+    """清空当前用户当前家庭的对话历史，上下文从此从头开始。"""
+    service = _build_service(session)
+    resolved_space_id = await service._resolve_space_id(current_user, space_id)
+    cleared = await service.clear_messages(current_user.id, resolved_space_id)
     await session.commit()
     return success({"cleared": cleared})

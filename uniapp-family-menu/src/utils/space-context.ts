@@ -16,6 +16,8 @@ import type { Space } from '../services/space';
 
 /** 本地缓存键：当前选中的家庭组 */
 const CURRENT_SPACE_KEY = 'uni_family_current_space';
+/** 最近一次主动切换家庭的提示，供 AI 页面消费。 */
+const SPACE_SWITCH_NOTICE_KEY = 'uni_family_space_switch_notice';
 
 /** 家庭组信息 */
 export interface SpaceInfo {
@@ -69,6 +71,54 @@ export function getCurrentSpaceId(): string {
 /** 当前家庭组名称，未选择时返回空字符串 */
 export function getCurrentSpaceName(): string {
   return getCurrentSpace()?.name || '';
+}
+
+export interface SpaceSwitchNotice {
+  fromName: string;
+  toName: string;
+  fromId?: string;
+  toId: string;
+  /** 家庭页已经弹过提示时，AI 页只显示分隔线，避免重复弹窗。 */
+  toastShown?: boolean;
+  createdAt: number;
+}
+
+/** 记录一次家庭切换，避免不同页面各自维护一套通知状态。 */
+export function recordSpaceSwitch(
+  fromName: string,
+  to: SpaceInfo,
+  fromId?: string,
+  toastShown = false,
+): void {
+  try {
+    uni.setStorageSync(
+      SPACE_SWITCH_NOTICE_KEY,
+      JSON.stringify({
+        fromName: fromName || '未选择家庭',
+        toName: to.name,
+        fromId,
+        toId: to.id,
+        toastShown,
+        createdAt: Date.now(),
+      } satisfies SpaceSwitchNotice),
+    );
+  } catch {
+    // 通知只是体验增强，缓存失败不影响家庭切换本身。
+  }
+}
+
+/** 读取并消费最近一次切换提示，保证同一条提示只显示一次。 */
+export function consumeSpaceSwitchNotice(): SpaceSwitchNotice | null {
+  try {
+    const raw = uni.getStorageSync(SPACE_SWITCH_NOTICE_KEY);
+    if (!raw) return null;
+    uni.removeStorageSync(SPACE_SWITCH_NOTICE_KEY);
+    return typeof raw === 'string'
+      ? (JSON.parse(raw) as SpaceSwitchNotice)
+      : (raw as SpaceSwitchNotice);
+  } catch {
+    return null;
+  }
 }
 
 /** 读取当前用户已加入的家庭组列表（走后端接口） */

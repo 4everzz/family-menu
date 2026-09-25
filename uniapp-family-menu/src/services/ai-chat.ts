@@ -229,6 +229,18 @@ function streamAiChat(
     const decoder = new Utf8StreamDecoder();
     let buffer = '';
     let settled = false;
+    let chunkCount = 0;
+    let eventCount = 0;
+    const startedAt = Date.now();
+
+    // 临时诊断：只记录分块和事件的时间、数量、长度，不记录聊天内容或令牌。
+    const debugStream = (message: string, details?: Record<string, unknown>): void => {
+      console.info('[AI流式诊断]', message, {
+        elapsedMs: Date.now() - startedAt,
+        ...details,
+      });
+    };
+    debugStream('请求开始');
 
     const fail = (err: ApiError): void => {
       if (settled) return;
@@ -237,11 +249,20 @@ function streamAiChat(
     };
 
     const handleFrame = (event: string, data: string): void => {
+      eventCount += 1;
+      debugStream('收到事件', {
+        event,
+        eventIndex: eventCount,
+        dataLength: data.length,
+      });
       if (event === 'step') {
         try {
-          onStep(JSON.parse(data) as AgentStepInfo);
+          const step = JSON.parse(data) as AgentStepInfo;
+          debugStream('收到步骤', { tool: step.tool, ok: step.ok });
+          onStep(step);
         } catch {
           // 单帧坏了就丢掉这一帧，不能让一次解析失败炸掉整轮对话
+          debugStream('步骤解析失败');
         }
         return;
       }
@@ -259,9 +280,11 @@ function streamAiChat(
       if (event === 'message') {
         try {
           const resp = JSON.parse(data) as AiChatResponse;
+          debugStream('收到最终消息', { replyLength: resp.reply.length });
           settled = true;
           resolve(resp);
         } catch {
+          debugStream('最终消息解析失败');
           fail(new ApiError('服务端返回格式异常', -1));
         }
       }
@@ -277,6 +300,18 @@ function streamAiChat(
       //    老平台忽略这个标志 → 走下面 success 里的"整包兜底"，行为照样正确
       enableChunked: true,
       success: (res: { statusCode: number; data: unknown }) => {
+        const responseLength = typeof res.data === 'string'
+          ? res.data.length
+          : res.data instanceof ArrayBuffer
+            ? res.data.byteLength
+            : 0;
+        debugStream('请求完成', {
+          statusCode: res.statusCode,
+          chunkCount,
+          eventCount,
+          responseType: typeof res.data,
+          responseLength,
+        });
         // 兜底：onChunkReceived 一次都没触发（平台不支持 chunked）
         // → 把整个响应体当完整 SSE 解析一遍
         if (!settled && typeof res.data === 'string') {
@@ -285,7 +320,10 @@ function streamAiChat(
         }
         if (!settled) fail(new ApiError('服务端返回格式异常', -1, res.statusCode));
       },
-      fail: () => fail(new ApiError('无法连接到服务器，请确认后端已启动', -2, 0)),
+      fail: () => {
+        debugStream('请求失败', { chunkCount, eventCount });
+        fail(new ApiError('无法连接到服务器，请确认后端已启动', -2, 0));
+      },
     };
 
     const task = uni.request(options as unknown as Parameters<typeof uni.request>[0]);
@@ -294,9 +332,21 @@ function streamAiChat(
     };
     chunkTask.onChunkReceived?.((res) => {
       if (settled) return;
+      chunkCount += 1;
+      const rawLength = typeof res.data === 'string'
+        ? res.data.length
+        : res.data instanceof ArrayBuffer
+          ? res.data.byteLength
+          : 0;
       buffer += decoder.decode(res.data ?? '');
       const parsed = extractSseFrames(buffer);
       buffer = parsed.rest;
+      debugStream('收到数据分块', {
+        chunkCount,
+        rawLength,
+        frameCount: parsed.frames.length,
+        bufferLength: buffer.length,
+      });
       for (const f of parsed.frames) handleFrame(f.event, f.data);
     });
   });
@@ -326,9 +376,17 @@ export async function sendAiMessageStream(
 }
 
 /** 拉最近的对话历史（时间正序），进页面时回放 */
-export async function fetchAiMessages(limit = 50): Promise<AiChatHistoryMessage[]> {
+export async function fetchAiMessages(
+  limit = 50,
+  spaceId?: string,
+): Promise<AiChatHistoryMessage[]> {
+  // 不使用 URLSearchParams：App 端部分 JS 运行环境没有完整实现这个 Web API，
+  // 直接实例化会在真机启动时抛错，页面就会误显示“聊天记录加载失败”。
+  // encodeURIComponent 是各端都支持的基础 API，足够安全地拼接这里的两个参数。
+  const params = [`limit=${encodeURIComponent(String(limit))}`];
+  if (spaceId) params.push(`space_id=${encodeURIComponent(spaceId)}`);
   const rows = await request<AiChatMessageDto[]>({
-    url: `/ai/chat/messages?limit=${limit}`,
+    url: `/ai/chat/messages?${params.join('&')}`,
   });
   return rows.map((row) => ({
     id: row.id,
@@ -340,7 +398,11 @@ export async function fetchAiMessages(limit = 50): Promise<AiChatHistoryMessage[
 }
 
 /** 清空对话历史（「新对话」）。返回清掉的条数 */
-export async function clearAiMessages(): Promise<number> {
-  const data = await request<{ cleared: number }>({ url: '/ai/chat/messages', method: 'DELETE' });
+export async function clearAiMessages(spaceId?: string): Promise<number> {
+  const query = spaceId ? `?space_id=${encodeURIComponent(spaceId)}` : '';
+  const data = await request<{ cleared: number }>({
+    url: `/ai/chat/messages${query}`,
+    method: 'DELETE',
+  });
   return data.cleared;
 }

@@ -13,6 +13,7 @@
         <view class="field-row">
           <input
             v-model="usernameInput"
+            type="text"
             class="field-input"
             :maxlength="USERNAME_MAX_LENGTH"
             placeholder="字母、数字或下划线"

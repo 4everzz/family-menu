@@ -28,10 +28,10 @@
           <input
             class="nickname-input"
             v-model="nicknameInput"
+            type="text"
             :maxlength="20"
             placeholder="给家人们留个名字"
             placeholder-class="nickname-placeholder"
-            confirm-type="done"
           />
         </view>
       </view>

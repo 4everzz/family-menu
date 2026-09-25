@@ -21,10 +21,10 @@
       <view class="search">
         <input
           v-model="keyword"
+          type="text"
           class="search-input"
           placeholder="搜索食材"
           placeholder-class="search-ph"
-          confirm-type="search"
         />
       </view>
 

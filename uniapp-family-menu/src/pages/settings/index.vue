@@ -1,19 +1,18 @@
 <template>
   <view class="settings-page">
-    <!-- 账号：先让用户看清"现在是谁在登录"，再决定要不要换 -->
+    <!-- 账号：资料和登录凭证集中管理，避免在「我的」页重复放入口 -->
     <view class="group">
       <text class="group-title">账号</text>
       <view class="entry-group">
-        <view class="identity">
-          <image class="avatar-img" :src="avatarUrl || DEFAULT_AVATAR_URL" mode="aspectFill" />
-          <view class="identity-main">
-            <text class="identity-name">{{ nickname || '未登录' }}</text>
-            <text class="identity-desc">{{ identityDesc }}</text>
+        <view class="entry-item" hover-class="tap" @click="goProfileEdit">
+          <view class="entry-main">
+            <text class="entry-name">修改资料</text>
+            <text class="entry-desc">修改头像和昵称</text>
           </view>
+          <text class="entry-arrow">›</text>
         </view>
-        <!-- 账号密码：老账号（微信登录进来的）在这里补设，
-             已有账号的在这里改用户名 / 改密码 -->
-        <view class="entry-item account-entry" hover-class="tap" @click="goCredentials">
+        <!-- 账号密码只保留在设置页：老账号可补设，已有账号可修改 -->
+        <view class="entry-item" hover-class="tap" @click="goCredentials">
           <view class="entry-main">
             <text class="entry-name">{{ credentialTitle }}</text>
             <text class="entry-desc">{{ credentialDesc }}</text>
@@ -66,25 +65,16 @@
 
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
-import { DEFAULT_AVATAR_URL, fetchCurrentUser, resolveAvatarUrl } from '../../services/user';
+import { fetchCurrentUser } from '../../services/user';
 import { LOGIN_PATH } from '../../services/auth-api';
 import { clearToken, hasValidToken } from '../../utils/token';
 import { DANGER } from '../../utils/theme';
 import { getCurrentSpaceName, resolveCurrentSpace, setCurrentSpace } from '../../utils/space-context';
 
-const nickname = ref('');
 const username = ref('');
-const avatarUrl = ref('');
 const spaceName = ref('');
 /** 防止连点导致重复弹窗/重复请求 */
 const pending = ref(false);
-
-/** 身份卡片的副标题：把"有没有登录、用的是哪个用户名"说清楚 */
-const identityDesc = computed(() => {
-  if (!hasValidToken()) return '还没有登录';
-  // 改造前用微信登录的老账号还没有用户名，如实说明，别留一片空白
-  return username.value ? `@${username.value}` : '微信登录的账号，还没有用户名';
-});
 
 /** 账号密码入口的文案：没有用户名 = 首次设置，有 = 修改 */
 const credentialTitle = computed(() =>
@@ -105,9 +95,7 @@ async function refresh(): Promise<void> {
 
   try {
     const user = await fetchCurrentUser();
-    nickname.value = user.nickname;
     username.value = user.username;
-    avatarUrl.value = resolveAvatarUrl(user.avatarUrl);
   } catch (error) {
     // 读取失败（例如后端没启动）不打断页面，保留默认文案
   }
@@ -118,6 +106,11 @@ async function refresh(): Promise<void> {
   } catch (error) {
     // 同上：拿不到列表就沿用缓存里的名字
   }
+}
+
+/** 修改头像和昵称；未登录时先引导登录，避免进入没有保存意义的编辑页。 */
+function goProfileEdit(): void {
+  uni.navigateTo({ url: hasValidToken() ? '/pages/profile/edit' : LOGIN_PATH });
 }
 
 /** 切换/创建/加入家庭组都在家庭组页面里 */
@@ -157,9 +150,7 @@ function switchAccount(): void {
       clearToken();
       setCurrentSpace(null);
       spaceName.value = '';
-      nickname.value = '';
       username.value = '';
-      avatarUrl.value = '';
 
       pending.value = false;
       uni.reLaunch({ url: LOGIN_PATH });
@@ -193,35 +184,6 @@ onShow(refresh);
   overflow: hidden;
 }
 
-/* 身份卡片：比普通条目高一点，让"我是谁"这个信息更醒目 */
-.identity {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  min-height: 136rpx;
-  padding: var(--s-2) var(--s-3);
-}
-/* 头像是圆形：裁切交给容器，用户以后换成方图也能自动裁圆。
-   没设头像时后端给的是空值，前端统一兜到默认占位图（见 services/user.ts），
-   所以这里不需要"没有图就显示文字"的分支。 */
-.avatar-img {
-  flex: 0 0 auto;
-  width: 88rpx;
-  height: 88rpx;
-  border-radius: 50%;
-  background: var(--c-muted);
-}
-.identity-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
-.identity-name {
-  overflow: hidden;
-  color: var(--c-text);
-  font-size: 30rpx;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.identity-desc { color: var(--c-text-2); font-size: 23rpx; }
-
 .entry-item {
   display: flex;
   align-items: center;
@@ -231,8 +193,6 @@ onShow(refresh);
   border-bottom: 2rpx solid var(--c-border);
 }
 .entry-item:last-child { border-bottom: none; }
-/* 身份卡片下面的条目需要一条分隔线——.identity 自己没有下边框 */
-.account-entry { border-top: 2rpx solid var(--c-border); }
 .entry-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
 .entry-name { color: var(--c-text); font-size: 29rpx; font-weight: 500; }
 .entry-desc {

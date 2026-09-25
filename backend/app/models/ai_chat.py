@@ -1,4 +1,4 @@
-"""AI 对话历史（私有域：挂在 user_id 上）。
+"""AI 对话历史（按 user_id + space_id 隔离）。
 
 为什么对话历史要落库：
     对话能成立靠的是上下文——"再加一碗"这种省略句，全靠前几轮才看得懂。
@@ -32,8 +32,13 @@ class AiChatMessage(Base, TimestampMixin):
 
     __tablename__ = "ai_chat_messages"
     __table_args__ = (
-        # 高频查询只有一种："取某用户最近 N 条"——复合索引正好覆盖
-        Index("ix_ai_chat_messages_user_created", "user_id", "created_at"),
+        # 高频查询是“取某用户在某个家庭里的最近 N 条”。
+        Index(
+            "ix_ai_chat_messages_user_space_created",
+            "user_id",
+            "space_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -44,6 +49,12 @@ class AiChatMessage(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         comment="谁的对话。私有域：用户注销时一并清理",
+    )
+    space_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("spaces.id", ondelete="CASCADE"),
+        nullable=True,
+        comment="所属家庭；为空表示个人聊天，旧记录保留为空",
     )
     role: Mapped[str] = mapped_column(
         String(16), nullable=False, comment="角色：user 用户 / assistant AI"

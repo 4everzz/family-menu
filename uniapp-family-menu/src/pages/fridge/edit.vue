@@ -13,6 +13,7 @@
           <text class="field-label">食材名（必填）</text>
           <input
             v-model="form.name"
+            type="text"
             class="field-input"
             :class="{ focused: focusedField === 'name' }"
             placeholder="例如：鸡蛋"
@@ -38,6 +39,7 @@
             />
             <input
               v-model="form.unit"
+              type="text"
               class="field-input qty-unit"
               :class="{ focused: focusedField === 'unit' }"
               placeholder="单位，如 个/盒"

@@ -113,6 +113,7 @@
           </text>
           <input
             v-model="createName"
+            type="text"
             class="field"
             :disabled="createFull"
             placeholder="给家庭组起个名字，例如「张家」"
@@ -139,6 +140,7 @@
           </text>
           <input
             v-model="joinCode"
+            type="text"
             class="field"
             :disabled="joinFull"
             placeholder="输入家人分享的 8 位邀请码"
@@ -163,6 +165,7 @@ import { onShow } from '@dcloudio/uni-app';
 import {
   getCurrentSpaceId,
   getCurrentSpaceName,
+  recordSpaceSwitch,
   resolveCurrentSpace,
   setCurrentSpace,
 } from '../../utils/space-context';
@@ -295,9 +298,14 @@ async function load(): Promise<void> {
  */
 function switchTo(item: SpaceInfo, silent = false): void {
   if (item.id === currentId.value) return;
+  const previousId = currentId.value;
+  const previousName = currentName.value;
   setCurrentSpace(item);
   refreshCurrent();
-  if (!silent) uni.showToast({ title: `已切换到 ${item.name}`, icon: 'none' });
+  recordSpaceSwitch(previousName, item, previousId || undefined, !silent);
+  if (!silent) {
+    uni.showToast({ title: `已从${previousName || '未选择家庭'}切换到${item.name}`, icon: 'none' });
+  }
 }
 
 /** 复制邀请码：家人之间大多是复制粘贴分享 */

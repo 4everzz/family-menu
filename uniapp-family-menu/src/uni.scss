@@ -19,3 +19,16 @@ textarea,
 image {
   box-sizing: border-box;
 }
+
+/*
+ * H5 运行时会把 html/body 设为 user-select: none，避免页面文字被误选。
+ * 但输入框必须恢复文字选择，否则部分桌面浏览器的中文输入法组合输入
+ * （例如拼音候选词）会无法正常显示。只放开输入控件，不影响页面其他区域。
+ */
+input,
+textarea,
+.uni-input-input,
+.uni-textarea-textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}

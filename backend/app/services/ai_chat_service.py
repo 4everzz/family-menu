@@ -143,7 +143,7 @@ class AiChatService:
         space_id = await self._resolve_space_id(user, payload.space_id)
 
         # 上下文后端自己取：不依赖前端记性，换设备/刷新页面都不断片
-        recent = await self.repo.list_recent(user.id, MAX_HISTORY_TURNS)
+        recent = await self.repo.list_recent(user.id, MAX_HISTORY_TURNS, space_id)
         history = [AiChatTurn(role=m.role, content=m.content) for m in recent]
         messages = self._build_messages(message, history)
 
@@ -162,11 +162,12 @@ class AiChatService:
         result = self._parse(content, nutrition, run_result.steps)
 
         # 成功才落库，两句一起存（user 一句 + assistant 一句）
-        await self.repo.add_user_message(user.id, message)
+        await self.repo.add_user_message(user.id, message, space_id)
         await self.repo.add_assistant_message(
             user.id,
             result.reply,
             [action.model_dump() for action in result.actions],
+            space_id,
         )
         return result
 
@@ -269,13 +270,17 @@ class AiChatService:
         await MenuQueryService(self.session).ensure_member(user, space_id)
         return space_id
 
-    async def list_messages(self, user_id: int, limit: int) -> list[AiChatMessage]:
-        """取某用户的最近对话（给前端回放）。limit 做了上限保护。"""
-        return await self.repo.list_recent(user_id, max(1, min(limit, MAX_LIST_LIMIT)))
+    async def list_messages(
+        self, user_id: int, limit: int, space_id: int | None = None
+    ) -> list[AiChatMessage]:
+        """取某用户当前家庭上下文的最近对话（给前端回放）。"""
+        return await self.repo.list_recent(
+            user_id, max(1, min(limit, MAX_LIST_LIMIT)), space_id
+        )
 
-    async def clear_messages(self, user_id: int) -> int:
-        """清空某用户的全部对话（「新对话」）。返回删掉的条数。"""
-        return await self.repo.delete_all(user_id)
+    async def clear_messages(self, user_id: int, space_id: int | None = None) -> int:
+        """清空某用户当前家庭上下文的对话（「新对话」）。"""
+        return await self.repo.delete_all(user_id, space_id)
 
     # ---------------- 请求组装 ----------------
 

@@ -145,6 +145,7 @@
         <input
           class="manual-name"
           v-model="newFood"
+          type="text"
           placeholder="吃了什么，如 番茄炒蛋"
           placeholder-class="field-placeholder"
         />

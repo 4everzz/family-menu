@@ -80,7 +80,7 @@ class TestReactOnStep:
 class _FakeRepo:
     """够 chat() 跑通的假仓储：不碰库。"""
 
-    async def list_recent(self, user_id, limit):
+    async def list_recent(self, user_id, limit, space_id=None):
         return []
 
     async def add_user_message(self, *args, **kwargs):
@@ -192,6 +192,7 @@ class TestSseFrame:
         真实换行会把一帧切成两帧，前端解析直接乱套。"""
         frame = _sse("message", {"reply": "第一行\n第二行"})
         assert frame.count("\n\n") == 1
+        assert 'data: {"reply": "第一行\\n第二行"}' in frame
 
     def test_chinese_stays_readable(self):
         """ensure_ascii=False：中文原样输出，别把带宽浪费在 \\uXXXX 上。"""

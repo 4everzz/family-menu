@@ -1,35 +1,13 @@
 <template>
   <view class="profile-page">
-    <!--
-      用户信息卡片：一眼看清"现在是谁在登录"。
-      整张卡片都可点：未登录 → 去登录页；已登录 → 去编辑资料页
-      （编辑页可以换头像、改昵称）。
-    -->
-    <view class="user-card" hover-class="tap" @click="onUserCardTap">
+    <!-- 用户信息卡片只负责展示身份；资料修改统一从「设置 → 修改资料」进入。 -->
+    <view class="user-card" :hover-class="user ? '' : 'tap'" @click="onUserCardTap">
       <image class="user-avatar" :src="displayAvatar" mode="aspectFill" />
       <view class="user-main">
         <text class="user-name">{{ user ? user.nickname : '未登录' }}</text>
         <text class="user-sub">{{ userSubText }}</text>
       </view>
-      <text class="entry-arrow">›</text>
-    </view>
-
-    <!--
-      账号密码：改用户名 / 改密码 / 给老账号补一套账号。
-      为什么单独放一条入口——在此之前卡片上那句「还没有设置用户名」是个**死胡同**：
-      用户看得见自己缺什么，却没有任何地方能去补。
-    -->
-    <view v-if="user" class="group">
-      <text class="group-title">账号</text>
-      <view class="entry-group">
-        <view class="entry-item" hover-class="tap" @click="goCredentials">
-          <view class="entry-main">
-            <text class="entry-name">{{ credentialTitle }}</text>
-            <text class="entry-desc">{{ credentialDesc }}</text>
-          </view>
-          <text class="entry-arrow">›</text>
-        </view>
-      </view>
+      <text v-if="!user" class="entry-arrow">›</text>
     </view>
 
     <!--
@@ -214,21 +192,6 @@ const userSubText = computed(() => {
   return user.value.username ? `@${user.value.username}` : '还没有设置用户名';
 });
 
-/** 账号密码入口的文案：没有用户名 = 首次设置，有 = 修改 */
-const credentialTitle = computed(() => (user.value?.username ? '账号密码' : '设置账号密码'));
-
-const credentialDesc = computed(() => {
-  if (!user.value) return '';
-  return user.value.username
-    ? '修改登录用户名或密码'
-    : '补一套用户名和密码，之后也能用它在 App 登录';
-});
-
-/** 去账号密码页（改用户名 / 改密码 / 老账号首次补设） */
-function goCredentials(): void {
-  uni.navigateTo({ url: '/pages/auth/credentials' });
-}
-
 /** 头像显示地址：本地占位图直接显示，服务端上传的相对路径拼完整地址 */
 const displayAvatar = computed(() => resolveAvatarUrl(user.value?.avatarUrl));
 
@@ -253,12 +216,10 @@ async function refreshUser(): Promise<void> {
 /**
  * 点用户信息卡片。
  *
- * 两种状态各去一个地方：
- *   未登录 → 登录页（否则用户在这一页找不到任何"进账号"的入口）；
- *   已登录 → 编辑资料页（可换头像、改昵称）。
+ * 未登录时进入登录页；已登录时资料卡是只读展示，修改入口在设置页。
  */
 function onUserCardTap(): void {
-  uni.navigateTo({ url: user.value ? '/pages/profile/edit' : '/pages/auth/login' });
+  if (!user.value) uni.navigateTo({ url: '/pages/auth/login' });
 }
 
 /**

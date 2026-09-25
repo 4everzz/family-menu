@@ -32,9 +32,9 @@ import { clearToken, getToken } from '../utils/token';
  * Windows 上用 `ipconfig` 看 WLAN/以太网的 IPv4 地址。
  * ⚠️ 换网络或路由器重新分配后会变（DHCP），变了就改这一行；
  *    想省事可以在路由器里给这台电脑设固定 IP。
- * 2026-09-23：WLAN IP 由 10.100.206.80 变为 10.191.232.80。
+ * 2026-09-24：WLAN IP 变更为 10.15.61.80。
  */
-const DEV_LAN_HOST = '10.191.232.80';
+const DEV_LAN_HOST = '10.15.61.80';
 
 /**
  * 后端端口。
